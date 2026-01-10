@@ -1,0 +1,136 @@
+# File & Folder Naming Convention
+
+This project enforces **kebab-case** for all files and folders by default.
+
+## Global Rules (Strict)
+
+- All file and folder names MUST use **kebab-case**
+- Use **lowercase letters only**
+- Separate words with hyphens (`-`)
+- This rule applies to the entire project
+
+### Examples (Correct)
+
+- `user-profile-card.tsx`
+- `use-auth-session.ts`
+- `api-client.ts`
+- `date-format-utils.ts`
+
+### Examples (Incorrect)
+
+- `UserProfileCard.tsx`
+- `userProfileCard.tsx`
+- `user_profile_card.tsx`
+
+## Exceptions (Rare & Intentional)
+
+- Route files MAY deviate only when required by the framework
+- Examples: `page.tsx`, `layout.tsx`, `route.ts`
+- Do not introduce PascalCase or camelCase unless the framework requires it
+- When in doubt, default to **kebab-case**
+
+## Code vs File Naming
+
+- File names: **k**ebab-case\*\*
+- Component and function names in code may use PascalCase or camelCase
+
+---
+
+# App Router Structure (Next.js)
+
+The application follows a strict and intentional route-group structure.
+
+`(marketing)`
+
+- Public, non-authenticated pages
+- Landing pages, homepage, pricing, SEO pages
+
+`(platform)`
+
+- Internal platform pages
+
+  `(auth)`
+  - Authentication-related pages only
+  - Login, register, password reset, email verification
+
+  `(workspace)`
+  - Main logged-in product experience
+  - Orders, products, user account / profile
+  - Future team and organization features
+
+Rules:
+
+- Do not mix concerns between route groups
+- Marketing must not depend on platform code
+- Auth must stay isolated from workspace features
+- Workspace contains all product functionality
+
+---
+
+# Components Architecture
+
+All reusable components live inside `/components`.
+
+## General Rules
+
+- Every component MUST live in its own folder
+- Folder name and main file name MUST match
+- Use kebab-case for both
+
+Example:
+`components/new-sidebar/new-sidebar.tsx`
+
+## /components/ui
+
+- Contains only components generated or modified by shadcn/ui
+- Do not add custom business components here
+
+## /components/typography
+
+- Add only if needed
+- Prefer native HTML elements first
+- Avoid over-abstraction
+
+## Custom Components
+
+- All new custom components go inside /components
+- One folder per component
+- No misc or common dumping folders
+
+## UI components policy
+
+- All new pages and components MUST use shadcn/ui components as the default UI foundation
+- Prefer composing existing shadcn components over creating custom UI from scratch
+- Custom UI components should only be created when:
+- shadcn does not provide the needed primitive, or
+- the design clearly requires deviation
+- If shadcn/ui is not installed or missing a required component:
+  - Ask the developer for confirmation before installing or generating shadcn components
+  - Do NOT auto-install or modify shadcn setup without explicit approval
+
+## Dependency & tooling changes
+
+Any change that introduces:
+
+- new UI libraries
+- shadcn installation
+- design system changes
+
+MUST be confirmed with the developer before proceeding
+
+# Tailwind CSS v4 Configuration
+
+This project uses **Tailwind CSS v4**. When writing code, use Tailwind CSS v4 syntax and features.
+
+## Key Points:
+
+- Use Tailwind CSS v4 utilities and syntax
+- The project uses `@tailwindcss/postcss` v4 for PostCSS integration
+- Follow Tailwind CSS v4 documentation patterns
+- Use modern CSS-first configuration approach where applicable
+
+## When suggesting Tailwind classes:
+
+- Use v4-compatible class names and utilities
+- Prefer v4 syntax over v3 patterns
+- Reference Tailwind CSS v4 documentation for new features

@@ -1,0 +1,12 @@
+.next
+.husky
+.prettierignore
+.stylelintignore
+.eslintignore
+package-lock.json
+package.json
+build/
+coverage/
+keys/
+logs/
+node_modules/
