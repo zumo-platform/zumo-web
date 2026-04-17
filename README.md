@@ -1,4 +1,4 @@
-# Suplai Web
+# Zumo Web
 
 Frontend application for a WhatsApp-based supplier ordering system.
 
