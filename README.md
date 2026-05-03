@@ -2,89 +2,105 @@
 
 Frontend application for a WhatsApp-based supplier ordering system.
 
-Built with **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind CSS** and **pnpm**.
+Built with **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind CSS**, and **pnpm**.
 
-## Repository structure 🗂️
+## Repository structure
 
 ```
 zumo-web/
 ├── src/
-│   ├── app/              # Next.js app router (pages and layouts)
-│   │   ├── (marketing)/  # Marketing pages
-│   │   └── (platform)/   # Platform pages
-│   │       ├── (auth)/   # Authentication routes
-│   │       └── (dashboard)/ # Dashboard routes
-│   ├── components/       # React components
-│   │   ├── ui/          # UI component library (shadcn/ui)
-│   │   └── typography/  # Typography components
-│   ├── context/         # App state
-│   ├── hooks/           # Custom React hooks
-│   └── lib/             # Utility functions and helpers
-├── public/              # Static assets
-└── package.json         # Dependencies and scripts
+│   ├── app/
+│   │   ├── (marketing)/[locale]/   # Localized marketing (en, es): home, privacy, terms
+│   │   ├── (platform)/
+│   │   │   ├── (auth)/              # login, register (redirects to signup tab)
+│   │   │   └── (workspace)/         # inbox, orders, profile (app shell)
+│   │   ├── layout.tsx               # Root layout (fonts, toaster)
+│   │   └── page.tsx                 # Redirects `/` → `/en`
+│   ├── components/
+│   │   ├── auth/                    # Sign-in / sign-up UI (tabs; auth not wired yet)
+│   │   ├── marketing/               # Shell, header, footer, hero, legal views
+│   │   ├── typography/
+│   │   └── ui/                      # shadcn/Radix primitives
+│   ├── content/marketing/           # Copy and legal text per locale
+│   ├── hooks/
+│   └── lib/                         # Helpers (e.g. marketing locale helpers)
+├── public/
+└── package.json
 ```
 
-- **`src/app/`** - Next.js app router structure with route groups for organization
-- **`src/components/ui/`** - Reusable UI components built with Radix UI and Tailwind CSS
-- **`src/components/typography/`** - Typography components
-- **`src/hooks/`** - Custom React hooks for shared logic
-- **`src/lib/`** - Utility functions and shared helpers
+- **`(marketing)/[locale]`** — Static locale segments (`en`, `es`) with shared layout and translated strings.
+- **`(platform)/(auth)`** — Distributor auth entry points; forms are UI-only until backend integration.
+- **`components/ui/`** — Radix-based UI kit styled with Tailwind.
 
-## Prerequisites ✅
+## Prerequisites
 
-- **Node 24**
-- **pnpm v10**
+- **Node.js 24** (or the version pinned by your environment)
+- **pnpm v10** (`packageManager` in `package.json`)
 
-## Setup & installation 🚀
+## Setup & installation
 
 ```bash
 pnpm install
 ```
 
-### Development
+If pnpm aborts when recreating `node_modules` in non-interactive environments (e.g. some CI or tooling), use:
 
 ```bash
-pnpm dev              # Start Next.js development server (port 3000)
+CI=true pnpm install
 ```
 
-### Build
+## Development
 
 ```bash
-pnpm build            # Build the application for production
-pnpm start            # Start the production server
+pnpm dev          # Next.js dev server on http://localhost:3000 (webpack)
+pnpm dev:turbo    # Same, using Turbopack (faster; may be fussier with pnpm hoisting)
 ```
 
-## Environment variables 🔐
+Only run **one** `next dev` at a time for this project. If you see _Unable to acquire lock_ under `.next/dev/`, stop the other process (Ctrl+C), remove `.next/dev/lock` if needed, and start again.
 
-For local development, create a `.env.local` file in the root directory. Next.js automatically loads environment variables from `.env.local` files.
+## Main routes
 
-Required environment variables (example):
+| Path | Purpose |
+|------|---------|
+| `/` | Redirects to `/en` |
+| `/en`, `/es` | Marketing home |
+| `/en/privacy`, `/es/privacy`, etc. | Legal |
+| `/login` | Sign in / sign up tabs (`?tab=signup` opens sign up) |
+| `/register` | Redirects to `/login?tab=signup` |
+| `/inbox`, `/orders`, `/profile` | Workspace placeholders |
 
-- `NEXT_PUBLIC_API_URL` - Backend API URL
-- Other environment variables as needed for your backend integration
+Privacy/terms shortcuts: `/privacy` and `/terms` redirect to the English locale routes (see `next.config.ts`).
 
-## Linting ✨
+## Build & production
 
 ```bash
-pnpm lint             # Run ESLint
-pnpm lint:fix         # Run ESLint and fix auto-fixable issues
-pnpm lint:ci          # Run ESLint in CI mode (max warnings: 0)
+pnpm build        # Production build
+pnpm start        # Serve the production build (default port 3000)
 ```
 
-Import order is enforced via `eslint-plugin-import` with automatic grouping and alphabetization.
+## Environment variables
 
-## Testing 🧪
+Create `.env.local` in the project root for local overrides. Next.js loads it automatically.
+
+Examples you may add as the backend is integrated:
+
+- `NEXT_PUBLIC_API_URL` — Backend API base URL
+
+## Linting
 
 ```bash
-pnpm test             # Run tests once
-pnpm test:watch       # Run tests in watch mode
+pnpm lint         # ESLint
+pnpm lint:fix     # ESLint with autofix
+pnpm lint:ci      # ESLint, zero warnings allowed (CI-friendly)
 ```
 
-## Contributing 🤝
+Import order is enforced via `eslint-plugin-import` (grouping and alphabetization).
+
+## Contributing
 
 This project is early-stage and evolving, so clarity and discipline matter more than volume.
 
-### Branch strategy 🌿
+### Branch strategy
 
 We follow a simple, environment-aligned branching model:
 
@@ -106,7 +122,7 @@ Work happens in short-lived branches created from `develop`:
 
 Rebasing feature branches before opening a PR is encouraged to keep history clean.
 
-### Commit messages 🧾
+### Commit messages
 
 This repo enforces **Conventional Commits** via commit hooks.
 
