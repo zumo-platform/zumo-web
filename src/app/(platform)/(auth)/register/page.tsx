@@ -1,9 +1,5 @@
-import { TypographyH1 } from "@/components/typography/typography-h1";
+import { redirect } from "next/navigation";
 
-export default function Register() {
-  return (
-    <main>
-      <TypographyH1>Landing Page</TypographyH1>
-    </main>
-  );
+export default function RegisterPage() {
+  redirect("/login?tab=signup");
 }

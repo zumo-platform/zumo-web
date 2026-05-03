@@ -73,7 +73,13 @@ const eslintConfig = defineConfig([
   },
   // Disables ESLint rules that conflict with Prettier.
   eslintConfigPrettier,
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
+  globalIgnores([
+    '.next/**',
+    'out/**',
+    'build/**',
+    'next-env.d.ts',
+    'zumo-platform/**',
+  ]),
 ]);
 
 export default eslintConfig;
