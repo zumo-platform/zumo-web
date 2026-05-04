@@ -1,40 +1,99 @@
 # Zumo Web
 
-Frontend application for a WhatsApp-based supplier ordering system.
+Frontend for a **WhatsApp-first** ordering product for food & beverage suppliers: marketing site, distributor auth, and (planned) inbox / onboarding.
 
-Built with **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind CSS**, and **pnpm**.
+Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind CSS 4**, **pnpm**.
 
-## Repository structure
+## Tech stack (pinned / primary)
+
+| Piece | Role |
+|-------|------|
+| **next** `16.1.1` | Framework (App Router) |
+| **react** `19.2.3` / **react-dom** `19.2.3` | UI |
+| **tailwindcss** `^4` | Styling |
+| **Radix UI** + **class-variance-authority** | Primitives (shadcn-style kit under `components/ui/`) |
+| **lucide-react** | Icons |
+| **zustand** | Client UI state |
+| **react-hook-form** + **@hookform/resolvers** + **zod** | Forms & validation |
+| **next-themes** | Theme switching |
+| **sonner** | Toasts |
+| **@tanstack/react-query** | Server/async state (queries & mutations) |
+| **next-auth** `5.0.0-beta.x` | Session/auth bridge (e.g. Cognito — wiring TBD) |
+
+## Product flows (target)
+
+Backend pieces for signup / invites are **not all exposed on the HTTP API yet**; these flows describe the intended UX. Seller roles in Postgres are **`seller_role`**: `owner` \| `admin` \| `seller` (use **`owner`** for the first user on a new supplier — there is no separate `super_admin` enum value).
+
+### Flow A — First-time supplier signup
+
+1. User visits **`/signup`** (planned; today use **`/login?tab=signup`** for the placeholder UI).
+2. Collects **email**, **password**, **full name**, **supplier business name**.
+3. **Cognito** user is created (Hosted UI or app-initiated sign-up — TBD).
+4. Backend creates **`suppliers`** row (e.g. status **`pending_onboarding`** — align with `supplier_status` in DB).
+5. Backend creates **`sellers`** row: **`role: owner`**, new **`supplier_id`**.
+6. After login, user lands on **`/onboarding`** (planned): connect WhatsApp, add products, etc.
+
+### Flow B — Invited user
+
+1. **`/settings/team`** (planned): super-user opens **Invite user**, enters **email** + **role** (`admin` \| `seller`).
+2. Backend inserts **`seller_invitations`** and sends email with magic link.
+3. Invitee opens **`/accept-invite?token=…`** (planned).
+4. Sets password / completes profile.
+5. Backend creates **Cognito** user + **`sellers`** row (**`supplier_id`** + **`role`** from invite).
+6. User lands on **`/inbox`** (workspace).
+
+## Zustand — good fits for Zumo
+
+- Selected conversation (which thread is open)
+- Inbox filters (unread, assigned to me, …)
+- Draft order editing before confirm
+- Shell UI (sidebar collapsed, panels open)
+- Optimistic reads (e.g. mark read immediately)
+- Coordinating real-time or polled inbox updates with minimal prop drilling
+
+Use **TanStack Query** for server-backed data (lists, detail, mutations); use **Zustand** for ephemeral UI and cross-component client state.
+
+## Repository structure (current)
 
 ```
 zumo-web/
 ├── src/
 │   ├── app/
-│   │   ├── (marketing)/[locale]/   # Localized marketing (en, es): home, privacy, terms
+│   │   ├── (marketing)/[locale]/   # EN/ES marketing, privacy, terms
 │   │   ├── (platform)/
-│   │   │   ├── (auth)/              # login, register (redirects to signup tab)
-│   │   │   └── (workspace)/         # inbox, orders, profile (app shell)
-│   │   ├── layout.tsx               # Root layout (fonts, toaster)
-│   │   └── page.tsx                 # Redirects `/` → `/en`
+│   │   │   ├── (auth)/             # /login, /register → signup tab
+│   │   │   └── (workspace)/        # /inbox, /orders, /profile (placeholders)
+│   │   ├── privacy/page.tsx        # → redirect /en/privacy
+│   │   ├── terms/page.tsx          # → redirect /en/terms
+│   │   ├── layout.tsx              # Root layout (fonts, toaster)
+│   │   └── page.tsx                # / → /en
 │   ├── components/
-│   │   ├── auth/                    # Sign-in / sign-up UI (tabs; auth not wired yet)
-│   │   ├── marketing/               # Shell, header, footer, hero, legal views
+│   │   ├── auth/                   # Sign-in / sign-up tabs (UI only until API + NextAuth)
+│   │   ├── marketing/
 │   │   ├── typography/
-│   │   └── ui/                      # shadcn/Radix primitives
-│   ├── content/marketing/           # Copy and legal text per locale
+│   │   └── ui/
+│   ├── content/marketing/
 │   ├── hooks/
-│   └── lib/                         # Helpers (e.g. marketing locale helpers)
+│   └── lib/                        # e.g. marketing locale helpers
 ├── public/
 └── package.json
 ```
 
-- **`(marketing)/[locale]`** — Static locale segments (`en`, `es`) with shared layout and translated strings.
-- **`(platform)/(auth)`** — Distributor auth entry points; forms are UI-only until backend integration.
-- **`components/ui/`** — Radix-based UI kit styled with Tailwind.
+### Target layout (in progress)
+
+Not all paths exist yet; planned additions:
+
+| Area | Purpose |
+|------|---------|
+| **`src/app/(platform)/layout.tsx`** | Auth gate + shared shell (sidebar) |
+| **`src/app/(platform)/(workspace)/inbox/page.tsx`** | Three-column inbox (expand beyond placeholder) |
+| **`src/components/inbox/`** | e.g. `conversation-list`, `thread-view`, `draft-order-panel` |
+| **`src/lib/auth.ts`** | Auth.js / Cognito configuration |
+| **`src/lib/api.ts`** | Typed **`fetch`** helper for **`NEXT_PUBLIC_API_URL`** |
 
 ## Prerequisites
 
-- **Node.js 24** (or the version pinned by your environment)
+- **Node.js 24** (or whatever you standardize on)
 - **pnpm v10** (`packageManager` in `package.json`)
 
 ## Setup & installation
@@ -43,7 +102,7 @@ zumo-web/
 pnpm install
 ```
 
-If pnpm aborts when recreating `node_modules` in non-interactive environments (e.g. some CI or tooling), use:
+If pnpm aborts when recreating `node_modules` in non-interactive environments:
 
 ```bash
 CI=true pnpm install
@@ -52,93 +111,60 @@ CI=true pnpm install
 ## Development
 
 ```bash
-pnpm dev          # Next.js dev server on http://localhost:3000 (webpack)
-pnpm dev:turbo    # Same, using Turbopack (faster; may be fussier with pnpm hoisting)
+pnpm dev          # http://localhost:3000 — webpack (recommended default)
+pnpm dev:turbo    # Turbopack (faster; can be picky with pnpm + Radix)
 ```
 
-Only run **one** `next dev` at a time for this project. If you see _Unable to acquire lock_ under `.next/dev/`, stop the other process (Ctrl+C), remove `.next/dev/lock` if needed, and start again.
+Run only **one** `next dev` per clone. If you see **Unable to acquire lock** under `.next/dev/`, stop the other process, remove `.next/dev/lock` if needed, and restart.
 
 ## Main routes
 
 | Path | Purpose |
 |------|---------|
-| `/` | Redirects to `/en` |
-| `/en`, `/es` | Marketing home |
-| `/en/privacy`, `/es/privacy`, etc. | Legal |
-| `/login` | Sign in / sign up tabs (`?tab=signup` opens sign up) |
-| `/register` | Redirects to `/login?tab=signup` |
+| `/` | Redirect → `/en` |
+| `/en`, `/es` | Marketing |
+| `/privacy`, `/terms` | Redirect → `/en/privacy`, `/en/terms` |
+| `/login` | Sign in / sign up (`?tab=signup`) |
+| `/register` | Redirect → `/login?tab=signup` |
 | `/inbox`, `/orders`, `/profile` | Workspace placeholders |
-
-Privacy/terms shortcuts: `/privacy` and `/terms` redirect to the English locale routes (see `next.config.ts`).
 
 ## Build & production
 
 ```bash
-pnpm build        # Production build
-pnpm start        # Serve the production build (default port 3000)
+pnpm build
+pnpm start
 ```
 
 ## Environment variables
 
-Create `.env.local` in the project root for local overrides. Next.js loads it automatically.
+Use **`.env.local`** at the repo root.
 
-Examples you may add as the backend is integrated:
+Examples as integrations land:
 
-- `NEXT_PUBLIC_API_URL` — Backend API base URL
+- **`NEXT_PUBLIC_API_URL`** — HTTP API base (API Gateway)
+- Cognito / Auth.js variables (pool id, client id, secret, issuer — follow **`next-auth`** v5 + provider docs)
 
 ## Linting
 
 ```bash
-pnpm lint         # ESLint
-pnpm lint:fix     # ESLint with autofix
-pnpm lint:ci      # ESLint, zero warnings allowed (CI-friendly)
+pnpm lint
+pnpm lint:fix
+pnpm lint:ci
 ```
 
-Import order is enforced via `eslint-plugin-import` (grouping and alphabetization).
+Import order uses **`eslint-plugin-import`** (groups + alphabetization).
 
 ## Contributing
 
-This project is early-stage and evolving, so clarity and discipline matter more than volume.
+Early-stage repo — prefer small, reviewable changes.
 
 ### Branch strategy
 
-We follow a simple, environment-aligned branching model:
-
 - **`main`** → production
-- **`develop`** → integration / development
+- **`develop`** → integration
 
-Work happens in short-lived branches created from `develop`:
-
-- `feat/<short-description>` → new features
-- `fix/<short-description>` → bug fixes
-- `chore/<short-description>` → tooling, refactors, maintenance
-
-**Flow:**
-
-1. Create a branch from `develop`
-2. Open a PR back into `develop`
-3. PRs are **squash-merged**
-4. Releases are promoted from `develop` → `main`
-
-Rebasing feature branches before opening a PR is encouraged to keep history clean.
+Branch naming: `feat/…`, `fix/…`, `chore/…` from **`develop`**; squash-merge PRs; promote **`develop`** → **`main`** for releases.
 
 ### Commit messages
 
-This repo enforces **Conventional Commits** via commit hooks.
-
-Use this format:
-
-```
-Common types:
-- `feat:` → new functionality
-- `fix:` → bug fix
-- `chore:` → tooling, config, cleanup
-- `refactor:` → code changes without behavior change
-- `test:` → tests only
-```
-
-Examples:
-
-- feat: add login page component
-- fix: handle form validation errors
-- chore: update eslint rules
+**Conventional Commits** (enforced via hooks): `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, etc.
