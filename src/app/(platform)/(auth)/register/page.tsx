@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function RegisterPage() {
-  redirect("/login?tab=signup");
+  redirect("/es/login?tab=signup");
 }

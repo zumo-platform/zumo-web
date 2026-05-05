@@ -1,4 +1,5 @@
-export const MARKETING_LOCALES = ["en", "es"] as const;
+/** Spanish first — default marketing and auth locale. */
+export const MARKETING_LOCALES = ["es", "en"] as const;
 
 export type MarketingLocale = (typeof MARKETING_LOCALES)[number];
 
@@ -13,6 +14,15 @@ export function marketingHref(locale: MarketingLocale, segment: MarketingPageSeg
     return `/${locale}`;
   }
   return `/${locale}/${segment}`;
+}
+
+/** Localized login route (`/es/login`, `/en/login`). */
+export function authLoginPath(
+  locale: MarketingLocale,
+  options?: Readonly<{ tab?: "signup" }>,
+): string {
+  const base = `/${locale}/login`;
+  return options?.tab === "signup" ? `${base}?tab=signup` : base;
 }
 
 export function resolveMarketingSegment(pathname: string): MarketingPageSegment {

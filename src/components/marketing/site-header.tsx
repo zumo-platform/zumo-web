@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import type { MarketingMessages } from "@/content/marketing/types";
 import type { MarketingLocale, MarketingPageSegment } from "@/lib/marketing-locale";
-import { marketingHref } from "@/lib/marketing-locale";
+import { authLoginPath, marketingHref } from "@/lib/marketing-locale";
 import { cn } from "@/lib/utils";
 
 function NavAnchor({
@@ -47,19 +47,6 @@ function LanguageToggle({
       role="group"
     >
       <Link
-        aria-current={locale === "en" ? "true" : undefined}
-        className={cn(
-          "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-          locale === "en"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        href={targetEn}
-        lang="en"
-      >
-        {messages.header.langEn}
-      </Link>
-      <Link
         aria-current={locale === "es" ? "true" : undefined}
         className={cn(
           "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
@@ -71,6 +58,19 @@ function LanguageToggle({
         lang="es"
       >
         {messages.header.langEs}
+      </Link>
+      <Link
+        aria-current={locale === "en" ? "true" : undefined}
+        className={cn(
+          "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+          locale === "en"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        href={targetEn}
+        lang="en"
+      >
+        {messages.header.langEn}
       </Link>
     </div>
   );
@@ -110,13 +110,13 @@ export function SiteHeader({
             <NavAnchor href={howHref}>{messages.header.navHowItWorks}</NavAnchor>
             <NavAnchor href={builtHref}>{messages.header.navBuiltFor}</NavAnchor>
             <Button asChild size="sm">
-              <Link href="/login">{messages.header.requestAccess}</Link>
+              <Link href={authLoginPath(locale)}>{messages.header.requestAccess}</Link>
             </Button>
           </nav>
 
           <div className="md:hidden">
             <Button asChild size="sm">
-              <Link href="/login">{messages.header.requestAccess}</Link>
+              <Link href={authLoginPath(locale)}>{messages.header.requestAccess}</Link>
             </Button>
           </div>
         </div>

@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getMarketingMessages } from "@/content/marketing/index";
-import { isMarketingLocale } from "@/lib/marketing-locale";
+import { authLoginPath, isMarketingLocale } from "@/lib/marketing-locale";
 
 type PageProps = Readonly<{
   params: Promise<{ locale: string }>;
@@ -78,7 +78,7 @@ export default async function MarketingHomePage({ params }: PageProps) {
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <Button asChild size="lg">
-            <Link href="/login">{messages.home.ctaPrimary}</Link>
+            <Link href={authLoginPath(locale)}>{messages.home.ctaPrimary}</Link>
           </Button>
           <Button asChild size="lg" variant="outline">
             <a href="#how-it-works">{messages.home.ctaSecondary}</a>
@@ -155,7 +155,7 @@ export default async function MarketingHomePage({ params }: PageProps) {
           </h2>
           <p className="mt-4 text-muted-foreground">{messages.home.ctaSub}</p>
           <Button asChild className="mt-8" size="lg">
-            <Link href="/login">{messages.home.ctaButton}</Link>
+            <Link href={authLoginPath(locale)}>{messages.home.ctaButton}</Link>
           </Button>
         </div>
       </section>

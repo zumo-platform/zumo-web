@@ -1,0 +1,27 @@
+export type AuthMessages = {
+  metaTitle: string;
+  metaDescription: string;
+  subtitle: string;
+  langSwitcherAria: string;
+  langEs: string;
+  langEn: string;
+  tabSignIn: string;
+  tabSignUp: string;
+  signInTitle: string;
+  signInDescription: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  emailHint: string;
+  passwordLabel: string;
+  forgotPassword: string;
+  submitSignIn: string;
+  signUpTitle: string;
+  signUpDescription: string;
+  companyLabel: string;
+  companyPlaceholder: string;
+  submitSignUp: string;
+  backToLanding: string;
+  showPassword: string;
+  hidePassword: string;
+  toastPreview: string;
+};

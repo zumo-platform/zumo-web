@@ -1,0 +1,70 @@
+import type { MarketingLocale } from "@/lib/marketing-locale";
+
+import type { AuthMessages } from "./types";
+
+const authMessagesEs: AuthMessages = {
+  metaTitle: "Iniciar sesión",
+  metaDescription: "Accede al panel de distribuidor Zumo.",
+  subtitle: "Inicia sesión o crea una cuenta para tu espacio de trabajo.",
+  langSwitcherAria: "Idioma",
+  langEs: "ES",
+  langEn: "EN",
+  tabSignIn: "Iniciar sesión",
+  tabSignUp: "Registrarse",
+  signInTitle: "Bienvenido de nuevo",
+  signInDescription: "Entra con tu correo y contraseña.",
+  emailLabel: "Correo electrónico",
+  emailPlaceholder: "tu@gmail.com",
+  emailHint: "Puedes usar Gmail, Outlook u otro proveedor.",
+  passwordLabel: "Contraseña",
+  forgotPassword: "¿Olvidaste tu contraseña?",
+  submitSignIn: "Iniciar sesión",
+  signUpTitle: "Crea tu espacio",
+  signUpDescription:
+    "Indica los datos de tu negocio. Usa un correo que puedas verificar.",
+  companyLabel: "Nombre del negocio",
+  companyPlaceholder: "Distribuidora Central S.A.",
+  submitSignUp: "Crear cuenta",
+  backToLanding: "Volver al inicio",
+  showPassword: "Mostrar contraseña",
+  hidePassword: "Ocultar contraseña",
+  toastPreview:
+    "La autenticación aún no está conectada — vista previa de la interfaz.",
+};
+
+const authMessagesEn: AuthMessages = {
+  metaTitle: "Sign in",
+  metaDescription: "Access your Zumo distributor workspace.",
+  subtitle: "Sign in or create an account for the distributor workspace.",
+  langSwitcherAria: "Language",
+  langEs: "ES",
+  langEn: "EN",
+  tabSignIn: "Sign in",
+  tabSignUp: "Sign up",
+  signInTitle: "Welcome back",
+  signInDescription: "Sign in with your email and password.",
+  emailLabel: "Email",
+  emailPlaceholder: "you@gmail.com",
+  emailHint: "Gmail, Outlook, or any email provider works.",
+  passwordLabel: "Password",
+  forgotPassword: "Forgot password?",
+  submitSignIn: "Sign in",
+  signUpTitle: "Create your workspace",
+  signUpDescription: "Tell us about your business. Use an email you can verify.",
+  companyLabel: "Company name",
+  companyPlaceholder: "Central Foods LLC",
+  submitSignUp: "Create account",
+  backToLanding: "Back to home",
+  showPassword: "Show password",
+  hidePassword: "Hide password",
+  toastPreview: "Authentication is not wired yet — this is a UI preview.",
+};
+
+const catalog: Record<MarketingLocale, AuthMessages> = {
+  es: authMessagesEs,
+  en: authMessagesEn,
+};
+
+export function getAuthMessages(locale: MarketingLocale): AuthMessages {
+  return catalog[locale];
+}
