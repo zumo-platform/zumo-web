@@ -17,11 +17,20 @@ export type AuthMessages = {
   submitSignIn: string;
   signUpTitle: string;
   signUpDescription: string;
+  fullNameLabel: string;
+  fullNamePlaceholder: string;
   companyLabel: string;
   companyPlaceholder: string;
   submitSignUp: string;
+  confirmTitle: string;
+  confirmDescription: string;
+  confirmCodeLabel: string;
+  confirmCodePlaceholder: string;
+  submitConfirm: string;
+  backToSignIn: string;
   backToLanding: string;
   showPassword: string;
   hidePassword: string;
+  /** @deprecated kept for TS compat with existing callers */
   toastPreview: string;
 };

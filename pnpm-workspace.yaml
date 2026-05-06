@@ -1,5 +1,8 @@
 packages:
   - .
+
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+storeDir: /Users/richard/Library/pnpm/store/v10

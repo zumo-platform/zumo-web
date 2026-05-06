@@ -20,16 +20,22 @@ const authMessagesEs: AuthMessages = {
   forgotPassword: "¿Olvidaste tu contraseña?",
   submitSignIn: "Iniciar sesión",
   signUpTitle: "Crea tu espacio",
-  signUpDescription:
-    "Indica los datos de tu negocio. Usa un correo que puedas verificar.",
+  signUpDescription: "Indica los datos de tu negocio. Usa un correo que puedas verificar.",
+  fullNameLabel: "Tu nombre completo",
+  fullNamePlaceholder: "Ricardo Murillo",
   companyLabel: "Nombre del negocio",
   companyPlaceholder: "Distribuidora Central S.A.",
   submitSignUp: "Crear cuenta",
+  confirmTitle: "Verifica tu correo",
+  confirmDescription: "Revisa tu bandeja. Te enviamos un código de verificación.",
+  confirmCodeLabel: "Código de confirmación",
+  confirmCodePlaceholder: "123456",
+  submitConfirm: "Confirmar cuenta",
+  backToSignIn: "Volver al inicio de sesión",
   backToLanding: "Volver al inicio",
   showPassword: "Mostrar contraseña",
   hidePassword: "Ocultar contraseña",
-  toastPreview:
-    "La autenticación aún no está conectada — vista previa de la interfaz.",
+  toastPreview: "",
 };
 
 const authMessagesEn: AuthMessages = {
@@ -51,13 +57,21 @@ const authMessagesEn: AuthMessages = {
   submitSignIn: "Sign in",
   signUpTitle: "Create your workspace",
   signUpDescription: "Tell us about your business. Use an email you can verify.",
+  fullNameLabel: "Your full name",
+  fullNamePlaceholder: "Ricardo Murillo",
   companyLabel: "Company name",
   companyPlaceholder: "Central Foods LLC",
   submitSignUp: "Create account",
+  confirmTitle: "Verify your email",
+  confirmDescription: "Check your inbox. We sent a verification code.",
+  confirmCodeLabel: "Confirmation code",
+  confirmCodePlaceholder: "123456",
+  submitConfirm: "Confirm account",
+  backToSignIn: "Back to sign in",
   backToLanding: "Back to home",
   showPassword: "Show password",
   hidePassword: "Hide password",
-  toastPreview: "Authentication is not wired yet — this is a UI preview.",
+  toastPreview: "",
 };
 
 const catalog: Record<MarketingLocale, AuthMessages> = {

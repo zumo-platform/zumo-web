@@ -1,8 +1,9 @@
 "use client";
 
-import { type FormEvent, useId, useState } from "react";
+import { useId, useState } from "react";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,17 +21,20 @@ import type { AuthMessages } from "@/content/auth/types";
 import type { MarketingLocale } from "@/lib/marketing-locale";
 
 export type AuthTabValue = "signin" | "signup";
+type AuthState = "signin" | "signup" | "confirm";
 
 function PasswordField({
   ariaHidePassword,
   ariaShowPassword,
   autoComplete,
+  disabled,
   id,
   name,
 }: Readonly<{
   ariaHidePassword: string;
   ariaShowPassword: string;
   autoComplete: string;
+  disabled?: boolean;
   id: string;
   name: string;
 }>) {
@@ -41,6 +45,7 @@ function PasswordField({
       <Input
         autoComplete={autoComplete}
         className="pr-10"
+        disabled={disabled}
         id={id}
         name={name}
         required
@@ -51,13 +56,28 @@ function PasswordField({
         aria-label={visible ? ariaHidePassword : ariaShowPassword}
         aria-pressed={visible}
         className="absolute top-1/2 right-1 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        disabled={disabled}
         type="button"
         onClick={() => setVisible((v) => !v)}
       >
-        {visible ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
+        {visible ? (
+          <EyeOff aria-hidden className="size-4" />
+        ) : (
+          <Eye aria-hidden className="size-4" />
+        )}
       </button>
     </div>
   );
+}
+
+async function apiFetch(path: string, body: Record<string, string>) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  return { ok: res.ok, status: res.status, data: json };
 }
 
 export function AuthForms({
@@ -70,17 +90,175 @@ export function AuthForms({
   messages: AuthMessages;
 }>) {
   const uid = useId();
-  const signinPwdId = `${uid}-signin-password`;
-  const signupPwdId = `${uid}-signup-password`;
+  const router = useRouter();
+  const [state, setState] = useState<AuthState>(defaultTab);
+  const [loading, setLoading] = useState(false);
+
+  // Remember email/password across signup → confirm → auto-login
+  const [savedEmail, setSavedEmail] = useState("");
+  const [savedPassword, setSavedPassword] = useState("");
+
+  async function handleSignIn(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    const fd = new FormData(e.currentTarget);
+    const email = String(fd.get("email") ?? "");
+    const password = String(fd.get("password") ?? "");
+
+    const { ok, status, data } = await apiFetch("/api/auth/login", { email, password });
+
+    if (ok) {
+      const verify = await fetch("/api/backend/sellers/me");
+      if (!verify.ok) {
+        toast.error("Sesión iniciada pero no se pudo verificar tu perfil.");
+      }
+      router.push("/inbox");
+    } else if (status === 403 && data.error === "UserNotConfirmedException") {
+      setSavedEmail(email);
+      setSavedPassword(password);
+      toast.warning(data.message);
+      setState("confirm");
+    } else {
+      toast.error(data.message ?? "Error al iniciar sesión.");
+    }
+    setLoading(false);
+  }
+
+  async function handleSignUp(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    const fd = new FormData(e.currentTarget);
+    const fullName = String(fd.get("fullName") ?? "");
+    const businessName = String(fd.get("businessName") ?? "");
+    const email = String(fd.get("email") ?? "");
+    const password = String(fd.get("password") ?? "");
+
+    const { ok, data } = await apiFetch("/api/auth/signup", {
+      fullName,
+      businessName,
+      email,
+      password,
+    });
+
+    if (ok) {
+      setSavedEmail(email);
+      setSavedPassword(password);
+      setState("confirm");
+    } else {
+      toast.error(data.message ?? "Error al crear la cuenta.");
+    }
+    setLoading(false);
+  }
+
+  async function handleConfirm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    const fd = new FormData(e.currentTarget);
+    const code = String(fd.get("code") ?? "");
+    const email = (fd.get("email") as string | null) || savedEmail;
+
+    const { ok, data } = await apiFetch("/api/auth/confirm", { email, code });
+
+    if (!ok) {
+      toast.error(data.message ?? "Código incorrecto.");
+      setLoading(false);
+      return;
+    }
+
+    // Auto sign-in after confirmation if we saved the password
+    if (savedPassword) {
+      const { ok: loginOk, data: loginData } = await apiFetch("/api/auth/login", {
+        email,
+        password: savedPassword,
+      });
+      if (loginOk) {
+        router.push("/inbox");
+      } else {
+        toast.success("¡Cuenta confirmada! Inicia sesión.");
+        toast.error(loginData?.message ?? "Error al iniciar sesión.");
+        setState("signin");
+      }
+    } else {
+      toast.success("¡Cuenta confirmada! Inicia sesión.");
+      setState("signin");
+    }
+    setLoading(false);
+  }
+
+  if (state === "confirm") {
+    return (
+      <div lang={locale}>
+        <Card className="border-border/60 shadow-md">
+          <CardHeader>
+            <CardTitle>{messages.confirmTitle}</CardTitle>
+            <CardDescription>{messages.confirmDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handleConfirm}>
+              {/* Hidden email fallback if savedEmail is set */}
+              {savedEmail && (
+                <input type="hidden" name="email" value={savedEmail} />
+              )}
+              {!savedEmail && (
+                <div className="space-y-2">
+                  <Label htmlFor={`${uid}-confirm-email`}>{messages.emailLabel}</Label>
+                  <Input
+                    autoComplete="email"
+                    disabled={loading}
+                    id={`${uid}-confirm-email`}
+                    inputMode="email"
+                    name="email"
+                    placeholder={messages.emailPlaceholder}
+                    required
+                    type="email"
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor={`${uid}-confirm-code`}>{messages.confirmCodeLabel}</Label>
+                <Input
+                  autoComplete="one-time-code"
+                  disabled={loading}
+                  id={`${uid}-confirm-code`}
+                  inputMode="numeric"
+                  name="code"
+                  pattern="[0-9]*"
+                  placeholder={messages.confirmCodePlaceholder}
+                  required
+                />
+              </div>
+              <Button className="w-full" disabled={loading} type="submit">
+                {loading && <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />}
+                {messages.submitConfirm}
+              </Button>
+              <button
+                className="w-full text-center text-muted-foreground text-sm underline-offset-4 hover:text-foreground hover:underline"
+                disabled={loading}
+                type="button"
+                onClick={() => setState("signin")}
+              >
+                {messages.backToSignIn}
+              </button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div lang={locale}>
-      <Tabs className="w-full gap-4" defaultValue={defaultTab}>
+      <Tabs
+        className="w-full gap-4"
+        value={state === "signin" ? "signin" : "signup"}
+        onValueChange={(v) => setState(v as AuthState)}
+      >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">{messages.tabSignIn}</TabsTrigger>
           <TabsTrigger value="signup">{messages.tabSignUp}</TabsTrigger>
         </TabsList>
 
+        {/* Sign In */}
         <TabsContent value="signin">
           <Card className="border-border/60 shadow-md">
             <CardHeader>
@@ -88,14 +266,12 @@ export function AuthForms({
               <CardDescription>{messages.signInDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              <form
-                className="space-y-4"
-                onSubmit={(e) => handlePlaceholderSubmit(e, messages.toastPreview)}
-              >
+              <form className="space-y-4" onSubmit={handleSignIn}>
                 <div className="space-y-2">
                   <Label htmlFor={`${uid}-signin-email`}>{messages.emailLabel}</Label>
                   <Input
                     autoComplete="email"
+                    disabled={loading}
                     id={`${uid}-signin-email`}
                     inputMode="email"
                     name="email"
@@ -107,9 +283,10 @@ export function AuthForms({
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor={signinPwdId}>{messages.passwordLabel}</Label>
+                    <Label htmlFor={`${uid}-signin-password`}>{messages.passwordLabel}</Label>
                     <button
                       className="text-muted-foreground text-xs underline-offset-4 hover:text-foreground hover:underline"
+                      disabled={loading}
                       type="button"
                     >
                       {messages.forgotPassword}
@@ -119,11 +296,13 @@ export function AuthForms({
                     ariaHidePassword={messages.hidePassword}
                     ariaShowPassword={messages.showPassword}
                     autoComplete="current-password"
-                    id={signinPwdId}
+                    disabled={loading}
+                    id={`${uid}-signin-password`}
                     name="password"
                   />
                 </div>
-                <Button className="w-full" type="submit">
+                <Button className="w-full" disabled={loading} type="submit">
+                  {loading && <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />}
                   {messages.submitSignIn}
                 </Button>
               </form>
@@ -131,6 +310,7 @@ export function AuthForms({
           </Card>
         </TabsContent>
 
+        {/* Sign Up */}
         <TabsContent value="signup">
           <Card className="border-border/60 shadow-md">
             <CardHeader>
@@ -138,16 +318,25 @@ export function AuthForms({
               <CardDescription>{messages.signUpDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              <form
-                className="space-y-4"
-                onSubmit={(e) => handlePlaceholderSubmit(e, messages.toastPreview)}
-              >
+              <form className="space-y-4" onSubmit={handleSignUp}>
+                <div className="space-y-2">
+                  <Label htmlFor={`${uid}-signup-fullname`}>{messages.fullNameLabel}</Label>
+                  <Input
+                    autoComplete="name"
+                    disabled={loading}
+                    id={`${uid}-signup-fullname`}
+                    name="fullName"
+                    placeholder={messages.fullNamePlaceholder}
+                    required
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor={`${uid}-signup-company`}>{messages.companyLabel}</Label>
                   <Input
                     autoComplete="organization"
+                    disabled={loading}
                     id={`${uid}-signup-company`}
-                    name="company"
+                    name="businessName"
                     placeholder={messages.companyPlaceholder}
                     required
                   />
@@ -156,6 +345,7 @@ export function AuthForms({
                   <Label htmlFor={`${uid}-signup-email`}>{messages.emailLabel}</Label>
                   <Input
                     autoComplete="email"
+                    disabled={loading}
                     id={`${uid}-signup-email`}
                     inputMode="email"
                     name="email"
@@ -166,16 +356,18 @@ export function AuthForms({
                   <p className="text-muted-foreground text-xs">{messages.emailHint}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={signupPwdId}>{messages.passwordLabel}</Label>
+                  <Label htmlFor={`${uid}-signup-password`}>{messages.passwordLabel}</Label>
                   <PasswordField
                     ariaHidePassword={messages.hidePassword}
                     ariaShowPassword={messages.showPassword}
                     autoComplete="new-password"
-                    id={signupPwdId}
+                    disabled={loading}
+                    id={`${uid}-signup-password`}
                     name="password"
                   />
                 </div>
-                <Button className="w-full" type="submit">
+                <Button className="w-full" disabled={loading} type="submit">
+                  {loading && <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />}
                   {messages.submitSignUp}
                 </Button>
               </form>
@@ -185,9 +377,4 @@ export function AuthForms({
       </Tabs>
     </div>
   );
-}
-
-function handlePlaceholderSubmit(event: FormEvent<HTMLFormElement>, toastPreview: string) {
-  event.preventDefault();
-  toast.message(toastPreview);
 }
