@@ -2,19 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { CheckCircle, Loader2, LogOut, MessageSquare, RefreshCw } from "lucide-react";
-import { useRouter } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import { CheckCircle, Info, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import type {
-  Conversation,
-  Message,
-  Order,
-  SellerMe,
-} from "@/lib/dashboard-types";
+import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
+import type { Conversation, Message, Order } from "@/lib/dashboard-types";
 import { cn } from "@/lib/utils";
 
 async function backendGet<T>(path: string): Promise<T> {
@@ -60,6 +66,34 @@ function roleBubbleClass(role: Message["role"]): string {
   }
 }
 
+function PanelHeading({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <div className="border-b bg-muted/30 px-3 py-2.5">
+      <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {children}
+      </p>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+}: Readonly<{
+  icon: LucideIcon;
+  title: string;
+  description: string;
+}>) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/10 p-8 text-center">
+      <Icon aria-hidden className="size-8 text-muted-foreground opacity-50" />
+      <p className="font-medium text-sm">{title}</p>
+      <p className="max-w-[240px] text-muted-foreground text-xs leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
 // ─── Left panel ────────────────────────────────────────────────────────────
 
 function ConversationList({
@@ -75,43 +109,59 @@ function ConversationList({
 }) {
   if (loading) {
     return (
-      <div className="flex h-32 items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      <div className="space-y-3 p-3">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div className="space-y-2 rounded-lg border border-transparent px-2 py-2" key={i}>
+            <Skeleton className="h-4 w-[85%]" />
+            <div className="flex justify-between gap-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 p-6 text-center text-muted-foreground">
-        <MessageSquare className="size-8 opacity-40" />
-        <p className="text-sm">No conversations yet</p>
-        <p className="text-xs">Messages will appear here once customers write via WhatsApp.</p>
+      <div className="p-4">
+        <EmptyState
+          description="Messages will appear here once customers write via WhatsApp."
+          icon={MessageSquare}
+          title="No conversations yet"
+        />
       </div>
     );
   }
 
   return (
-    <ul className="divide-y divide-border">
+    <ul className="p-2">
       {conversations.map((conv) => (
         <li key={conv.conversationId}>
           <button
             className={cn(
-              "w-full px-4 py-3 text-left transition-colors hover:bg-muted/60",
-              selectedId === conv.conversationId && "bg-muted",
+              "flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors",
+              "hover:bg-accent hover:text-accent-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              selectedId === conv.conversationId && "bg-accent text-accent-foreground shadow-sm",
             )}
             type="button"
             onClick={() => onSelect(conv.conversationId)}
           >
-            <p className="truncate font-medium text-sm">{conv.customerName || "Unknown"}</p>
-            <p className="mt-0.5 flex items-center justify-between gap-2">
-              <span className="truncate text-muted-foreground text-xs">
+            <span className="truncate font-medium text-sm">{conv.customerName || "Unknown"}</span>
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <Badge
+                className="max-w-[min(100%,8rem)] shrink truncate font-normal capitalize"
+                title={conv.status}
+                variant="outline"
+              >
                 {conv.status}
-              </span>
+              </Badge>
               <span className="shrink-0 text-muted-foreground text-xs">
                 {formatTime(conv.updatedAt ?? conv.createdAt)}
               </span>
-            </p>
+            </span>
           </button>
         </li>
       ))}
@@ -138,8 +188,12 @@ function MessageThread({
 
   if (!conversationId) {
     return (
-      <div className="flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select a conversation</p>
+      <div className="flex flex-1 items-center justify-center p-6">
+        <EmptyState
+          description="Choose a thread from the list to read messages."
+          icon={MessageSquare}
+          title="Select a conversation"
+        />
       </div>
     );
   }
@@ -147,45 +201,49 @@ function MessageThread({
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-sm">No messages yet.</p>
+      <div className="flex flex-1 items-center justify-center p-6">
+        <EmptyState
+          description="When the customer sends a message, it will show up here."
+          icon={MessageSquare}
+          title="No messages yet"
+        />
       </div>
     );
   }
 
   return (
-          <div className="flex-1 overflow-y-auto px-4 py-3">
-      <div className="flex flex-col gap-2">
-        {messages.map((msg) => (
-          <div
-            key={msg.messageId}
-            className={cn(
-              "flex max-w-[75%] flex-col rounded-2xl px-3 py-2 text-sm",
-              roleBubbleClass(msg.role),
-            )}
-          >
-            <span>{msg.content}</span>
-            <span className="mt-0.5 text-right text-xs opacity-60">
-              {formatTime(msg.createdAt)}
-            </span>
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-2 px-4 py-4">
+          {messages.map((msg) => (
+            <div
+              className={cn(
+                "flex max-w-[min(75%,28rem)] flex-col rounded-2xl px-3 py-2 text-sm shadow-sm",
+                roleBubbleClass(msg.role),
+              )}
+              key={msg.messageId}
+            >
+              <span>{msg.content}</span>
+              <span className="mt-1 text-right text-xs opacity-70">{formatTime(msg.createdAt)}</span>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      </ScrollArea>
     </div>
   );
 }
 
-// ─── Right panel ────────────────────────────────────────────────────────────
+// ─── Right panel (conversation information) ─────────────────────────────────
 
-function DraftOrderPanel({
+function InformationPanel({
   conversationId,
   orders,
   onConfirmed,
@@ -215,58 +273,70 @@ function DraftOrderPanel({
 
   if (!conversationId) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p className="text-sm">Select a conversation</p>
+      <div className="flex h-full items-center justify-center p-6">
+        <EmptyState
+          description="Open a thread to see context and details for that conversation."
+          icon={Info}
+          title="Select a conversation"
+        />
       </div>
     );
   }
 
   if (pending.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 p-6 text-center text-muted-foreground">
-        <CheckCircle className="size-8 opacity-40" />
-        <p className="text-sm">No draft orders</p>
-        <p className="text-xs">Pending orders for this conversation will appear here.</p>
+      <div className="p-4">
+        <EmptyState
+          description="Nothing extra for this chat yet—summaries and items to review will appear here."
+          icon={Info}
+          title="No information yet"
+        />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="space-y-4 p-4">
       {pending.map((order) => (
-        <div key={order.orderId} className="rounded-lg border border-border bg-card p-4 shadow-sm">
-          <p className="mb-2 font-semibold text-sm">Draft Order</p>
-          <ul className="mb-3 space-y-1">
-            {(order.lines ?? []).map((line, i) => (
-              <li key={i} className="flex items-center gap-1 text-sm">
-                <span className="font-medium">{line.quantity}</span>
-                <span className="text-muted-foreground">{line.unit}</span>
-                <span>{line.productName}</span>
-              </li>
-            ))}
-            {(!order.lines || order.lines.length === 0) && (
-              <li className="text-muted-foreground text-sm">No line items</li>
-            )}
-          </ul>
-          {order.deliveryNotes && (
-            <p className="mb-3 text-muted-foreground text-xs">
-              Note: {order.deliveryNotes}
-            </p>
-          )}
-          <Button
-            className="w-full"
-            disabled={confirming === order.orderId}
-            size="sm"
-            onClick={() => confirm(order.orderId)}
-          >
-            {confirming === order.orderId ? (
-              <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />
-            ) : (
-              <CheckCircle aria-hidden className="mr-2 size-4" />
-            )}
-            Confirm Order
-          </Button>
-        </div>
+        <Card className="gap-0 overflow-hidden py-0 shadow-sm" key={order.orderId}>
+          <CardHeader className="border-b bg-muted/20 px-4 py-3">
+            <CardTitle className="text-sm">Order summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 px-4 py-4">
+            <ul className="space-y-1.5">
+              {(order.lines ?? []).map((line, i) => (
+                <li className="flex flex-wrap items-baseline gap-x-1 text-sm" key={i}>
+                  <span className="font-semibold tabular-nums">{line.quantity}</span>
+                  <span className="text-muted-foreground">{line.unit}</span>
+                  <span>{line.productName}</span>
+                </li>
+              ))}
+              {(!order.lines || order.lines.length === 0) && (
+                <li className="text-muted-foreground text-sm">No line items</li>
+              )}
+            </ul>
+            {order.deliveryNotes ? (
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-muted-foreground text-xs leading-relaxed">
+                <span className="font-medium text-foreground">Note:</span> {order.deliveryNotes}
+              </p>
+            ) : null}
+          </CardContent>
+          <CardFooter className="border-t bg-muted/10 px-4 py-3">
+            <Button
+              className="w-full"
+              disabled={confirming === order.orderId}
+              size="sm"
+              onClick={() => confirm(order.orderId)}
+            >
+              {confirming === order.orderId ? (
+                <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />
+              ) : (
+                <CheckCircle aria-hidden className="mr-2 size-4" />
+              )}
+              Confirm order
+            </Button>
+          </CardFooter>
+        </Card>
       ))}
     </div>
   );
@@ -274,15 +344,13 @@ function DraftOrderPanel({
 
 // ─── Root inbox component ────────────────────────────────────────────────────
 
-export function InboxClient({ seller }: { seller: SellerMe["seller"] }) {
-  const router = useRouter();
+export function InboxClient() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [convsLoading, setConvsLoading] = useState(true);
   const [msgsLoading, setMsgsLoading] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -357,113 +425,55 @@ export function InboxClient({ seller }: { seller: SellerMe["seller"] }) {
     setMessages([]);
   }
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  }
-
-  async function handleRefresh() {
-    await Promise.all([
-      fetchConversations(),
-      fetchOrders(),
-      ...(selectedId ? [fetchMessages(selectedId)] : []),
-    ]);
-    toast.success("Refreshed");
-  }
+  const threadTitle = selectedId
+    ? (conversations.find((c) => c.conversationId === selectedId)?.customerName ?? "Thread")
+    : "Thread";
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
-      {/* Top bar */}
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm">Zumo</span>
-          <Badge variant="secondary" className="text-xs">
-            {seller.name}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleRefresh}
-            aria-label="Refresh"
-          >
-            <RefreshCw className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={loggingOut}
-            onClick={handleLogout}
-          >
-            {loggingOut ? (
-              <Loader2 aria-hidden className="size-4 animate-spin" />
-            ) : (
-              <LogOut aria-hidden className="mr-1.5 size-4" />
-            )}
-            Logout
-          </Button>
-        </div>
-      </header>
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <WorkspacePageHeader
+        description="WhatsApp threads and conversation information in one place."
+        title="Inbox"
+      />
 
-      {/* Three-column body */}
-      <div className="flex flex-1 overflow-hidden divide-x divide-border">
+      <div className="flex min-h-0 flex-1 divide-x divide-border">
         {/* Left: conversation list */}
-        <aside className="flex w-72 shrink-0 flex-col overflow-hidden">
-          <div className="border-b border-border px-4 py-2">
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
-              Conversations
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto">
+        <aside className="flex min-h-0 w-[min(100%,18rem)] shrink-0 flex-col sm:w-72">
+          <PanelHeading>Conversations</PanelHeading>
+          <ScrollArea className="min-h-0 flex-1">
             <ConversationList
               conversations={conversations}
               loading={convsLoading}
               selectedId={selectedId}
               onSelect={handleSelect}
             />
-          </div>
+          </ScrollArea>
         </aside>
 
         {/* Center: message thread */}
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <div className="border-b border-border px-4 py-2">
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
-              {selectedId
-                ? (conversations.find((c) => c.conversationId === selectedId)?.customerName ?? "Thread")
-                : "Thread"}
-            </p>
-          </div>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <PanelHeading>{threadTitle}</PanelHeading>
           <MessageThread
             conversationId={selectedId}
             messages={messages}
             loading={msgsLoading}
           />
           <Separator />
-          <div className="flex items-center gap-2 px-4 py-3">
-            <input
-              className="flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground"
-              disabled
-              placeholder="Reply coming soon…"
-            />
+          <div className="shrink-0 bg-muted/20 px-4 py-3">
+            <Input disabled placeholder="Reply coming soon…" />
           </div>
         </main>
 
-        {/* Right: draft order panel */}
-        <aside className="flex w-72 shrink-0 flex-col overflow-hidden">
-          <div className="border-b border-border px-4 py-2">
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
-              Draft Order
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <DraftOrderPanel
+        {/* Right: information */}
+        <aside className="flex min-h-0 w-[min(100%,18rem)] shrink-0 flex-col sm:w-72">
+          <PanelHeading>Information</PanelHeading>
+          <ScrollArea className="min-h-0 flex-1">
+            <InformationPanel
               conversationId={selectedId}
               orders={orders}
               onConfirmed={() => void fetchOrders()}
             />
-          </div>
+          </ScrollArea>
         </aside>
       </div>
     </div>

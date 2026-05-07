@@ -56,17 +56,17 @@ export default async function MarketingHomePage({ params }: PageProps) {
     <>
       <section className="mx-auto max-w-6xl px-6 pt-20 pb-16 text-center md:pt-32 md:pb-24">
         <Badge className="gap-1.5 rounded-full px-3 py-1 font-normal" variant="outline">
-          <span aria-hidden className="size-1.5 rounded-full bg-emerald-400" />
+          <span aria-hidden className="size-1.5 rounded-full bg-foreground/55" />
           {messages.home.badge}
         </Badge>
 
         <h1 className="mt-8 text-balance text-5xl font-semibold tracking-tight md:text-7xl">
           {messages.home.heroBeforeWhatsApp}{" "}
-          <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-foreground via-foreground/75 to-muted-foreground bg-clip-text text-transparent">
             WhatsApp
           </span>
           {messages.home.heroAfterWhatsAppBeforeZumo}
-          <span className="bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-muted-foreground to-foreground/85 bg-clip-text text-transparent">
             Zumo
           </span>{" "}
           {messages.home.heroAfterZumo}

@@ -47,7 +47,7 @@ export default async function MarketingLocaleLayout({ children, params }: Layout
 
   return (
     <div
-      className="dark flex min-h-screen flex-col bg-background text-foreground"
+      className="flex min-h-screen flex-col bg-background text-foreground"
       lang={locale}
     >
       <MarketingShell locale={locale} messages={messages}>

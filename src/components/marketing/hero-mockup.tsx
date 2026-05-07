@@ -16,19 +16,19 @@ export function HeroMockup({
           <div className="flex items-start gap-3 border-border/40 border-b pb-4">
             <div
               aria-hidden
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 font-semibold text-sm text-white"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-muted font-semibold text-foreground text-sm"
             >
               LM
             </div>
             <div>
               <p className="font-semibold leading-tight">{mockup.chatName}</p>
-              <p className="text-emerald-500 text-xs">{mockup.chatStatus}</p>
+              <p className="text-muted-foreground text-xs">{mockup.chatStatus}</p>
             </div>
           </div>
           <div className="mt-4 flex flex-col items-end gap-1">
-            <div className="max-w-[85%] rounded-2xl rounded-br-md bg-emerald-600/90 px-3 py-2.5 text-white shadow-sm">
+            <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-2.5 text-primary-foreground shadow-sm">
               <p className="text-sm leading-relaxed">{mockup.bubbleText}</p>
-              <div className="mt-1 flex items-center justify-end gap-1 text-emerald-100/90 text-[10px]">
+              <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-primary-foreground/75">
                 <span>{mockup.timestamp}</span>
                 <CheckCheck aria-hidden className="size-3.5" strokeWidth={2.5} />
               </div>
@@ -47,7 +47,7 @@ export function HeroMockup({
             <span className="text-muted-foreground text-xs uppercase tracking-wide">
               {mockup.draftLabel}
             </span>
-            <Badge className="border-transparent bg-emerald-600/90 text-white hover:bg-emerald-600">
+            <Badge className="border-transparent bg-primary text-primary-foreground hover:bg-primary/90">
               {mockup.matchBadge}
             </Badge>
           </div>

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { AuthForms, type AuthTabValue } from "@/components/auth/auth-forms";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { getAuthMessages } from "@/content/auth/index";
 import type { AuthMessages } from "@/content/auth/types";
 import {
@@ -116,19 +117,21 @@ export default async function LocalizedLoginPage({ params, searchParams }: Login
           <AuthLocaleToggle locale={locale} messages={messages} tab={defaultTab} />
         </div>
 
-        <div className="space-y-2 text-center">
-          <Link className="font-semibold text-lg tracking-tight" href={landingHref}>
-            Zumo
-          </Link>
-          <p className="text-muted-foreground text-sm">{messages.subtitle}</p>
-        </div>
+        <Card className="border-border/60 p-6 shadow-md">
+          <div className="mb-6 space-y-2 text-center">
+            <Link className="font-semibold text-lg tracking-tight" href={landingHref}>
+              Zumo
+            </Link>
+            <p className="text-muted-foreground text-sm">{messages.subtitle}</p>
+          </div>
 
-        <AuthForms
-          defaultTab={defaultTab}
-          key={`${locale}-${defaultTab}`}
-          locale={locale}
-          messages={messages}
-        />
+          <AuthForms
+            defaultTab={defaultTab}
+            key={`${locale}-${defaultTab}`}
+            locale={locale}
+            messages={messages}
+          />
+        </Card>
       </div>
     </main>
   );
