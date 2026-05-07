@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ZumoWordmark } from "@/components/branding/zumo-logos";
 import type { MarketingMessages } from "@/content/marketing/types";
 import type { MarketingLocale } from "@/lib/marketing-locale";
 import { marketingHref } from "@/lib/marketing-locale";
@@ -19,7 +20,9 @@ export function SiteFooter({
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
           <div>
-            <p className="font-semibold text-lg tracking-tight">Zumo</p>
+            <Link className="inline-flex" href={marketingHref(locale, "home")}>
+              <ZumoWordmark />
+            </Link>
             <p className="mt-2 text-muted-foreground text-sm">{messages.footer.tagline}</p>
           </div>
           <div>

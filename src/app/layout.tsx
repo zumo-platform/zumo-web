@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 
@@ -14,11 +14,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#1e1b2d",
+};
+
 export const metadata: Metadata = {
   title: "Zumo Demo",
   description: "AI powered product and order management",
   icons: {
-    icon: "/favicon.ico",
+    icon: [{ url: "/branding/zumo-isotype.png", type: "image/png" }],
+    apple: "/branding/zumo-isotype.png",
   },
 };
 

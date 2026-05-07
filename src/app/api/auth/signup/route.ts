@@ -5,16 +5,20 @@ import { signUp } from "@/lib/cognito-server";
 
 export async function POST(request: Request) {
   try {
-    const { fullName, businessName, email, password } = await request.json();
+    const { fullName, businessName, email, password, phone } = await request.json();
 
-    if (!email || !password || !fullName || !businessName) {
+    if (!email || !password || !fullName || !businessName || !phone) {
       return NextResponse.json(
-        { error: "ValidationError", message: "fullName, businessName, email, and password are required." },
+        {
+          error: "ValidationError",
+          message:
+            "fullName, businessName, email, password, and phone (E.164) are required.",
+        },
         { status: 400 },
       );
     }
 
-    await signUp({ fullName, businessName, email, password });
+    await signUp({ fullName, businessName, email, password, phone });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

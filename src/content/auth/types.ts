@@ -21,6 +21,9 @@ export type AuthMessages = {
   fullNamePlaceholder: string;
   companyLabel: string;
   companyPlaceholder: string;
+  phoneLabel: string;
+  phoneHint: string;
+  phoneInvalid: string;
   submitSignUp: string;
   confirmTitle: string;
   confirmDescription: string;

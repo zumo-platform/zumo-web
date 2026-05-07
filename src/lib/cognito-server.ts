@@ -15,6 +15,8 @@ export async function signUp(input: {
   businessName: string;
   email: string;
   password: string;
+  /** E.164, stored on seller row via post-confirmation (custom:phone). */
+  phone: string;
 }): Promise<void> {
   await cognito.send(
     new SignUpCommand({
@@ -25,6 +27,7 @@ export async function signUp(input: {
         { Name: "email", Value: input.email },
         { Name: "name", Value: input.fullName },
         { Name: "custom:businessName", Value: input.businessName },
+        { Name: "custom:phone", Value: input.phone },
       ],
     }),
   );

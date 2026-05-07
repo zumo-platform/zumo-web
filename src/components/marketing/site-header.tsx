@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ZumoWordmark } from "@/components/branding/zumo-logos";
 import { Button } from "@/components/ui/button";
 import type { MarketingMessages } from "@/content/marketing/types";
 import type { MarketingLocale, MarketingPageSegment } from "@/lib/marketing-locale";
@@ -92,12 +93,8 @@ export function SiteHeader({
   return (
     <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-6">
-        <Link className="flex shrink-0 items-center gap-2 font-semibold text-lg tracking-tight" href={homePath}>
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500"
-          />
-          Zumo
+        <Link className="flex shrink-0 items-center" href={homePath}>
+          <ZumoWordmark priority />
         </Link>
 
         <div className="flex items-center gap-2 md:gap-3">

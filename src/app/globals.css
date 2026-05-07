@@ -47,40 +47,41 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* Zinc-style gray / white light theme (shadcn-aligned). Dark block stays neutral—no accent hue. */
+/* Brand ink drives primary text + controls across the light UI. */
 :root {
   --radius: 0.625rem;
+  --brand-ink: #1e1b2d;
   --background: oklch(0.985 0.002 286);
-  --foreground: oklch(0.141 0.005 285.823);
+  --foreground: var(--brand-ink);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
+  --card-foreground: var(--brand-ink);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
+  --popover-foreground: var(--brand-ink);
+  --primary: var(--brand-ink);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --secondary-foreground: var(--brand-ink);
   --muted: oklch(0.967 0.001 286.375);
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
+  --accent-foreground: var(--brand-ink);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-  --chart-1: oklch(0.42 0.012 286);
-  --chart-2: oklch(0.52 0.012 286);
-  --chart-3: oklch(0.62 0.01 286);
-  --chart-4: oklch(0.72 0.008 286);
-  --chart-5: oklch(0.82 0.006 286);
+  --ring: oklch(0.55 0.03 292);
+  --chart-1: oklch(0.42 0.035 292);
+  --chart-2: oklch(0.52 0.03 292);
+  --chart-3: oklch(0.62 0.025 292);
+  --chart-4: oklch(0.72 0.02 292);
+  --chart-5: oklch(0.82 0.015 292);
   --sidebar: oklch(0.98 0.003 286);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: var(--brand-ink);
+  --sidebar-primary: var(--brand-ink);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.96 0.004 286);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-accent-foreground: var(--brand-ink);
   --sidebar-border: oklch(0.91 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --sidebar-ring: oklch(0.55 0.03 292);
 }
 
 .dark {
@@ -90,8 +91,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.21 0.006 285.885);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.93 0.018 292);
+  --primary-foreground: var(--brand-ink);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.274 0.006 286.033);
@@ -102,15 +103,15 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.55 0.015 286);
-  --chart-2: oklch(0.62 0.012 286);
-  --chart-3: oklch(0.69 0.01 286);
-  --chart-4: oklch(0.76 0.008 286);
-  --chart-5: oklch(0.83 0.006 286);
+  --chart-1: oklch(0.55 0.03 292);
+  --chart-2: oklch(0.62 0.025 292);
+  --chart-3: oklch(0.69 0.02 292);
+  --chart-4: oklch(0.76 0.015 292);
+  --chart-5: oklch(0.83 0.012 292);
   --sidebar: oklch(0.21 0.006 285.885);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.922 0 0);
-  --sidebar-primary-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-primary: oklch(0.93 0.018 292);
+  --sidebar-primary-foreground: var(--brand-ink);
   --sidebar-accent: oklch(0.274 0.006 286.033);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
@@ -129,4 +130,31 @@
 /** Logo wordmark — Satoshi is loaded via Fontshare in root layout (not on fonts.google.com). */
 .font-satoshi {
   font-family: var(--font-satoshi);
+}
+
+@layer utilities {
+  /**
+   * Phone country dropdown: keep vertical scrollbar gutter visible (scroll vs auto),
+   * style thumb/track on WebKit; Firefox uses scrollbar-width: thin.
+   */
+  .phone-country-select-content {
+    overflow-x: hidden;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+
+  .phone-country-select-content::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .phone-country-select-content::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: var(--border);
+  }
+
+  .phone-country-select-content::-webkit-scrollbar-track {
+    border-radius: 9999px;
+    background-color: var(--muted);
+  }
 }

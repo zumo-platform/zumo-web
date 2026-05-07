@@ -20,6 +20,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { ZumoIsotype, ZumoWordmark } from "@/components/branding/zumo-logos";
 import {
   Sidebar,
   SidebarContent,
@@ -117,16 +118,16 @@ export function AppSidebar({
         <div className="flex items-center justify-between gap-2">
           <Link
             className={cn(
-              "font-satoshi flex min-w-0 items-center gap-1 font-bold tracking-tight text-sidebar-foreground",
+              "flex min-w-0 items-center gap-1 text-sidebar-foreground",
               "group-data-[collapsible=icon]:justify-center",
             )}
             href="/inbox"
           >
-            <span className="truncate text-xl group-data-[collapsible=icon]:hidden">
-              Zumo
+            <span className="group-data-[collapsible=icon]:hidden">
+              <ZumoWordmark className="max-h-7 max-w-[min(100%,6.5rem)] md:max-h-8" />
             </span>
-            <span className="hidden size-8 items-center justify-center rounded-md bg-sidebar-accent text-lg group-data-[collapsible=icon]:flex">
-              Z
+            <span className="hidden group-data-[collapsible=icon]:flex">
+              <ZumoIsotype />
             </span>
           </Link>
           <SidebarTrigger className="shrink-0 text-sidebar-foreground" />

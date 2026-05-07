@@ -2,10 +2,12 @@
 
 import { useId, useState } from "react";
 
+import type { CountryCode } from "libphonenumber-js";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { PhoneNumberField } from "@/components/auth/phone-number-field";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AuthMessages } from "@/content/auth/types";
 import type { MarketingLocale } from "@/lib/marketing-locale";
+import { nationalToE164 } from "@/lib/phone-e164";
 
 export type AuthTabValue = "signin" | "signup";
 type AuthState = "signin" | "signup" | "confirm";
@@ -98,6 +101,9 @@ export function AuthForms({
   const [savedEmail, setSavedEmail] = useState("");
   const [savedPassword, setSavedPassword] = useState("");
 
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>("CR");
+  const [phoneNational, setPhoneNational] = useState("");
+
   async function handleSignIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -133,11 +139,19 @@ export function AuthForms({
     const email = String(fd.get("email") ?? "");
     const password = String(fd.get("password") ?? "");
 
+    const phone = nationalToE164(phoneNational, phoneCountry);
+    if (!phone) {
+      toast.error(messages.phoneInvalid);
+      setLoading(false);
+      return;
+    }
+
     const { ok, data } = await apiFetch("/api/auth/signup", {
       fullName,
       businessName,
       email,
       password,
+      phone,
     });
 
     if (ok) {
@@ -330,6 +344,18 @@ export function AuthForms({
                     required
                   />
                 </div>
+                <PhoneNumberField
+                  country={phoneCountry}
+                  disabled={loading}
+                  hint={messages.phoneHint}
+                  id={`${uid}-signup-phone`}
+                  label={messages.phoneLabel}
+                  locale={locale}
+                  national={phoneNational}
+                  placeholder="89479486"
+                  onCountryChange={setPhoneCountry}
+                  onNationalChange={setPhoneNational}
+                />
                 <div className="space-y-2">
                   <Label htmlFor={`${uid}-signup-company`}>{messages.companyLabel}</Label>
                   <Input

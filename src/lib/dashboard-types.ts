@@ -41,6 +41,7 @@ export interface SellerMe {
     sellerId: number;
     email: string;
     name: string;
+    phone: string | null;
     role: string;
     active: boolean;
   };

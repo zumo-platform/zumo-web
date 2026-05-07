@@ -10,6 +10,7 @@ const fallbackSeller: SellerMe["seller"] = {
   sellerId: 0,
   email: "",
   name: "Usuario",
+  phone: null,
   role: "owner",
   active: true,
 };
