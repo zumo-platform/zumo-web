@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import Link from "next/link";
 
 import {
@@ -8,15 +10,16 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { ClientsHeaderActions } from "@/components/workspace/clients-header-actions";
 
 /**
  * Application page header inspired by “page-header-2”: breadcrumbs plus title row with actions ([shadcndesign page headers](https://www.shadcndesign.com/pro-blocks/page-headers)).
  */
 export function ClientsPageHeader({
   description,
+  actions,
 }: Readonly<{
   description: string;
+  actions: ReactNode;
 }>) {
   return (
     <header className="shrink-0 border-b bg-background px-6 py-5">
@@ -43,7 +46,7 @@ export function ClientsPageHeader({
             {description}
           </p>
         </div>
-        <ClientsHeaderActions />
+        {actions}
       </div>
     </header>
   );

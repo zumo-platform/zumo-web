@@ -5,7 +5,11 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 
-export function ClientsHeaderActions() {
+export function ClientsHeaderActions({
+  onAddCustomer,
+}: Readonly<{
+  onAddCustomer?: () => void;
+}>) {
   return (
     <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
       <Button
@@ -32,7 +36,9 @@ export function ClientsHeaderActions() {
         size="sm"
         className="gap-2"
         type="button"
-        onClick={() => toast.message("Agregar clientes — próximamente")}
+        onClick={() =>
+          onAddCustomer ? onAddCustomer() : toast.message("Agregar clientes — próximamente")
+        }
       >
         <UserPlus aria-hidden className="size-4" />
         Agregar cliente

@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 /**
  * Empty onboarding when the supplier has no customers yet (matches product design).
  */
-export function ClientsEmptyState() {
+export function ClientsEmptyState({
+  onPrimaryCta,
+}: Readonly<{
+  onPrimaryCta?: () => void;
+}>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-16">
       <div className="mx-auto max-w-xl text-center">
@@ -24,7 +28,9 @@ export function ClientsEmptyState() {
             className="rounded-lg px-8"
             size="lg"
             type="button"
-            onClick={() => toast.message("Agregar clientes — próximamente")}
+            onClick={() =>
+              onPrimaryCta ? onPrimaryCta() : toast.message("Agregar clientes — próximamente")
+            }
           >
             Agregar Clientes
           </Button>
