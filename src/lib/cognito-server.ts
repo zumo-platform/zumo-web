@@ -23,7 +23,7 @@ export async function signUp(input: {
   businessName: string;
   email: string;
   password: string;
-  /** E.164, stored on seller row via post-confirmation (custom:phone). */
+  /** E.164 — stored as Cognito standard `phone_number` and copied to seller.phone in post-confirmation. */
   phone: string;
 }): Promise<void> {
   const ClientId = cognitoAppClientId();
@@ -36,7 +36,7 @@ export async function signUp(input: {
         { Name: "email", Value: input.email },
         { Name: "name", Value: input.fullName },
         { Name: "custom:businessName", Value: input.businessName },
-        { Name: "custom:phone", Value: input.phone },
+        { Name: "phone_number", Value: input.phone },
       ],
     }),
   );
