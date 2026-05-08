@@ -34,6 +34,8 @@ export type AuthMessages = {
   backToLanding: string;
   showPassword: string;
   hidePassword: string;
+  /** Shown when auth API fails to respond or returns non‑JSON body */
+  authNetworkError: string;
   /** @deprecated kept for TS compat with existing callers */
   toastPreview: string;
 };

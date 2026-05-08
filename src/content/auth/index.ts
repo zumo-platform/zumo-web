@@ -39,6 +39,7 @@ const authMessagesEs: AuthMessages = {
   backToLanding: "Volver al inicio",
   showPassword: "Mostrar contraseña",
   hidePassword: "Ocultar contraseña",
+  authNetworkError: "No se pudo conectar con el servidor. Revisa la red o reinicia Next.",
   toastPreview: "",
 };
 
@@ -78,6 +79,7 @@ const authMessagesEn: AuthMessages = {
   backToLanding: "Back to home",
   showPassword: "Show password",
   hidePassword: "Hide password",
+  authNetworkError: "Could not reach the server. Check network or restart Next.",
   toastPreview: "",
 };
 

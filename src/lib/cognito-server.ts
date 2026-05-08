@@ -5,8 +5,16 @@ import {
   SignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
+/** App client ID for USER_PASSWORD_SIGNUP / initiate auth — same ID whether read server-only or NEXT_PUBLIC_* (parity with SST `NEXT_PUBLIC_COGNITO_CLIENT_ID`). */
+export function cognitoAppClientId(): string {
+  return (
+    process.env.COGNITO_USER_POOL_CLIENT_ID?.trim() ||
+    process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID?.trim() ||
+    ""
+  );
+}
+
 const region = process.env.AWS_REGION ?? "us-east-2";
-const clientId = process.env.COGNITO_USER_POOL_CLIENT_ID ?? "";
 
 const cognito = new CognitoIdentityProviderClient({ region });
 
@@ -18,9 +26,10 @@ export async function signUp(input: {
   /** E.164, stored on seller row via post-confirmation (custom:phone). */
   phone: string;
 }): Promise<void> {
+  const ClientId = cognitoAppClientId();
   await cognito.send(
     new SignUpCommand({
-      ClientId: clientId,
+      ClientId,
       Username: input.email,
       Password: input.password,
       UserAttributes: [
@@ -39,7 +48,7 @@ export async function confirmSignUp(input: {
 }): Promise<void> {
   await cognito.send(
     new ConfirmSignUpCommand({
-      ClientId: clientId,
+      ClientId: cognitoAppClientId(),
       Username: input.email,
       ConfirmationCode: input.code,
     }),
@@ -59,7 +68,7 @@ export async function signIn(input: {
 }): Promise<AuthTokens> {
   const res = await cognito.send(
     new InitiateAuthCommand({
-      ClientId: clientId,
+      ClientId: cognitoAppClientId(),
       AuthFlow: "USER_PASSWORD_AUTH",
       AuthParameters: {
         USERNAME: input.email,

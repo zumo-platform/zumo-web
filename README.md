@@ -137,7 +137,9 @@ pnpm start
 
 ## Environment variables
 
-Use **`.env.local`** at the repo root.
+Use **`.env.local`** at the repo root (`cp .env.example .env.local`).
+
+**Cognito signup/login** Route Handlers need **`AWS_REGION`**, a **Cognito app client id** (`COGNITO_USER_POOL_CLIENT_ID` or **`NEXT_PUBLIC_COGNITO_CLIENT_ID`** — same value SST sets for `packages/dashboard`), and **`AWS_PROFILE`** so the server SDK can assume the same SSO profile as your CLI (`aws sso login --profile zumo-dev`).
 
 Examples as integrations land:
 

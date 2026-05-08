@@ -1,18 +1,36 @@
 import { NextResponse } from "next/server";
 
+import { localeFromRequest } from "@/lib/auth-locale";
 import { mapCognitoError } from "@/lib/cognito-errors";
-import { signUp } from "@/lib/cognito-server";
+import { cognitoAppClientId, signUp } from "@/lib/cognito-server";
 
 export async function POST(request: Request) {
+  const locale = localeFromRequest(request);
+
   try {
     const { fullName, businessName, email, password, phone } = await request.json();
+
+    if (!cognitoAppClientId()) {
+      return NextResponse.json(
+        {
+          error: "ConfigurationError",
+          message:
+            locale === "es"
+              ? "Falta el ID del cliente de Cognito. Añade COGNITO_USER_POOL_CLIENT_ID o NEXT_PUBLIC_COGNITO_CLIENT_ID en .env.local (mismo valor que en el dashboard SST)."
+              : "Missing Cognito app client id. Set COGNITO_USER_POOL_CLIENT_ID or NEXT_PUBLIC_COGNITO_CLIENT_ID in .env.local (same value SST uses for NEXT_PUBLIC_COGNITO_CLIENT_ID).",
+        },
+        { status: 503 },
+      );
+    }
 
     if (!email || !password || !fullName || !businessName || !phone) {
       return NextResponse.json(
         {
           error: "ValidationError",
           message:
-            "fullName, businessName, email, password, and phone (E.164) are required.",
+            locale === "es"
+              ? "Nombre, empresa, correo, contraseña y teléfono son obligatorios."
+              : "fullName, businessName, email, password, and phone (E.164) are required.",
         },
         { status: 400 },
       );
@@ -22,7 +40,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const mapped = mapCognitoError(err);
+    const mapped = mapCognitoError(err, locale);
     return NextResponse.json(mapped, { status: 400 });
   }
 }

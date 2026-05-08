@@ -10,7 +10,13 @@ export function sanitizeNationalPhoneDigits(raw: string): string {
 export function nationalToE164(national: string, country: CountryCode): string | null {
   const cleaned = sanitizeNationalPhoneDigits(national);
   if (!cleaned) return null;
-  const pn = parsePhoneNumberFromString(cleaned, country);
+
+  let pn = parsePhoneNumberFromString(cleaned, country);
+  if (!pn?.isValid()) {
+    const international = cleaned.startsWith("+") ? cleaned : `+${cleaned}`;
+    pn = parsePhoneNumberFromString(international);
+  }
+
   if (!pn?.isValid()) return null;
   return pn.format("E.164");
 }

@@ -73,15 +73,37 @@ function PasswordField({
   );
 }
 
-async function apiFetch(path: string, body: Record<string, string>) {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  return { ok: res.ok, status: res.status, data: json };
+async function apiFetch(path: string, body: Record<string, string>, authLocale: MarketingLocale) {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Locale": authLocale,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, status: 0, data: {} as ApiAuthPayload };
+  }
+
+  try {
+    const raw = (await res.json()) as Record<string, unknown>;
+    const data: ApiAuthPayload = {
+      error: typeof raw.error === "string" ? raw.error : undefined,
+      message: typeof raw.message === "string" ? raw.message : undefined,
+    };
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, status: res.status, data: {} };
+  }
 }
+
+type ApiAuthPayload = Readonly<{
+  error?: string;
+  message?: string;
+}>;
 
 export function AuthForms({
   defaultTab,
@@ -111,7 +133,7 @@ export function AuthForms({
     const email = String(fd.get("email") ?? "");
     const password = String(fd.get("password") ?? "");
 
-    const { ok, status, data } = await apiFetch("/api/auth/login", { email, password });
+    const { ok, status, data } = await apiFetch("/api/auth/login", { email, password }, locale);
 
     if (ok) {
       const verify = await fetch("/api/backend/sellers/me");
@@ -122,10 +144,10 @@ export function AuthForms({
     } else if (status === 403 && data.error === "UserNotConfirmedException") {
       setSavedEmail(email);
       setSavedPassword(password);
-      toast.warning(data.message);
+      toast.warning(data.message ?? "");
       setState("confirm");
     } else {
-      toast.error(data.message ?? "Error al iniciar sesión.");
+      toast.error(data.message ?? messages.authNetworkError);
     }
     setLoading(false);
   }
@@ -146,20 +168,24 @@ export function AuthForms({
       return;
     }
 
-    const { ok, data } = await apiFetch("/api/auth/signup", {
-      fullName,
-      businessName,
-      email,
-      password,
-      phone,
-    });
+    const { ok, data } = await apiFetch(
+      "/api/auth/signup",
+      {
+        fullName,
+        businessName,
+        email,
+        password,
+        phone,
+      },
+      locale,
+    );
 
     if (ok) {
       setSavedEmail(email);
       setSavedPassword(password);
       setState("confirm");
     } else {
-      toast.error(data.message ?? "Error al crear la cuenta.");
+      toast.error(data.message ?? messages.authNetworkError);
     }
     setLoading(false);
   }
@@ -171,25 +197,26 @@ export function AuthForms({
     const code = String(fd.get("code") ?? "");
     const email = (fd.get("email") as string | null) || savedEmail;
 
-    const { ok, data } = await apiFetch("/api/auth/confirm", { email, code });
+    const { ok, data } = await apiFetch("/api/auth/confirm", { email, code }, locale);
 
     if (!ok) {
-      toast.error(data.message ?? "Código incorrecto.");
+      toast.error(data.message ?? messages.authNetworkError);
       setLoading(false);
       return;
     }
 
     // Auto sign-in after confirmation if we saved the password
     if (savedPassword) {
-      const { ok: loginOk, data: loginData } = await apiFetch("/api/auth/login", {
-        email,
-        password: savedPassword,
-      });
+      const { ok: loginOk, data: loginData } = await apiFetch(
+        "/api/auth/login",
+        { email, password: savedPassword },
+        locale,
+      );
       if (loginOk) {
         router.push("/inbox");
       } else {
         toast.success("¡Cuenta confirmada! Inicia sesión.");
-        toast.error(loginData?.message ?? "Error al iniciar sesión.");
+        toast.error(loginData?.message ?? messages.authNetworkError);
         setState("signin");
       }
     } else {
