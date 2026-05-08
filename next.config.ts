@@ -12,8 +12,8 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   async redirects() {
     return [
-      { destination: "/en/privacy", permanent: false, source: "/privacy" },
-      { destination: "/en/terms", permanent: false, source: "/terms" },
+      { destination: "/es/privacy", permanent: false, source: "/privacy" },
+      { destination: "/es/terms", permanent: false, source: "/terms" },
     ];
   },
 };

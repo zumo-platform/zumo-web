@@ -63,10 +63,10 @@ zumo-web/
 │   │   ├── (platform)/
 │   │   │   ├── (auth)/             # /login, /register → signup tab
 │   │   │   └── (workspace)/        # /inbox, /orders, /profile (placeholders)
-│   │   ├── privacy/page.tsx        # → redirect /en/privacy
-│   │   ├── terms/page.tsx          # → redirect /en/terms
+│   │   ├── privacy/page.tsx        # → redirect /es/privacy
+│   │   ├── terms/page.tsx          # → redirect /es/terms
 │   │   ├── layout.tsx              # Root layout (fonts, toaster)
-│   │   └── page.tsx                # / → /en
+│   │   └── page.tsx                # / → /es
 │   ├── components/
 │   │   ├── auth/                   # Sign-in / sign-up tabs (UI only until API + NextAuth)
 │   │   ├── marketing/
@@ -121,9 +121,9 @@ Run only **one** `next dev` per clone. If you see **Unable to acquire lock** und
 
 | Path | Purpose |
 |------|---------|
-| `/` | Redirect → `/en` |
+| `/` | Redirect → `/es` |
 | `/en`, `/es` | Marketing |
-| `/privacy`, `/terms` | Redirect → `/en/privacy`, `/en/terms` |
+| `/privacy`, `/terms` | Redirect → `/es/privacy`, `/es/terms` |
 | `/login` | Sign in / sign up (`?tab=signup`) |
 | `/register` | Redirect → `/login?tab=signup` |
 | `/inbox`, `/orders`, `/profile` | Workspace placeholders |
