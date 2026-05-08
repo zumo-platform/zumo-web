@@ -62,7 +62,7 @@ zumo-web/
 │   │   ├── (marketing)/[locale]/   # EN/ES marketing, privacy, terms
 │   │   ├── (platform)/
 │   │   │   ├── (auth)/             # /login, /register → signup tab
-│   │   │   └── (workspace)/        # /inbox, /orders, /profile (placeholders)
+│   │   │   └── (workspace)/        # /inbox, /orders, /clients, /profile
 │   │   ├── privacy/page.tsx        # → redirect /es/privacy
 │   │   ├── terms/page.tsx          # → redirect /es/terms
 │   │   ├── layout.tsx              # Root layout (fonts, toaster)
@@ -126,7 +126,7 @@ Run only **one** `next dev` per clone. If you see **Unable to acquire lock** und
 | `/privacy`, `/terms` | Redirect → `/es/privacy`, `/es/terms` |
 | `/login` | Sign in / sign up (`?tab=signup`) |
 | `/register` | Redirect → `/login?tab=signup` |
-| `/inbox`, `/orders`, `/profile` | Workspace placeholders |
+| `/inbox`, `/orders`, `/clients`, `/profile` | Workspace (inbox, orders, clients empty state when no customers, profile) |
 
 ## Build & production
 

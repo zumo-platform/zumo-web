@@ -73,12 +73,7 @@ const mainNav: NavItem[] = [
     icon: Calendar,
     label: "Calendario",
   },
-  {
-    disabled: true,
-    tooltip: "Pronto",
-    icon: Store,
-    label: "Clientes",
-  },
+  { href: "/clients", icon: Store, label: "Clientes" },
   {
     disabled: true,
     tooltip: "Pronto",
