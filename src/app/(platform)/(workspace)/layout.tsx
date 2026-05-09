@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import type { SellerMe } from "@/lib/dashboard-types";
+import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
 import { getAuthSession } from "@/lib/session";
 
 import packageJson from "../../../../package.json";
@@ -26,23 +27,25 @@ export default async function WorkspaceLayout({
     redirect("/login");
   }
 
-  const apiUrl = (process.env.API_URL ?? "").replace(/\/$/, "");
+  const apiUrl = getServerApiBaseUrl();
 
   let seller = fallbackSeller;
   let supplier: SellerMe["supplier"] | null = null;
 
-  try {
-    const res = await fetch(`${apiUrl}/sellers/me`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const data = (await res.json()) as SellerMe;
-      if (data.seller) seller = data.seller;
-      supplier = data.supplier ?? null;
+  if (apiUrl) {
+    try {
+      const res = await fetch(joinApiGatewayPath(apiUrl, "sellers/me"), {
+        headers: { Authorization: `Bearer ${idToken}` },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = (await res.json()) as SellerMe;
+        if (data.seller) seller = data.seller;
+        supplier = data.supplier ?? null;
+      }
+    } catch {
+      // fallback seller keeps shell usable
     }
-  } catch {
-    // fallback seller keeps shell usable
   }
 
   return (

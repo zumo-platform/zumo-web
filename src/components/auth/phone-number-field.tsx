@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 type PhoneNumberFieldProps = Readonly<{
   id: string;
   label: string;
+  /** Marks the field visually and for assistive tech as required. */
+  required?: boolean;
   hint?: string;
   disabled?: boolean;
   locale: string;
@@ -35,6 +37,7 @@ type PhoneNumberFieldProps = Readonly<{
 export function PhoneNumberField({
   id,
   label,
+  required,
   hint,
   disabled,
   locale,
@@ -47,9 +50,18 @@ export function PhoneNumberField({
 }: PhoneNumberFieldProps) {
   const countries = useMemo(() => getSortedCallingCountries(locale), [locale]);
 
+  const fieldAriaLabel = required ? `${label} (obligatorio)` : label;
+
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id}>
+        {label}
+        {required ? (
+          <abbr className="ml-0.5 cursor-help text-destructive no-underline" title="Campo obligatorio">
+            *
+          </abbr>
+        ) : null}
+      </Label>
       <InputGroup
         aria-invalid={invalid}
         className={cn(invalid && "border-destructive ring-destructive/20")}
@@ -61,7 +73,7 @@ export function PhoneNumberField({
             onValueChange={(v) => onCountryChange(v as CountryCode)}
           >
             <SelectTrigger
-              aria-label={label}
+              aria-label={fieldAriaLabel}
               className="h-9 max-w-[10rem] min-w-[7rem] shrink-0 gap-1 rounded-none border-0 bg-transparent px-2 shadow-none ring-0 focus-visible:ring-0 data-[size=default]:h-9 [&_[data-slot=select-value]]:truncate"
               size="sm"
             >
@@ -93,6 +105,7 @@ export function PhoneNumberField({
           <Separator className="mx-1 h-5 shrink-0" orientation="vertical" />
         </InputGroupAddon>
         <InputGroupInput
+          aria-required={required}
           aria-invalid={invalid}
           autoComplete="tel-national"
           disabled={disabled}

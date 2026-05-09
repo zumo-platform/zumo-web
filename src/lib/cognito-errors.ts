@@ -32,8 +32,8 @@ const BY_CODE: Partial<Record<KnownCognitoErrorCode, Record<MarketingLocale, str
     en: "The confirmation code is incorrect.",
   },
   ExpiredCodeException: {
-    es: "El código de confirmación expiró.",
-    en: "The confirmation code expired. Request a new code later.",
+    es: "El código caducó. Pulsa «Enviar otro código» para recibir uno nuevo.",
+    en: "The confirmation code expired. Use “Send another code” to get a new one.",
   },
   NotAuthorizedException: {
     es: "Correo o contraseña incorrectos.",

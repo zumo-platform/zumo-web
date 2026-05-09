@@ -1,8 +1,23 @@
 import { NextResponse } from "next/server";
 
+import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
 import { getAuthSession } from "@/lib/session";
 
-const API_URL = (process.env.API_URL ?? "").replace(/\/$/, "");
+export const runtime = "nodejs";
+
+function coercePathSegments(routePath: unknown): string[] {
+  if (Array.isArray(routePath)) {
+    return routePath
+      .flatMap((segment) =>
+        typeof segment === "string" ? segment.split("/") : String(segment ?? "").split("/"),
+      )
+      .filter(Boolean);
+  }
+  if (typeof routePath === "string" && routePath.length > 0) {
+    return routePath.split("/").filter(Boolean);
+  }
+  return [];
+}
 
 async function proxyRequest(
   request: Request,
@@ -17,10 +32,29 @@ async function proxyRequest(
     );
   }
 
+  const baseUrl = getServerApiBaseUrl();
+  if (!baseUrl) {
+    return NextResponse.json(
+      {
+        error: "MissingAPIUrl",
+        message:
+          "Falta API_URL o NEXT_PUBLIC_API_URL en .env.local apuntando a la URL base del API Gateway (sin slash final ni sufijo …/dashboard).",
+      },
+      { status: 503 },
+    );
+  }
+
+  if (segments.length === 0) {
+    return NextResponse.json(
+      { error: "BadRequest", message: "Falta el path tras /api/backend/." },
+      { status: 400 },
+    );
+  }
+
   const pathStr = segments.join("/");
   const { searchParams } = new URL(request.url);
   const qs = searchParams.toString();
-  const upstream = `${API_URL}/${pathStr}${qs ? `?${qs}` : ""}`;
+  const upstream = `${joinApiGatewayPath(baseUrl, pathStr)}${qs ? `?${qs}` : ""}`;
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${idToken}`,
@@ -38,7 +72,20 @@ async function proxyRequest(
     }
   }
 
-  const upstream_res = await fetch(upstream, init);
+  let upstream_res: Response;
+  try {
+    upstream_res = await fetch(upstream, init);
+  } catch {
+    return NextResponse.json(
+      {
+        error: "UpstreamUnavailable",
+        message:
+          "No se pudo conectar con el API. Comprueba API_URL y la red/VPN.",
+      },
+      { status: 502 },
+    );
+  }
+
   const text = await upstream_res.text();
 
   let body: unknown;
@@ -48,21 +95,25 @@ async function proxyRequest(
     body = { raw: text };
   }
 
-  return NextResponse.json(body, { status: upstream_res.status });
+  const res = NextResponse.json(body, { status: upstream_res.status });
+  if (process.env.NODE_ENV === "development") {
+    res.headers.set("x-zumo-proxy-upstream", upstream);
+  }
+  return res;
 }
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ path: string[] }> },
+  ctx: { params: Promise<{ path?: string[] | string }> },
 ) {
-  const { path } = await params;
-  return proxyRequest(request, path);
+  const { path } = await ctx.params;
+  return proxyRequest(request, coercePathSegments(path));
 }
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ path: string[] }> },
+  ctx: { params: Promise<{ path?: string[] | string }> },
 ) {
-  const { path } = await params;
-  return proxyRequest(request, path);
+  const { path } = await ctx.params;
+  return proxyRequest(request, coercePathSegments(path));
 }

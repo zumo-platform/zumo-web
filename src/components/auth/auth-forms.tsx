@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type { CountryCode } from "libphonenumber-js";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -105,6 +105,10 @@ type ApiAuthPayload = Readonly<{
   message?: string;
 }>;
 
+const RESEND_COOLDOWN_SECONDS = 60;
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function AuthForms({
   defaultTab,
   locale,
@@ -118,13 +122,25 @@ export function AuthForms({
   const router = useRouter();
   const [state, setState] = useState<AuthState>(defaultTab);
   const [loading, setLoading] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Remember email/password across signup → confirm → auto-login
   const [savedEmail, setSavedEmail] = useState("");
   const [savedPassword, setSavedPassword] = useState("");
+  /** Editable draft when confirming without a signup hidden email (e.g. from sign-in). */
+  const [confirmEmailDraft, setConfirmEmailDraft] = useState("");
 
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>("CR");
   const [phoneNational, setPhoneNational] = useState("");
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = window.setTimeout(() => {
+      setResendCooldown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
 
   async function handleSignIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -142,8 +158,9 @@ export function AuthForms({
       }
       router.push("/inbox");
     } else if (status === 403 && data.error === "UserNotConfirmedException") {
-      setSavedEmail(email);
+      setSavedEmail(email.trim().toLowerCase());
       setSavedPassword(password);
+      setConfirmEmailDraft("");
       toast.warning(data.message ?? "");
       setState("confirm");
     } else {
@@ -158,7 +175,7 @@ export function AuthForms({
     const fd = new FormData(e.currentTarget);
     const fullName = String(fd.get("fullName") ?? "");
     const businessName = String(fd.get("businessName") ?? "");
-    const email = String(fd.get("email") ?? "");
+    const rawEmail = String(fd.get("email") ?? "").trim().toLowerCase();
     const password = String(fd.get("password") ?? "");
 
     const phone = nationalToE164(phoneNational, phoneCountry);
@@ -173,7 +190,7 @@ export function AuthForms({
       {
         fullName,
         businessName,
-        email,
+        email: rawEmail,
         password,
         phone,
       },
@@ -181,8 +198,10 @@ export function AuthForms({
     );
 
     if (ok) {
-      setSavedEmail(email);
+      setSavedEmail(rawEmail);
       setSavedPassword(password);
+      setConfirmEmailDraft("");
+      toast.success(messages.signupCreatedCheckEmail);
       setState("confirm");
     } else {
       toast.error(data.message ?? messages.authNetworkError);
@@ -190,12 +209,39 @@ export function AuthForms({
     setLoading(false);
   }
 
+  async function handleResend() {
+    const emailRaw = savedEmail.trim() || confirmEmailDraft.trim();
+    if (!EMAIL_REGEX.test(emailRaw)) {
+      toast.error(messages.resendEmailRequired);
+      return;
+    }
+    setResendBusy(true);
+    const { ok, data } = await apiFetch(
+      "/api/auth/resend",
+      { email: emailRaw.toLowerCase() },
+      locale,
+    );
+    setResendBusy(false);
+    if (ok) {
+      toast.success(messages.confirmResendToast);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      return;
+    }
+    toast.error(data.message ?? messages.authNetworkError);
+  }
+
   async function handleConfirm(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     const fd = new FormData(e.currentTarget);
     const code = String(fd.get("code") ?? "");
-    const email = (fd.get("email") as string | null) || savedEmail;
+    const emailRaw = savedEmail.trim() || confirmEmailDraft.trim();
+    if (!EMAIL_REGEX.test(emailRaw)) {
+      toast.error(messages.confirmEmailInvalid);
+      setLoading(false);
+      return;
+    }
+    const email = emailRaw.toLowerCase();
 
     const { ok, data } = await apiFetch("/api/auth/confirm", { email, code }, locale);
 
@@ -232,15 +278,19 @@ export function AuthForms({
         <Card className="border-border/60 shadow-md">
           <CardHeader>
             <CardTitle>{messages.confirmTitle}</CardTitle>
-            <CardDescription>{messages.confirmDescription}</CardDescription>
+            <CardDescription className="space-y-2">
+              <span className="block">{messages.confirmDescription}</span>
+              <span className="block text-muted-foreground text-xs leading-relaxed">
+                {messages.confirmCodeDeliveryHint}
+              </span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleConfirm}>
-              {/* Hidden email fallback if savedEmail is set */}
-              {savedEmail && (
-                <input type="hidden" name="email" value={savedEmail} />
-              )}
-              {!savedEmail && (
+              {savedEmail ? (
+                <input name="email" type="hidden" value={savedEmail} />
+              ) : null}
+              {!savedEmail ? (
                 <div className="space-y-2">
                   <Label htmlFor={`${uid}-confirm-email`}>{messages.emailLabel}</Label>
                   <Input
@@ -252,9 +302,11 @@ export function AuthForms({
                     placeholder={messages.emailPlaceholder}
                     required
                     type="email"
+                    value={confirmEmailDraft}
+                    onChange={(ev) => setConfirmEmailDraft(ev.target.value)}
                   />
                 </div>
-              )}
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor={`${uid}-confirm-code`}>{messages.confirmCodeLabel}</Label>
                 <Input
@@ -271,6 +323,23 @@ export function AuthForms({
               <Button className="w-full" disabled={loading} type="submit">
                 {loading && <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />}
                 {messages.submitConfirm}
+              </Button>
+              <Button
+                aria-label={
+                  resendBusy
+                    ? `${messages.confirmResending} (${messages.confirmResendCode})`
+                    : messages.confirmResendCode
+                }
+                className="w-full"
+                disabled={loading || resendBusy || resendCooldown > 0}
+                type="button"
+                variant="outline"
+                onClick={handleResend}
+              >
+                {resendBusy && <Loader2 aria-hidden className="mr-2 size-4 animate-spin" />}
+                {resendCooldown > 0
+                  ? messages.confirmResendWait.replace("{seconds}", String(resendCooldown))
+                  : messages.confirmResendCode}
               </Button>
               <button
                 className="w-full text-center text-muted-foreground text-sm underline-offset-4 hover:text-foreground hover:underline"
@@ -292,7 +361,9 @@ export function AuthForms({
       <Tabs
         className="w-full gap-4"
         value={state === "signin" ? "signin" : "signup"}
-        onValueChange={(v) => setState(v as AuthState)}
+        onValueChange={(value) =>
+          setState(value === "signin" || value === "signup" ? value : "signin")
+        }
       >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">{messages.tabSignIn}</TabsTrigger>

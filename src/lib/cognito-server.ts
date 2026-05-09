@@ -2,6 +2,7 @@ import {
   CognitoIdentityProviderClient,
   ConfirmSignUpCommand,
   InitiateAuthCommand,
+  ResendConfirmationCodeCommand,
   SignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -30,10 +31,10 @@ export async function signUp(input: {
   await cognito.send(
     new SignUpCommand({
       ClientId,
-      Username: input.email,
+      Username: input.email.trim().toLowerCase(),
       Password: input.password,
       UserAttributes: [
-        { Name: "email", Value: input.email },
+        { Name: "email", Value: input.email.trim().toLowerCase() },
         { Name: "name", Value: input.fullName },
         { Name: "custom:businessName", Value: input.businessName },
         { Name: "phone_number", Value: input.phone },
@@ -51,6 +52,16 @@ export async function confirmSignUp(input: {
       ClientId: cognitoAppClientId(),
       Username: input.email,
       ConfirmationCode: input.code,
+    }),
+  );
+}
+
+export async function resendConfirmationCode(input: { email: string }): Promise<void> {
+  const ClientId = cognitoAppClientId();
+  await cognito.send(
+    new ResendConfirmationCodeCommand({
+      ClientId,
+      Username: input.email.trim().toLowerCase(),
     }),
   );
 }

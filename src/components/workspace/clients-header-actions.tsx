@@ -7,8 +7,11 @@ import { Button } from "@/components/ui/button";
 
 export function ClientsHeaderActions({
   onAddCustomer,
+  onImportCustomers,
 }: Readonly<{
   onAddCustomer?: () => void;
+  /** When set, primary import affordance jumps to that workspace section instead of a toast-only stub. */
+  onImportCustomers?: () => void;
 }>) {
   return (
     <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -17,7 +20,9 @@ export function ClientsHeaderActions({
         size="sm"
         className="gap-2"
         type="button"
-        onClick={() => toast.message("Importar clientes — próximamente")}
+        onClick={() =>
+          onImportCustomers ? onImportCustomers() : toast.message("Importar clientes — próximamente")
+        }
       >
         <Download aria-hidden className="size-4" />
         Importar

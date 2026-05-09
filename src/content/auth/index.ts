@@ -31,15 +31,26 @@ const authMessagesEs: AuthMessages = {
   phoneInvalid: "Introduce un número válido para el país seleccionado.",
   submitSignUp: "Crear cuenta",
   confirmTitle: "Verifica tu correo",
-  confirmDescription: "Revisa tu bandeja. Te enviamos un código de verificación.",
+  confirmDescription:
+    "Introduce el código de verificación que te enviamos (normalmente varios dígitos).",
+  confirmCodeDeliveryHint:
+    "El correo lo envía AWS (Amazon Cognito), no Zumo directamente. Suele llegar en 1–3 minutos. Revisa spam, Promociones y la pestaña “Actualización”. Si sigue sin aparecer, pulsa «Enviar otro código».",
   confirmCodeLabel: "Código de confirmación",
   confirmCodePlaceholder: "123456",
+  confirmResendCode: "Enviar otro código",
+  confirmResending: "Enviando código…",
+  confirmResendToast: "Pedimos otro código. Busca el correo más reciente y usa ese número.",
+  confirmResendWait: "Espera {seconds} s antes de otro envío",
   submitConfirm: "Confirmar cuenta",
   backToSignIn: "Volver al inicio de sesión",
   backToLanding: "Volver al inicio",
   showPassword: "Mostrar contraseña",
   hidePassword: "Ocultar contraseña",
   authNetworkError: "No se pudo conectar con el servidor. Revisa la red o reinicia Next.",
+  signupCreatedCheckEmail:
+    "Cuenta creada: el código puede tardar hasta unos minutos. Revisa spam y Promociones; si no llega, podés pedir otro código abajo.",
+  resendEmailRequired: "Escribe tu correo arriba para poder reenviar el código.",
+  confirmEmailInvalid: "Introduce un correo válido para confirmar la cuenta.",
   toastPreview: "",
 };
 
@@ -71,15 +82,25 @@ const authMessagesEn: AuthMessages = {
   phoneInvalid: "Enter a valid phone number for the selected country.",
   submitSignUp: "Create account",
   confirmTitle: "Verify your email",
-  confirmDescription: "Check your inbox. We sent a verification code.",
+  confirmDescription: "Enter the verification code from the email we sent (typically several digits).",
+  confirmCodeDeliveryHint:
+    "AWS (Amazon Cognito) sends this message, not Zumo itself. Delivery often takes 1–3 minutes. Check spam/promotions. If nothing arrives, use “Send another code” below.",
   confirmCodeLabel: "Confirmation code",
   confirmCodePlaceholder: "123456",
+  confirmResendCode: "Send another code",
+  confirmResending: "Sending code…",
+  confirmResendToast: "Another code has been requested. Use the newest email.",
+  confirmResendWait: "Wait {seconds}s before resending",
   submitConfirm: "Confirm account",
   backToSignIn: "Back to sign in",
   backToLanding: "Back to home",
   showPassword: "Show password",
   hidePassword: "Hide password",
   authNetworkError: "Could not reach the server. Check network or restart Next.",
+  signupCreatedCheckEmail:
+    "Account created: the verification email can take a few minutes. Check spam/promotions, or tap “Send another code” below if needed.",
+  resendEmailRequired: "Enter your email above so we can resend the code.",
+  confirmEmailInvalid: "Enter a valid email address to confirm your account.",
   toastPreview: "",
 };
 

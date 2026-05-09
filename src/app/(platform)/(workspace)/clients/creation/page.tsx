@@ -1,23 +1,23 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { ClientsExperience } from "@/components/workspace/clients-experience";
-import { fetchCustomersDashboard } from "@/lib/dashboard-customers";
-import { getServerApiBaseUrl } from "@/lib/api";
 import { getAuthSession } from "@/lib/session";
 
-export default async function ClientsPage() {
+export const metadata: Metadata = {
+  title: "Creación de cliente",
+};
+
+export default async function ClientCreationPage() {
   const { idToken } = await getAuthSession();
 
   if (!idToken) {
     redirect("/login");
   }
 
-  const apiUrl = getServerApiBaseUrl();
-  const initialCustomers = await fetchCustomersDashboard(apiUrl, idToken);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
-      <ClientsExperience initialCustomers={initialCustomers} variant="list" />
+      <ClientsExperience variant="creation" />
     </div>
   );
 }

@@ -25,18 +25,36 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { nationalToE164 } from "@/lib/phone-e164";
 
+const optionalCompanyEmailSchema = z.union([
+  z.literal(""),
+  z
+    .string()
+    .trim()
+    .min(1)
+    .email("Introduce un correo válido para la empresa o déjalo vacío."),
+]);
+
 const formSchema = z.object({
-  name: z.string().min(1, "El nombre comercial es obligatorio."),
+  name: z.string().trim().min(1, "El nombre comercial es obligatorio."),
   legalName: z.string().optional(),
   governmentId: z.string().optional(),
-  email: z.string().optional(),
-  clientCode: z.string().optional(),
-  primaryContactName: z.string().min(1, "Indica el nombre del contacto principal."),
-  primaryContactEmail: z.string().optional(),
-  addressLine1: z.string().optional(),
+  /** Correo de la empresa; puede repetir el del contacto. */
+  email: optionalCompanyEmailSchema,
+  clientCode: z.string().trim().min(1, "El código cliente es obligatorio."),
+  primaryContactName: z
+    .string()
+    .trim()
+    .min(1, "El nombre del contacto es obligatorio."),
+  primaryContactEmail: z
+    .string()
+    .trim()
+    .min(1, "El correo del contacto es obligatorio.")
+    .email("Introduce un correo válido."),
+  addressLine1: z.string().trim().min(1, "La dirección línea 1 es obligatoria."),
   addressLine2: z.string().optional(),
-  city: z.string().optional(),
-  region: z.string().optional(),
+  /** Cantón — se guarda en el mismo campo «ciudad» en el servidor. */
+  city: z.string().trim().min(1, "El cantón es obligatorio."),
+  region: z.string().trim().min(1, "La provincia es obligatoria."),
   postalCode: z.string().optional(),
   wazeAddress: z.string().optional(),
   advanceDays: z.string().optional(),
@@ -51,6 +69,14 @@ const formSchema = z.object({
 });
 
 export type AddCustomerFormValues = z.infer<typeof formSchema>;
+
+function RequiredIndicator() {
+  return (
+    <abbr className="ml-0.5 cursor-help text-destructive no-underline" title="Campo obligatorio">
+      *
+    </abbr>
+  );
+}
 
 function optionalTrim(value: string | undefined): string | undefined {
   const t = (value ?? "").trim();
@@ -107,7 +133,7 @@ export function AddCustomerForm({
     const phone = nationalToE164(phoneNational, phoneCountry);
     if (!phone) {
       setPhoneSubmitError(true);
-      toast.error("Introduce un teléfono válido para el país seleccionado.");
+      toast.error("Introduce un teléfono válido del contacto para el país seleccionado.");
       return;
     }
 
@@ -128,6 +154,11 @@ export function AddCustomerForm({
       name: values.name.trim(),
       primaryContactName: values.primaryContactName.trim(),
       primaryContactPhone: phone,
+      primaryContactEmail: values.primaryContactEmail.trim(),
+      clientCode: values.clientCode.trim(),
+      addressLine1: values.addressLine1.trim(),
+      region: values.region.trim(),
+      city: values.city.trim(),
       forceToPay: values.forceToPay,
       shareInDirectory: values.shareInDirectory,
       advanceDays: advanceDaysParsed,
@@ -137,12 +168,7 @@ export function AddCustomerForm({
       "legalName",
       "governmentId",
       "email",
-      "clientCode",
-      "primaryContactEmail",
-      "addressLine1",
       "addressLine2",
-      "city",
-      "region",
       "postalCode",
       "wazeAddress",
       "cutoffTime",
@@ -166,11 +192,41 @@ export function AddCustomerForm({
 
     const raw = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg =
-        typeof raw.message === "string"
-          ? raw.message
-          : "No se pudo crear el cliente. Inténtalo de nuevo.";
-      toast.error(msg);
+      const r = raw as Record<string, unknown>;
+      let proxyHint = "";
+      if (typeof process.env !== "undefined" && process.env.NODE_ENV === "development") {
+        const upstreamHdr = res.headers.get("x-zumo-proxy-upstream");
+        if (upstreamHdr) {
+          try {
+            const u = new URL(upstreamHdr);
+            proxyHint = `Proxy → ${u.host}${u.pathname}`;
+          } catch {
+            proxyHint = `Proxy → ${upstreamHdr}`;
+          }
+        }
+      }
+      let msg =
+        typeof r.message === "string"
+          ? r.message
+          : typeof r.error === "string"
+            ? r.error
+            : "";
+      if (
+        msg === "" &&
+        typeof r.raw === "string" &&
+        /not found/i.test(r.raw)
+      ) {
+        msg =
+          'El servidor devolvió "Not Found"; suele indicar una API_URL incorrecta o un backend sin la ruta POST /dashboard/customers.';
+      }
+      if (msg === "" && res.status === 404) {
+        msg =
+          "No encontramos esa ruta en el API (404). Verifica API_URL o NEXT_PUBLIC_API_URL en .env.local y que el último deploy del backend incluya POST /dashboard/customers.";
+      }
+      if (!msg.trim()) {
+        msg = "No se pudo crear el cliente. Inténtalo de nuevo.";
+      }
+      toast.error(proxyHint.trim() ? `${msg} (${proxyHint})` : msg);
       return;
     }
 
@@ -187,15 +243,16 @@ export function AddCustomerForm({
     >
       <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-          <div>
-            <h2 className="font-semibold text-foreground text-lg tracking-tight">
-              Nuevo cliente
-            </h2>
-            <p className="mt-1 text-muted-foreground text-sm leading-relaxed">
-              Los datos siguen tu esquema de clientes en Zumo. No se guarda nada hasta que pulses{" "}
-              <span className="font-medium text-foreground">Guardar</span>.
-            </p>
-          </div>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Los datos siguen tu esquema de clientes en Zumo. No se guarda nada hasta que pulses{" "}
+            <span className="font-medium text-foreground">Guardar</span>.
+          </p>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            <abbr className="text-destructive no-underline" title="Campo obligatorio">
+              *
+            </abbr>{" "}
+            Obligatorio
+          </p>
 
           <Card className="border-border/60 shadow-sm">
             <CardHeader className="space-y-0 pb-2">
@@ -205,37 +262,73 @@ export function AddCustomerForm({
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className={`${fieldGap} sm:col-span-2`}>
-                <Label htmlFor={`${uid}-name`}>Nombre comercial</Label>
+                <Label htmlFor={`${uid}-name`}>
+                  Nombre comercial
+                  <RequiredIndicator />
+                </Label>
                 <Input
                   aria-invalid={Boolean(errors.name)}
+                  aria-required
                   id={`${uid}-name`}
                   autoComplete="organization"
+                  placeholder="Restaurante Oro"
                   {...register("name")}
                 />
                 {errors.name ? (
                   <p className="text-destructive text-xs">{errors.name.message}</p>
                 ) : null}
               </div>
-              <div className={fieldGap}>
-                <Label htmlFor={`${uid}-legalName`}>Razón social</Label>
-                <Input autoComplete="off" id={`${uid}-legalName`} {...register("legalName")} />
-              </div>
-              <div className={fieldGap}>
-                <Label htmlFor={`${uid}-governmentId`}>Documento fiscal (NIT / ID)</Label>
-                <Input autoComplete="off" id={`${uid}-governmentId`} {...register("governmentId")} />
-              </div>
-              <div className={fieldGap}>
-                <Label htmlFor={`${uid}-clientCode`}>Código cliente</Label>
-                <Input autoComplete="off" id={`${uid}-clientCode`} {...register("clientCode")} />
-              </div>
-              <div className={fieldGap}>
-                <Label htmlFor={`${uid}-email`}>Correo electrónico</Label>
+              <div className={`${fieldGap} sm:col-span-2`}>
+                <Label htmlFor={`${uid}-clientCode`}>
+                  Código cliente
+                  <RequiredIndicator />
+                </Label>
                 <Input
+                  aria-invalid={Boolean(errors.clientCode)}
+                  aria-required
+                  autoComplete="off"
+                  id={`${uid}-clientCode`}
+                  placeholder="Ej. CLI-1024"
+                  {...register("clientCode")}
+                />
+                {errors.clientCode ? (
+                  <p className="text-destructive text-xs">{errors.clientCode.message}</p>
+                ) : null}
+              </div>
+              <div className={`${fieldGap} sm:col-span-2`}>
+                <Label htmlFor={`${uid}-email`}>Correo electrónico (empresa)</Label>
+                <Input
+                  aria-invalid={Boolean(errors.email)}
                   autoComplete="email"
                   id={`${uid}-email`}
                   inputMode="email"
+                  placeholder="Ej. facturacion@empresa.com"
                   type="email"
                   {...register("email")}
+                />
+                <p className="mt-1 text-muted-foreground text-xs leading-snug">
+                  Opcional. Puede ser el mismo que el correo del contacto.
+                </p>
+                {errors.email ? (
+                  <p className="text-destructive text-xs">{errors.email.message}</p>
+                ) : null}
+              </div>
+              <div className={fieldGap}>
+                <Label htmlFor={`${uid}-legalName`}>Razón social</Label>
+                <Input
+                  autoComplete="organization"
+                  id={`${uid}-legalName`}
+                  placeholder="Restaurante Oro Sociedad Anónima"
+                  {...register("legalName")}
+                />
+              </div>
+              <div className={fieldGap}>
+                <Label htmlFor={`${uid}-governmentId`}>Documento fiscal (NIT / ID)</Label>
+                <Input
+                  autoComplete="off"
+                  id={`${uid}-governmentId`}
+                  placeholder="Ej. 3-101-654321"
+                  {...register("governmentId")}
                 />
               </div>
             </CardContent>
@@ -249,11 +342,16 @@ export function AddCustomerForm({
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className={fieldGap}>
-                <Label htmlFor={`${uid}-primaryContactName`}>Nombre completo del contacto</Label>
+                <Label htmlFor={`${uid}-primaryContactName`}>
+                  Nombre del contacto
+                  <RequiredIndicator />
+                </Label>
                 <Input
                   aria-invalid={Boolean(errors.primaryContactName)}
+                  aria-required
                   autoComplete="name"
                   id={`${uid}-primaryContactName`}
+                  placeholder="Ej. María José Ramírez"
                   {...register("primaryContactName")}
                 />
                 {errors.primaryContactName ? (
@@ -264,11 +362,12 @@ export function AddCustomerForm({
                 country={phoneCountry}
                 hint="No incluyas el código de país manualmente si eliges país arriba."
                 id={`${uid}-primaryPhone`}
-                label="Teléfono WhatsApp"
+                label="Teléfono del contacto"
                 locale="es"
                 national={phoneNational}
+                required
                 invalid={phoneSubmitError}
-                placeholder="89479486"
+                placeholder="88886666"
                 onCountryChange={setPhoneCountry}
                 onNationalChange={(v) => {
                   setPhoneNational(v);
@@ -276,14 +375,23 @@ export function AddCustomerForm({
                 }}
               />
               <div className={fieldGap}>
-                <Label htmlFor={`${uid}-primaryContactEmail`}>Correo del contacto</Label>
+                <Label htmlFor={`${uid}-primaryContactEmail`}>
+                  Correo del contacto
+                  <RequiredIndicator />
+                </Label>
                 <Input
+                  aria-invalid={Boolean(errors.primaryContactEmail)}
+                  aria-required
                   autoComplete="email"
                   id={`${uid}-primaryContactEmail`}
                   inputMode="email"
+                  placeholder="Ej. nombre@ejemplo.com"
                   type="email"
                   {...register("primaryContactEmail")}
                 />
+                {errors.primaryContactEmail ? (
+                  <p className="text-destructive text-xs">{errors.primaryContactEmail.message}</p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -296,28 +404,82 @@ export function AddCustomerForm({
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className={`${fieldGap} sm:col-span-2`}>
-                <Label htmlFor={`${uid}-addressLine1`}>Dirección línea 1</Label>
-                <Input autoComplete="street-address" id={`${uid}-addressLine1`} {...register("addressLine1")} />
+                <Label htmlFor={`${uid}-addressLine1`}>
+                  Dirección línea 1
+                  <RequiredIndicator />
+                </Label>
+                <Input
+                  aria-invalid={Boolean(errors.addressLine1)}
+                  aria-required
+                  autoComplete="street-address"
+                  id={`${uid}-addressLine1`}
+                  placeholder="Ej. Del parque municipal, 125 m norte, local 3"
+                  {...register("addressLine1")}
+                />
+                {errors.addressLine1 ? (
+                  <p className="text-destructive text-xs">{errors.addressLine1.message}</p>
+                ) : null}
+              </div>
+              <div className={fieldGap}>
+                <Label htmlFor={`${uid}-region`}>
+                  Provincia
+                  <RequiredIndicator />
+                </Label>
+                <Input
+                  aria-invalid={Boolean(errors.region)}
+                  aria-required
+                  autoComplete="address-level1"
+                  id={`${uid}-region`}
+                  placeholder="Ej. Cartago"
+                  {...register("region")}
+                />
+                {errors.region ? (
+                  <p className="text-destructive text-xs">{errors.region.message}</p>
+                ) : null}
+              </div>
+              <div className={fieldGap}>
+                <Label htmlFor={`${uid}-city`}>
+                  Cantón
+                  <RequiredIndicator />
+                </Label>
+                <Input
+                  aria-invalid={Boolean(errors.city)}
+                  aria-required
+                  autoComplete="address-level2"
+                  id={`${uid}-city`}
+                  placeholder="Ej. La Unión"
+                  {...register("city")}
+                />
+                {errors.city ? (
+                  <p className="text-destructive text-xs">{errors.city.message}</p>
+                ) : null}
               </div>
               <div className={`${fieldGap} sm:col-span-2`}>
                 <Label htmlFor={`${uid}-addressLine2`}>Dirección línea 2</Label>
-                <Input autoComplete="off" id={`${uid}-addressLine2`} {...register("addressLine2")} />
-              </div>
-              <div className={fieldGap}>
-                <Label htmlFor={`${uid}-city`}>Ciudad</Label>
-                <Input autoComplete="address-level2" id={`${uid}-city`} {...register("city")} />
-              </div>
-              <div className={fieldGap}>
-                <Label htmlFor={`${uid}-region`}>Provincia / región</Label>
-                <Input autoComplete="address-level1" id={`${uid}-region`} {...register("region")} />
+                <Input
+                  autoComplete="off"
+                  id={`${uid}-addressLine2`}
+                  placeholder="Edificio, piso u otra referencia"
+                  {...register("addressLine2")}
+                />
               </div>
               <div className={fieldGap}>
                 <Label htmlFor={`${uid}-postalCode`}>Código postal</Label>
-                <Input autoComplete="postal-code" id={`${uid}-postalCode`} {...register("postalCode")} />
+                <Input
+                  autoComplete="postal-code"
+                  id={`${uid}-postalCode`}
+                  placeholder="Ej. 30301"
+                  {...register("postalCode")}
+                />
               </div>
               <div className={`${fieldGap} sm:col-span-2`}>
                 <Label htmlFor={`${uid}-wazeAddress`}>Enlace Waze / referencia</Label>
-                <Input autoComplete="off" id={`${uid}-wazeAddress`} {...register("wazeAddress")} />
+                <Input
+                  autoComplete="off"
+                  id={`${uid}-wazeAddress`}
+                  placeholder="Enlace de Waze o indicaciones breves"
+                  {...register("wazeAddress")}
+                />
               </div>
             </CardContent>
           </Card>
@@ -331,19 +493,19 @@ export function AddCustomerForm({
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className={fieldGap}>
                 <Label htmlFor={`${uid}-advanceDays`}>Días de anticipación</Label>
-                <Input autoComplete="off" id={`${uid}-advanceDays`} inputMode="numeric" {...register("advanceDays")} />
+                <Input autoComplete="off" id={`${uid}-advanceDays`} inputMode="numeric" placeholder="Ej. 2" {...register("advanceDays")} />
               </div>
               <div className={fieldGap}>
                 <Label htmlFor={`${uid}-cutoffTime`}>Hora límite de pedido</Label>
-                <Input autoComplete="off" id={`${uid}-cutoffTime`} type="time" {...register("cutoffTime")} />
+                <Input autoComplete="off" id={`${uid}-cutoffTime`} placeholder="15:30" type="time" {...register("cutoffTime")} />
               </div>
               <div className={`${fieldGap} sm:col-span-2`}>
                 <Label htmlFor={`${uid}-paymentTerms`}>Términos de pago</Label>
-                <Input autoComplete="off" id={`${uid}-paymentTerms`} {...register("paymentTerms")} />
+                <Input autoComplete="off" id={`${uid}-paymentTerms`} placeholder="Ej. Neto 15 días" {...register("paymentTerms")} />
               </div>
               <div className={fieldGap}>
                 <Label htmlFor={`${uid}-creditLimit`}>Límite de crédito</Label>
-                <Input autoComplete="off" id={`${uid}-creditLimit`} inputMode="decimal" {...register("creditLimit")} />
+                <Input autoComplete="off" id={`${uid}-creditLimit`} inputMode="decimal" placeholder="Ej. 500000" {...register("creditLimit")} />
               </div>
               <div className={fieldGap}>
                 <Label htmlFor={`${uid}-minimumOrderTotal`}>Compra mínima</Label>
@@ -351,6 +513,7 @@ export function AddCustomerForm({
                   autoComplete="off"
                   id={`${uid}-minimumOrderTotal`}
                   inputMode="decimal"
+                  placeholder="Ej. 25000"
                   {...register("minimumOrderTotal")}
                 />
               </div>
@@ -383,12 +546,18 @@ export function AddCustomerForm({
                 <Textarea
                   className="min-h-[88px]"
                   id={`${uid}-deliveryNotes`}
+                  placeholder="Ej. entrada lateral, persona que recibe, ventana horaria..."
                   {...register("deliveryNotes")}
                 />
               </div>
               <div className={fieldGap}>
                 <Label htmlFor={`${uid}-notes`}>Notas internas</Label>
-                <Textarea className="min-h-[88px]" id={`${uid}-notes`} {...register("notes")} />
+                <Textarea
+                  className="min-h-[88px]"
+                  id={`${uid}-notes`}
+                  placeholder="Solo equipo interno: preferencias o contexto recurrente del cliente."
+                  {...register("notes")}
+                />
               </div>
               <Controller
                 control={control}
