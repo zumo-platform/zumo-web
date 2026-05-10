@@ -1,5 +1,12 @@
 /** Types + server fetch for GET /dashboard/customers (tabla de clientes). */
 
+/** Prefer id_token; fall back to access_token on 401/403. */
+function uniqBearerCandidates(idToken?: string | null, accessToken?: string | null): string[] {
+  return [
+    ...new Set([idToken, accessToken].filter((t): t is string => typeof t === "string" && t.length > 0)),
+  ];
+}
+
 export type DashboardCustomerRow = Readonly<{
   customerId: number;
   name: string;
@@ -32,30 +39,63 @@ function parseCustomerRow(raw: unknown): DashboardCustomerRow | null {
   };
 }
 
+function parseCustomersEnvelope(data: unknown): DashboardCustomerRow[] {
+  const o = data as { customers?: unknown[] };
+  if (!Array.isArray(o.customers)) return [];
+  const rows: DashboardCustomerRow[] = [];
+  for (const item of o.customers) {
+    const row = parseCustomerRow(item);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+function dashboardCustomersPayloadFromResponseText(text: string, httpOk: boolean): DashboardCustomerRow[] | null {
+  if (!httpOk) return null;
+  try {
+    const data = text.trim() === "" ? {} : (JSON.parse(text) as unknown);
+    return parseCustomersEnvelope(data);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Returns `null` if the request failed. Empty array = supplier has no customers yet.
+ * Tries Cognito **`id_token` first**, then **`access_token`** on 401/403.
  */
 export async function fetchCustomersDashboard(
   apiUrl: string,
-  idToken: string,
+  idToken?: string | null,
+  accessToken?: string | null,
 ): Promise<DashboardCustomerRow[] | null> {
   const trimmed = apiUrl.replace(/\/$/, "");
   if (!trimmed) return null;
 
+  const bearerCandidates = uniqBearerCandidates(idToken, accessToken);
+  if (bearerCandidates.length === 0) return null;
+
+  const url = `${trimmed}/dashboard/customers`;
+
   try {
-    const res = await fetch(`${trimmed}/dashboard/customers`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { customers?: unknown[] };
-    if (!Array.isArray(data.customers)) return [];
-    const rows: DashboardCustomerRow[] = [];
-    for (const item of data.customers) {
-      const row = parseCustomerRow(item);
-      if (row) rows.push(row);
+    for (let i = 0; i < bearerCandidates.length; i++) {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${bearerCandidates[i]}` },
+        cache: "no-store",
+      });
+
+      const text = await res.text();
+
+      if (res.ok) {
+        return dashboardCustomersPayloadFromResponseText(text, true);
+      }
+
+      const retriable = res.status === 401 || res.status === 403;
+      if (!retriable || i === bearerCandidates.length - 1) {
+        return null;
+      }
     }
-    return rows;
+    return null;
   } catch {
     return null;
   }

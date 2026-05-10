@@ -33,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html suppressHydrationWarning lang="es">
       <head>
         {/* Satoshi is distributed by Fontshare (not hosted on fonts.google.com). */}
         <link
@@ -42,6 +42,7 @@ export default function RootLayout({
         />
       </head>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}

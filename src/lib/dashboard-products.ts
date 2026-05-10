@@ -1,0 +1,117 @@
+/** Types + server fetch for GET /dashboard/products. */
+
+import { joinApiGatewayPath } from "@/lib/api";
+
+export type DashboardProductRow = Readonly<{
+  productId: number;
+  name: string;
+  unit: string;
+  sku: string | null;
+  status: string;
+  deletedAt: string | null;
+}>;
+
+function parseProduct(raw: unknown): DashboardProductRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o.productId === "number" ? o.productId : Number(o.productId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  const unit = typeof o.unit === "string" ? o.unit.trim() : "";
+  const skuRaw = typeof o.sku === "string" ? o.sku.trim() : "";
+  const status = typeof o.status === "string" ? o.status.trim() : "active";
+  const deletedAt =
+    o.deletedAt === null || o.deletedAt === undefined
+      ? null
+      : typeof o.deletedAt === "string"
+        ? o.deletedAt
+        : null;
+  return {
+    productId: id,
+    name: name || "—",
+    unit: unit || "—",
+    sku: skuRaw.length ? skuRaw : null,
+    status: status || "—",
+    deletedAt,
+  };
+}
+
+/** Active catalog rows (omit soft-deleted). */
+export function activeProducts(rows: readonly DashboardProductRow[]): DashboardProductRow[] {
+  return rows.filter((p) => p.deletedAt == null || p.deletedAt === "");
+}
+
+/** Prefer id_token (custom tenant claims); fall back to access_token for gateways that reject IDs. */
+function uniqBearerCandidates(idToken?: string | null, accessToken?: string | null): string[] {
+  return [
+    ...new Set(
+      [idToken, accessToken].filter((t): t is string => typeof t === "string" && t.length > 0),
+    ),
+  ];
+}
+
+function parseProductsEnvelope(data: unknown): DashboardProductRow[] {
+  const o = data as { products?: unknown[] };
+  if (!Array.isArray(o.products)) return [];
+  const rows: DashboardProductRow[] = [];
+  for (const item of o.products) {
+    const row = parseProduct(item);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+/** Client / Route Handler responses (JSON body shaped like `{ products?: … }`). */
+export function parseDashboardProductsEnvelope(data: unknown): DashboardProductRow[] {
+  return parseProductsEnvelope(data);
+}
+
+function dashboardProductsPayloadFromResponseText(text: string, httpOk: boolean): DashboardProductRow[] | null {
+  if (!httpOk) return null;
+  let data: unknown;
+  try {
+    if (text.trim() === "") data = {};
+    else data = JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+  return parseProductsEnvelope(data);
+}
+
+/** Direct Gateway: try Cognito **`id_token` first**, then **`access_token`** on 401/403. */
+export async function fetchProductsDashboard(
+  apiUrl: string,
+  idToken?: string | null,
+  accessToken?: string | null,
+): Promise<DashboardProductRow[] | null> {
+  const base = apiUrl.replace(/\/+$/, "");
+  if (!base) return null;
+
+  const bearerCandidates = uniqBearerCandidates(idToken, accessToken);
+  if (bearerCandidates.length === 0) return null;
+
+  const upstreamUrl = joinApiGatewayPath(base, "dashboard/products");
+
+  try {
+    for (let i = 0; i < bearerCandidates.length; i++) {
+      const res = await fetch(upstreamUrl, {
+        headers: { Authorization: `Bearer ${bearerCandidates[i]}` },
+        cache: "no-store",
+      });
+
+      const text = await res.text();
+
+      if (res.ok) {
+        return dashboardProductsPayloadFromResponseText(text, true);
+      }
+
+      const retriable = res.status === 401 || res.status === 403;
+      if (!retriable || i === bearerCandidates.length - 1) {
+        return null;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

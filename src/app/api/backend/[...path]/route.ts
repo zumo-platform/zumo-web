@@ -23,9 +23,11 @@ async function proxyRequest(
   request: Request,
   segments: string[],
 ): Promise<NextResponse> {
-  const { idToken } = await getAuthSession();
+  const { accessToken, idToken } = await getAuthSession();
+  /** Prefer id_token (tenant claims); retry with access_token if the gateway rejects the first. */
+  const bearerCandidates = [...new Set([idToken, accessToken].filter((t): t is string => Boolean(t)))];
 
-  if (!idToken) {
+  if (bearerCandidates.length === 0) {
     return NextResponse.json(
       { error: "Unauthorized", message: "No active session." },
       { status: 401 },
@@ -56,25 +58,43 @@ async function proxyRequest(
   const qs = searchParams.toString();
   const upstream = `${joinApiGatewayPath(baseUrl, pathStr)}${qs ? `?${qs}` : ""}`;
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${idToken}`,
-    "Content-Type": "application/json",
-  };
-
-  const init: RequestInit = { method: request.method, headers };
-
-  if (request.method === "POST") {
+  let forwardedBody: string | undefined;
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method)) {
     try {
       const body = await request.text();
-      if (body) init.body = body;
+      if (body.length > 0) forwardedBody = body;
     } catch {
       // no body
     }
   }
 
   let upstream_res: Response;
+  let text = "";
+
   try {
-    upstream_res = await fetch(upstream, init);
+    const upstreamFetch = (bearer: string) =>
+      fetch(upstream, {
+        method: request.method,
+        headers:
+          forwardedBody !== undefined
+            ? {
+                Authorization: `Bearer ${bearer}`,
+                "Content-Type": "application/json",
+              }
+            : { Authorization: `Bearer ${bearer}` },
+        ...(forwardedBody !== undefined ? { body: forwardedBody } : {}),
+      });
+
+    upstream_res = await upstreamFetch(bearerCandidates[0]);
+    text = await upstream_res.text();
+
+    for (let i = 1; i < bearerCandidates.length; i++) {
+      if (upstream_res.status !== 401 && upstream_res.status !== 403) {
+        break;
+      }
+      upstream_res = await upstreamFetch(bearerCandidates[i]);
+      text = await upstream_res.text();
+    }
   } catch {
     return NextResponse.json(
       {
@@ -85,8 +105,6 @@ async function proxyRequest(
       { status: 502 },
     );
   }
-
-  const text = await upstream_res.text();
 
   let body: unknown;
   try {
@@ -111,6 +129,30 @@ export async function GET(
 }
 
 export async function POST(
+  request: Request,
+  ctx: { params: Promise<{ path?: string[] | string }> },
+) {
+  const { path } = await ctx.params;
+  return proxyRequest(request, coercePathSegments(path));
+}
+
+export async function PATCH(
+  request: Request,
+  ctx: { params: Promise<{ path?: string[] | string }> },
+) {
+  const { path } = await ctx.params;
+  return proxyRequest(request, coercePathSegments(path));
+}
+
+export async function PUT(
+  request: Request,
+  ctx: { params: Promise<{ path?: string[] | string }> },
+) {
+  const { path } = await ctx.params;
+  return proxyRequest(request, coercePathSegments(path));
+}
+
+export async function DELETE(
   request: Request,
   ctx: { params: Promise<{ path?: string[] | string }> },
 ) {
