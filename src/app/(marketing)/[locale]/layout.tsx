@@ -47,6 +47,7 @@ export default async function MarketingLocaleLayout({ children, params }: Layout
 
   return (
     <div
+      suppressHydrationWarning
       className="flex min-h-screen flex-col bg-background text-foreground"
       lang={locale}
     >

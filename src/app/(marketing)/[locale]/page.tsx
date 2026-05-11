@@ -53,7 +53,7 @@ export default async function MarketingHomePage({ params }: PageProps) {
   const messages = getMarketingMessages(locale);
 
   return (
-    <>
+    <div className="contents" suppressHydrationWarning>
       <section className="mx-auto max-w-6xl px-6 pt-20 pb-16 text-center md:pt-32 md:pb-24">
         <Badge className="gap-1.5 rounded-full px-3 py-1 font-normal" variant="outline">
           <span aria-hidden className="size-1.5 rounded-full bg-foreground/55" />
@@ -159,7 +159,7 @@ export default async function MarketingHomePage({ params }: PageProps) {
           </Button>
         </div>
       </section>
-    </>
+    </div>
   );
 }
 

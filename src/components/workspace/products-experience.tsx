@@ -23,44 +23,54 @@ import {
   type DashboardProductRow,
 } from "@/lib/dashboard-products";
 
+async function fetchProductsFromProxy(): Promise<{ ok: true; rows: DashboardProductRow[] } | { ok: false }> {
+  const path = "/api/backend/dashboard/products";
+  const url = `${window.location.origin}${path}`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        return { ok: true, rows: parseDashboardProductsEnvelope(body) };
+      }
+    } catch {
+      /* retry */
+    }
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 350));
+    }
+  }
+  return { ok: false };
+}
+
 export function ProductsExperience({
   initialProducts,
 }: Readonly<{
-  /** SSR result: `null` may recover via same-origin `/api/backend` fetch in the browser. */
+  /** SSR result: `null` = server could not reach API; client retries via `/api/backend`. */
   initialProducts: DashboardProductRow[] | null;
 }>) {
   const router = useRouter();
   const hydratedFromSSR = initialProducts !== null;
 
-  /** `undefined` = client hasn't finished; only used when SSR returned `null`. */
   const [clientRows, setClientRows] = useState<DashboardProductRow[] | undefined>(() =>
-    hydratedFromSSR ? initialProducts ?? [] : undefined,
+    hydratedFromSSR ? (initialProducts ?? []) : undefined,
   );
-  const [clientError, setClientError] = useState(false);
 
   useEffect(() => {
     if (initialProducts !== null) return;
 
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await fetch("/api/backend/dashboard/products", {
-          credentials: "same-origin",
-          cache: "no-store",
-        });
-
-        const body = await res.json().catch(() => ({}));
-
-        if (cancelled) return;
-
-        if (!res.ok) {
-          setClientError(true);
-          return;
-        }
-
-        setClientRows(parseDashboardProductsEnvelope(body));
-      } catch {
-        if (!cancelled) setClientError(true);
+      const result = await fetchProductsFromProxy();
+      if (cancelled) return;
+      if (result.ok) {
+        setClientRows(result.rows);
+      } else {
+        setClientRows([]);
       }
     })();
 
@@ -69,9 +79,7 @@ export function ProductsExperience({
     };
   }, [initialProducts]);
 
-  const pendingClient = !hydratedFromSSR && clientRows === undefined && !clientError;
-  const fatalError =
-    !hydratedFromSSR && !pendingClient && (clientError || clientRows === undefined);
+  const pendingClient = !hydratedFromSSR && clientRows === undefined;
 
   if (pendingClient) {
     return (
@@ -88,30 +96,6 @@ export function ProductsExperience({
     );
   }
 
-  if (fatalError) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
-        <WorkspacePageHeader
-          description="Gestiona tu catálogo para pedidos desde WhatsApp."
-          title="Productos"
-        />
-        <div className="flex min-h-0 flex-1 overflow-y-auto px-4 md:px-8">
-          <div className="mx-auto w-full max-w-3xl space-y-6 py-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Conexión con el API</CardTitle>
-                <CardDescription>
-                  No pudimos cargar tus productos. Verificá API_URL o NEXT_PUBLIC_API_URL en .env.local,
-                  iniciá sesión de nuevo si hace falta, y actualizá la página.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const catalog: DashboardProductRow[] = hydratedFromSSR
     ? (initialProducts ?? [])
     : (clientRows ?? []);
@@ -123,14 +107,14 @@ export function ProductsExperience({
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto bg-background px-4 py-16">
         <div className="mx-auto flex w-full max-w-xl flex-col items-center text-center">
           <h1 className="text-balance font-semibold text-2xl tracking-tight text-foreground md:text-3xl">
-            Conectá tus productos e inventarios a Zumo
+            Conecta tus productos e inventarios a Zumo
           </h1>
           <p className="mt-6 text-muted-foreground text-[15px] leading-relaxed">
-            Conectá tu catálogo para permitir que nuestros robots automaticen tus pedidos e inventarios
-            directamente desde WhatsApp.
+            Conecta tu catálogo para permitir que nuestros robots automaticen tus pedidos e inventarios directamente
+            desde WhatsApp.
           </p>
           <p className="mt-4 text-muted-foreground text-[15px] leading-relaxed">
-            Cualquier precio incluido solo será visible para los clientes que vos definas.
+            Cualquier precio incluido solo será visible para los clientes que usted defina.
           </p>
           <ProductUploadSheets
             onProductsChanged={() => {

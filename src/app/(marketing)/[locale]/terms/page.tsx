@@ -35,7 +35,7 @@ export default async function TermsPage({ params }: PageProps) {
   const doc = termsDocument[raw];
 
   return (
-    <article className="mx-auto max-w-3xl space-y-6 px-6 py-20">
+    <article suppressHydrationWarning className="mx-auto max-w-3xl space-y-6 px-6 py-20">
       <TypographyH1>{doc.title}</TypographyH1>
       <LegalDocumentView document={doc} />
     </article>

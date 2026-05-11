@@ -78,6 +78,31 @@ function dashboardProductsPayloadFromResponseText(text: string, httpOk: boolean)
   return parseProductsEnvelope(data);
 }
 
+/**
+ * Server-side catalog load via the app’s own Route Handler (same path/cookies as the browser).
+ * Prefer this in RSC when direct API Gateway calls from the Node process fail (TLS, IPv6, env).
+ */
+export async function fetchProductsDashboardViaAppProxy(
+  origin: string,
+  cookieHeader: string,
+): Promise<DashboardProductRow[] | null> {
+  const base = origin.replace(/\/+$/, "");
+  if (!base) return null;
+
+  const url = `${base}/api/backend/dashboard/products`;
+
+  try {
+    const res = await fetch(url, {
+      headers: cookieHeader.length > 0 ? { Cookie: cookieHeader } : {},
+      cache: "no-store",
+    });
+    const text = await res.text();
+    return dashboardProductsPayloadFromResponseText(text, res.ok);
+  } catch {
+    return null;
+  }
+}
+
 /** Direct Gateway: try Cognito **`id_token` first**, then **`access_token`** on 401/403. */
 export async function fetchProductsDashboard(
   apiUrl: string,
