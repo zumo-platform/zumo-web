@@ -100,3 +100,28 @@ export async function signIn(input: {
     expiresIn: result.ExpiresIn ?? 3600,
   };
 }
+
+/** New id/access tokens when the refresh cookie is still valid but id/access cookies expired. */
+export async function refreshAuthSession(refreshToken: string): Promise<AuthTokens> {
+  const res = await cognito.send(
+    new InitiateAuthCommand({
+      ClientId: cognitoAppClientId(),
+      AuthFlow: "REFRESH_TOKEN_AUTH",
+      AuthParameters: {
+        REFRESH_TOKEN: refreshToken,
+      },
+    }),
+  );
+
+  const result = res.AuthenticationResult;
+  if (!result?.IdToken || !result?.AccessToken) {
+    throw new Error("Incomplete refresh result from Cognito");
+  }
+
+  return {
+    idToken: result.IdToken,
+    accessToken: result.AccessToken,
+    refreshToken: result.RefreshToken ?? refreshToken,
+    expiresIn: result.ExpiresIn ?? 3600,
+  };
+}

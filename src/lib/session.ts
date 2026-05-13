@@ -42,6 +42,59 @@ export async function getAuthSession(): Promise<{
   };
 }
 
+function decodeCookieValue(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Parse Zumo auth cookies from the raw `Cookie` header (fallback when `cookies()`
+ * does not expose values in some Route Handler edge cases).
+ */
+export function parseZumoAuthFromCookieHeader(cookieHeader: string | null): {
+  idToken: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+} {
+  const empty = { idToken: null, accessToken: null, refreshToken: null } as const;
+  if (!cookieHeader?.trim()) {
+    return { ...empty };
+  }
+  let idToken: string | null = null;
+  let accessToken: string | null = null;
+  let refreshToken: string | null = null;
+  for (const segment of cookieHeader.split(";")) {
+    const i = segment.indexOf("=");
+    if (i === -1) continue;
+    const name = segment.slice(0, i).trim();
+    const rawVal = segment.slice(i + 1).trim();
+    const val = decodeCookieValue(rawVal);
+    if (!val) continue;
+    if (name === COOKIE_ID_TOKEN) idToken = val;
+    else if (name === COOKIE_ACCESS_TOKEN) accessToken = val;
+    else if (name === COOKIE_REFRESH_TOKEN) refreshToken = val;
+  }
+  return { idToken, accessToken, refreshToken };
+}
+
+/** Merge `Cookie` header with `cookies()` so API proxy always sees browser-sent tokens. */
+export async function getAuthSessionForProxy(request: Request): Promise<{
+  idToken: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+}> {
+  const fromStore = await getAuthSession();
+  const fromHeader = parseZumoAuthFromCookieHeader(request.headers.get("cookie"));
+  return {
+    idToken: fromHeader.idToken ?? fromStore.idToken,
+    accessToken: fromHeader.accessToken ?? fromStore.accessToken,
+    refreshToken: fromHeader.refreshToken ?? fromStore.refreshToken,
+  };
+}
+
 export async function clearAuthSession(): Promise<void> {
   const store = await cookies();
   store.delete(COOKIE_ID_TOKEN);

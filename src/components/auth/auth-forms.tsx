@@ -152,7 +152,7 @@ export function AuthForms({
     const { ok, status, data } = await apiFetch("/api/auth/login", { email, password }, locale);
 
     if (ok) {
-      const verify = await fetch("/api/backend/sellers/me");
+      const verify = await fetch("/api/backend/sellers/me", { credentials: "include" });
       if (!verify.ok) {
         toast.error("Sesión iniciada pero no se pudo verificar tu perfil.");
       }

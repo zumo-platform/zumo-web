@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
-import { getAuthSession } from "@/lib/session";
+import { refreshAuthSession } from "@/lib/cognito-server";
+import { getAuthSessionForProxy, setAuthSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -23,13 +24,34 @@ async function proxyRequest(
   request: Request,
   segments: string[],
 ): Promise<NextResponse> {
-  const { accessToken, idToken } = await getAuthSession();
+  let { idToken, accessToken, refreshToken } = await getAuthSessionForProxy(request);
+
+  /** Id/access cookies use Cognito `expiresIn` (~1h); refresh lasts 30d. Refresh here so POSTs keep working. */
+  if (
+    (!idToken || !accessToken) &&
+    typeof refreshToken === "string" &&
+    refreshToken.length > 0
+  ) {
+    try {
+      const tokens = await refreshAuthSession(refreshToken);
+      await setAuthSession(tokens);
+      idToken = tokens.idToken;
+      accessToken = tokens.accessToken;
+    } catch (err) {
+      console.error("[api/backend] Cognito refresh failed", err);
+    }
+  }
+
   /** Prefer id_token (tenant claims); retry with access_token if the gateway rejects the first. */
   const bearerCandidates = [...new Set([idToken, accessToken].filter((t): t is string => Boolean(t)))];
 
   if (bearerCandidates.length === 0) {
     return NextResponse.json(
-      { error: "Unauthorized", message: "No active session." },
+      {
+        error: "Unauthorized",
+        message:
+          "No active session. Iniciá sesión de nuevo o esperá unos segundos si acabás de entrar.",
+      },
       { status: 401 },
     );
   }

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HelpCircle, ImageIcon, Loader2 } from "lucide-react";
+import { Copy, HelpCircle, ImageIcon, Loader2 } from "lucide-react";
 import { Controller, type Resolver, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -26,6 +26,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { copyTextWithUserGesture } from "@/lib/copy-text";
+import { resolveDashboardProductErrorNo } from "@/lib/dashboard-product-error-nos";
 import { cn } from "@/lib/utils";
 
 const UNIT_OPTIONS = [
@@ -50,6 +52,110 @@ function RequiredMark() {
     <abbr className="ml-0.5 cursor-help text-destructive no-underline" title="Obligatorio">
       *
     </abbr>
+  );
+}
+
+function resolveWorkspaceApiError(
+  raw: Record<string, unknown>,
+  status: number,
+  fallbackWithoutServerMessage: string,
+): { userText: string; metaLines: string[]; copyText: string } {
+  const errStr = typeof raw.error === "string" && raw.error.trim() ? raw.error.trim() : "";
+  const msgStr = typeof raw.message === "string" && raw.message.trim() ? raw.message.trim() : "";
+  const baseParts = [...new Set([errStr, msgStr].filter(Boolean))];
+
+  const code =
+    typeof raw.code === "string" && /^DPROD_/u.test(raw.code.trim()) ? raw.code.trim() : null;
+  const errorNo = resolveDashboardProductErrorNo(code, raw.errorNo);
+
+  const diagnosticHint =
+    typeof raw.diagnosticHint === "string" && raw.diagnosticHint.trim()
+      ? raw.diagnosticHint.trim()
+      : null;
+
+  let userText: string;
+  if (baseParts.length) {
+    userText = baseParts.join("\n");
+  } else if (status === 401 || status === 403) {
+    userText = "Sesión inválida o expirada. Iniciá sesión de nuevo.";
+  } else if (status === 404) {
+    userText =
+      "No se encontró la ruta del API (404). Verificá que el backend esté desplegado.";
+  } else if (status === 502 || status === 503) {
+    userText = "El servidor no respondió. Reintentá en unos segundos.";
+  } else {
+    userText = fallbackWithoutServerMessage;
+  }
+
+  const metaLines = [
+    errorNo !== null ? `Número de error: ${String(errorNo)}` : null,
+    code ? `Código: ${code}` : null,
+    `HTTP: ${String(status)}`,
+    diagnosticHint ? `Detalle técnico: ${diagnosticHint}` : null,
+  ].filter(Boolean) as string[];
+
+  const copyText = metaLines.length ? `${userText}\n\n${metaLines.join("\n")}` : userText;
+
+  return { userText, metaLines, copyText };
+}
+
+function toastWorkspaceError(
+  heading: string,
+  raw: Record<string, unknown>,
+  status: number,
+  fallbackWithoutServerMessage: string,
+) {
+  const { userText, metaLines, copyText } = resolveWorkspaceApiError(
+    raw,
+    status,
+    fallbackWithoutServerMessage,
+  );
+
+  toast.custom(
+    (id) => (
+      <div
+        className={cn(
+          "flex w-[min(100vw-2rem,24rem)] max-w-md select-text flex-col gap-3 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg",
+        )}
+      >
+        <div className="space-y-2">
+          <p className="font-semibold text-destructive text-sm">{heading}</p>
+          <p className="cursor-text whitespace-pre-wrap text-foreground text-sm leading-snug [user-select:text]">
+            {userText}
+          </p>
+          {metaLines.length > 0 ? (
+            <p className="cursor-text whitespace-pre-wrap border-border border-t pt-2 font-mono text-muted-foreground text-xs leading-relaxed [user-select:text]">
+              {metaLines.join("\n")}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              // Must stay synchronous: async clipboard loses user activation from the click.
+              const ok = copyTextWithUserGesture(copyText);
+              if (ok) {
+                toast.success("Detalle copiado al portapapeles.");
+                toast.dismiss(id);
+              } else {
+                toast.error(
+                  "No se pudo copiar automáticamente. Seleccioná el texto de arriba y usá Ctrl+C (o Cmd+C).",
+                  { duration: 8000 },
+                );
+              }
+            }}
+          >
+            <Copy className="size-3.5" aria-hidden />
+            Copiar detalle
+          </Button>
+        </div>
+      </div>
+    ),
+    { duration: 45_000 },
   );
 }
 
@@ -238,13 +344,18 @@ export function CreateProductForm({
       try {
         const res = await fetch("/api/backend/dashboard/product-categories", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: values.newCategoryName.trim() }),
         });
         const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         if (!res.ok) {
-          const msg = typeof raw.error === "string" ? raw.error : "No se pudo crear la categoría.";
-          toast.error(msg);
+          toastWorkspaceError(
+            "No se pudo crear la categoría",
+            raw,
+            res.status,
+            "No se pudo crear la categoría.",
+          );
           return;
         }
         const cat = raw.category as Record<string, unknown> | undefined;
@@ -304,14 +415,19 @@ export function CreateProductForm({
     try {
       const res = await fetch("/api/backend/dashboard/products", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
-        const msg = typeof raw.error === "string" ? raw.error : "No se pudo crear el producto.";
-        toast.error(msg);
+        toastWorkspaceError(
+          "No se pudo crear el producto",
+          raw,
+          res.status,
+          `No se pudo crear el producto (HTTP ${String(res.status)}).`,
+        );
         return;
       }
 

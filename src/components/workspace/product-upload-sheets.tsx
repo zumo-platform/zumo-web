@@ -71,6 +71,7 @@ export function ProductUploadSheets({
       try {
         const res = await fetch("/api/backend/dashboard/product-categories", {
           cache: "no-store",
+          credentials: "include",
         });
         const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         if (!res.ok) {

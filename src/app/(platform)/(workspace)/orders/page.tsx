@@ -7,15 +7,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 
+/** No orders list yet — avoid the workspace title bar until there is data to manage. */
 export default function OrdersPage() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <WorkspacePageHeader
-        description="Review and manage orders from your WhatsApp conversations."
-        title="Pedidos"
-      />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div className="flex flex-1 flex-col gap-6 overflow-auto p-6">
         <Card className="max-w-lg border-dashed">
           <CardHeader className="text-center sm:text-left">

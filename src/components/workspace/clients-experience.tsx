@@ -172,9 +172,14 @@ export function ClientsExperience({
     );
   }
 
+  /** Empty portfolio: center empty state without the breadcrumb / title / actions header. */
+  const hideListChrome = variant === "list" && showEmpty;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <ClientsPageHeader actions={headerActions} description={pageDescription} mode={headerMode} />
+      {!hideListChrome ? (
+        <ClientsPageHeader actions={headerActions} description={pageDescription} mode={headerMode} />
+      ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">{main}</div>
     </div>
   );

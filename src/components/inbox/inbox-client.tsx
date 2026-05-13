@@ -24,7 +24,7 @@ import type { Conversation, Message, Order } from "@/lib/dashboard-types";
 import { cn } from "@/lib/utils";
 
 async function backendGet<T>(path: string): Promise<T> {
-  const res = await fetch(`/api/backend/${path}`, { cache: "no-store" });
+  const res = await fetch(`/api/backend/${path}`, { cache: "no-store", credentials: "include" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error ?? `HTTP ${res.status}`);
@@ -35,6 +35,7 @@ async function backendGet<T>(path: string): Promise<T> {
 async function backendPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/backend/${path}`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
