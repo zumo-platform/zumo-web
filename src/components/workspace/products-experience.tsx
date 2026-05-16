@@ -6,17 +6,10 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ProductUploadSheets } from "@/components/workspace/product-upload-sheets";
+import { ProductsCatalogTable } from "@/components/workspace/products-catalog-table";
 import { ProductsHeaderActions } from "@/components/workspace/products-header-actions";
 import { ProductsPageHeader } from "@/components/workspace/products-page-header";
-import { ProductUploadSheets } from "@/components/workspace/product-upload-sheets";
 import {
   activeProducts,
   parseDashboardProductsEnvelope,
@@ -128,38 +121,15 @@ export function ProductsExperience({
   }
 
   const catalogBody = (
-    <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-1 flex-col">
+    <div className="mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col">
       <header className="shrink-0 pb-4">
         <h2 className="text-base font-semibold tracking-tight text-foreground">Catálogo</h2>
         <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
-          Listado sincronizado con el servidor. SKU y estado según tus datos operativos.
+          Listado sincronizado con el servidor: foto, inventario, precio y categorías según tus datos.
         </p>
       </header>
       <div className="min-h-0 flex-1 overflow-auto pb-6">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nombre</TableHead>
-              <TableHead>Unidad</TableHead>
-              <TableHead className="hidden sm:table-cell">SKU</TableHead>
-              <TableHead>Estado</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visible.map((p) => (
-              <TableRow key={p.productId}>
-                <TableCell className="max-w-[200px] truncate font-medium md:max-w-xs">
-                  {p.name}
-                </TableCell>
-                <TableCell>{p.unit}</TableCell>
-                <TableCell className="hidden sm:table-cell text-muted-foreground">
-                  {p.sku ?? "—"}
-                </TableCell>
-                <TableCell className="capitalize">{p.status}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <ProductsCatalogTable data={visible} onCatalogChanged={() => router.refresh()} />
       </div>
     </div>
   );

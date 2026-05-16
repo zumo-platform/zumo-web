@@ -1,36 +1,32 @@
-import { Package } from "lucide-react";
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { OrdersExperience } from "@/components/workspace/orders-experience";
+import { getServerApiBaseUrl } from "@/lib/api";
+import { fetchCustomersDashboard } from "@/lib/dashboard-customers";
+import { fetchAllOrdersDashboard } from "@/lib/dashboard-orders";
+import { getAuthSession } from "@/lib/session";
 
-/** No orders list yet — avoid the workspace title bar until there is data to manage. */
-export default function OrdersPage() {
+export const metadata: Metadata = {
+  title: "Pedidos",
+};
+
+export default async function OrdersPage() {
+  const { accessToken, idToken } = await getAuthSession();
+
+  if (!idToken && !accessToken) {
+    redirect("/login");
+  }
+
+  const apiUrl = getServerApiBaseUrl();
+  const [initialOrders, initialCustomers] = await Promise.all([
+    fetchAllOrdersDashboard(apiUrl, idToken, accessToken),
+    fetchCustomersDashboard(apiUrl, idToken, accessToken),
+  ]);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col gap-6 overflow-auto p-6">
-        <Card className="max-w-lg border-dashed">
-          <CardHeader className="text-center sm:text-left">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted sm:mx-0">
-              <Package aria-hidden className="size-6 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-xl">Coming soon</CardTitle>
-            <CardDescription>
-              This screen will list confirmed and pending orders with filters and exports.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              For now, open <span className="font-medium text-foreground">Inbox</span> to confirm
-              draft orders tied to a conversation.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
+      <OrdersExperience initialCustomers={initialCustomers} initialOrders={initialOrders} />
     </div>
   );
 }

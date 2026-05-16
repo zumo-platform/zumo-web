@@ -2,13 +2,21 @@
 
 import { joinApiGatewayPath } from "@/lib/api";
 
+/** Matches backend `MAX_UNLIMITED_STOCK_SENTINEL` (bulk “unlimited” stock UX). */
+export const DASHBOARD_PRODUCT_UNLIMITED_STOCK = "999999999999999";
+
 export type DashboardProductRow = Readonly<{
   productId: number;
   name: string;
+  presentation: string | null;
   unit: string;
   sku: string | null;
   status: string;
   deletedAt: string | null;
+  stockQuantity: string;
+  price: string | null;
+  imageUrl: string | null;
+  categoryId: number | null;
 }>;
 
 function parseProduct(raw: unknown): DashboardProductRow | null {
@@ -26,13 +34,59 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
       : typeof o.deletedAt === "string"
         ? o.deletedAt
         : null;
+
+  let stockQuantity = DASHBOARD_PRODUCT_UNLIMITED_STOCK;
+  const sq = o.stockQuantity;
+  if (typeof sq === "string" && sq.trim().length > 0) {
+    stockQuantity = sq.trim();
+  } else if (typeof sq === "number" && Number.isFinite(sq)) {
+    stockQuantity = String(Math.trunc(sq));
+  }
+
+  const price =
+    o.price === null || o.price === undefined
+      ? null
+      : typeof o.price === "string"
+        ? o.price.trim().length
+          ? o.price.trim()
+          : null
+        : typeof o.price === "number" && Number.isFinite(o.price)
+          ? String(o.price)
+          : null;
+
+  const imageUrl =
+    o.imageUrl === null || o.imageUrl === undefined
+      ? null
+      : typeof o.imageUrl === "string" && o.imageUrl.trim().length > 0
+        ? o.imageUrl.trim()
+        : null;
+
+  let categoryId: number | null = null;
+  if (o.categoryId !== null && o.categoryId !== undefined && o.categoryId !== "") {
+    const cid = typeof o.categoryId === "number" ? o.categoryId : Number(o.categoryId);
+    if (Number.isFinite(cid) && cid > 0) categoryId = cid;
+  }
+
+  const presentationRaw =
+    o.presentation === null || o.presentation === undefined
+      ? ""
+      : typeof o.presentation === "string"
+        ? o.presentation.trim()
+        : "";
+  const presentation = presentationRaw.length ? presentationRaw : null;
+
   return {
     productId: id,
     name: name || "—",
+    presentation,
     unit: unit || "—",
     sku: skuRaw.length ? skuRaw : null,
     status: status || "—",
     deletedAt,
+    stockQuantity,
+    price,
+    imageUrl,
+    categoryId,
   };
 }
 

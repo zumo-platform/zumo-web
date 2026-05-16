@@ -50,6 +50,11 @@ function parseCustomersEnvelope(data: unknown): DashboardCustomerRow[] {
   return rows;
 }
 
+/** Client / Route Handler responses (JSON body shaped like `{ customers?: … }`). */
+export function parseDashboardCustomersEnvelope(data: unknown): DashboardCustomerRow[] {
+  return parseCustomersEnvelope(data);
+}
+
 function dashboardCustomersPayloadFromResponseText(text: string, httpOk: boolean): DashboardCustomerRow[] | null {
   if (!httpOk) return null;
   try {
