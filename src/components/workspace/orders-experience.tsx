@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { Loader2, ShoppingCart } from "lucide-react";
+import { Loader2, Package, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,10 @@ import {
   mergeAndSortOrders,
   parseDashboardOrdersEnvelope,
   type DashboardOrderListRow,
+  type DashboardOrdersFetchResult,
 } from "@/lib/dashboard-orders";
 
-async function fetchAllOrdersFromProxy(): Promise<{ ok: true; rows: DashboardOrderListRow[] } | { ok: false }> {
+async function fetchAllOrdersFromProxy(): Promise<DashboardOrdersFetchResult> {
   const origin = window.location.origin;
   const flat: DashboardOrderListRow[] = [];
   let anySuccess = false;
@@ -32,12 +33,12 @@ async function fetchAllOrdersFromProxy(): Promise<{ ok: true; rows: DashboardOrd
         flat.push(...parseDashboardOrdersEnvelope(body));
       }
     } catch {
-      /* ignore */
+      /* network error for this status — keep trying others */
     }
   }
 
   if (!anySuccess) return { ok: false };
-  return { ok: true, rows: mergeAndSortOrders(flat) };
+  return { ok: true, orders: mergeAndSortOrders(flat) };
 }
 
 async function fetchCustomersFromProxy(): Promise<{ ok: true; rows: DashboardCustomerRow[] } | { ok: false }> {
@@ -53,64 +54,71 @@ async function fetchCustomersFromProxy(): Promise<{ ok: true; rows: DashboardCus
 }
 
 export function OrdersExperience({
-  initialOrders,
+  initialOrdersResult,
   initialCustomers,
 }: Readonly<{
-  initialOrders: DashboardOrderListRow[] | null;
+  initialOrdersResult: DashboardOrdersFetchResult;
   initialCustomers: DashboardCustomerRow[] | null;
 }>) {
-  const hydratedOrders = initialOrders !== null;
   const hydratedCustomers = initialCustomers !== null;
 
-  const [orderRows, setOrderRows] = useState<DashboardOrderListRow[] | undefined>(() =>
-    hydratedOrders ? (initialOrders ?? []) : undefined,
+  const [orders, setOrders] = useState<DashboardOrderListRow[]>(() =>
+    initialOrdersResult.ok ? initialOrdersResult.orders : [],
   );
+  const [ordersFetchFailed, setOrdersFetchFailed] = useState(() => !initialOrdersResult.ok);
+  const [ordersReady, setOrdersReady] = useState(() => initialOrdersResult.ok);
   const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | undefined>(() =>
     hydratedCustomers ? (initialCustomers ?? []) : undefined,
   );
-  const [ordersFetchFailed, setOrdersFetchFailed] = useState(false);
   const [customersFetchFailed, setCustomersFetchFailed] = useState(false);
 
   useEffect(() => {
-    if (hydratedOrders && hydratedCustomers) return;
-
     let cancelled = false;
     void (async () => {
-      const [ordersResult, customersResult] = await Promise.all([
-        hydratedOrders ? Promise.resolve({ ok: true as const, rows: initialOrders ?? [] }) : fetchAllOrdersFromProxy(),
-        hydratedCustomers
-          ? Promise.resolve({ ok: true as const, rows: initialCustomers ?? [] })
-          : fetchCustomersFromProxy(),
-      ]);
+      const tasks: Promise<void>[] = [];
 
-      if (cancelled) return;
-
-      if (ordersResult.ok) {
-        setOrdersFetchFailed(false);
-        setOrderRows(ordersResult.rows);
-      } else {
-        setOrdersFetchFailed(true);
-        setOrderRows([]);
+      if (!initialOrdersResult.ok) {
+        tasks.push(
+          (async () => {
+            const result = await fetchAllOrdersFromProxy();
+            if (cancelled) return;
+            if (result.ok) {
+              setOrdersFetchFailed(false);
+              setOrders(result.orders);
+            } else {
+              setOrdersFetchFailed(true);
+              setOrders([]);
+            }
+            setOrdersReady(true);
+          })(),
+        );
       }
 
-      if (customersResult.ok) {
-        setCustomersFetchFailed(false);
-        setCustomerRows(customersResult.rows);
-      } else {
-        setCustomersFetchFailed(true);
-        setCustomerRows([]);
+      if (!hydratedCustomers) {
+        tasks.push(
+          (async () => {
+            const customersResult = await fetchCustomersFromProxy();
+            if (cancelled) return;
+            if (customersResult.ok) {
+              setCustomersFetchFailed(false);
+              setCustomerRows(customersResult.rows);
+            } else {
+              setCustomersFetchFailed(true);
+              setCustomerRows([]);
+            }
+          })(),
+        );
       }
+
+      if (tasks.length === 0) return;
+
+      await Promise.all(tasks);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [hydratedCustomers, hydratedOrders, initialCustomers, initialOrders]);
-
-  const orderList = useMemo((): DashboardOrderListRow[] | undefined => {
-    if (!hydratedOrders && orderRows === undefined) return undefined;
-    return hydratedOrders ? (initialOrders ?? []) : (orderRows ?? []);
-  }, [hydratedOrders, initialOrders, orderRows]);
+  }, [hydratedCustomers, initialOrdersResult.ok]);
 
   const customerList = useMemo((): DashboardCustomerRow[] | undefined => {
     if (!hydratedCustomers && customerRows === undefined) return undefined;
@@ -126,7 +134,7 @@ export function OrdersExperience({
     return m;
   }, [customerList]);
 
-  const pendingClient = orderList === undefined || customerList === undefined;
+  const pendingClient = !ordersReady || customerList === undefined;
 
   if (pendingClient) {
     return (
@@ -138,8 +146,6 @@ export function OrdersExperience({
       </div>
     );
   }
-
-  const orders = orderList;
 
   const hasOrders = orders.length > 0;
 
@@ -153,13 +159,16 @@ export function OrdersExperience({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <OrdersPageHeader actions={<OrdersHeaderActions />} description={description} />
+      <OrdersPageHeader
+        actions={<OrdersHeaderActions showCreateOrder={hasOrders} />}
+        description={description}
+      />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <div className="flex min-h-0 flex-1 overflow-auto px-4 py-5 md:px-6 md:py-6">
           <div className="mx-auto flex w-full max-w-[1400px] min-h-0 flex-1 flex-col gap-6">
-            {ordersFetchFailed && !hasOrders ? (
+            {ordersFetchFailed ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-6 py-8 text-center">
-                <h2 className="text-balance font-semibold text-lg text-foreground md:text-xl">
+                <h2 className="text-balance font-semibold text-foreground text-lg md:text-xl">
                   No se pudieron cargar los pedidos
                 </h2>
                 <p className="mx-auto mt-2 max-w-lg text-muted-foreground text-sm leading-relaxed">
@@ -172,24 +181,36 @@ export function OrdersExperience({
             ) : null}
 
             {!hasOrders && !ordersFetchFailed ? (
-              <div className="rounded-lg border border-dashed bg-muted/15 px-6 py-8 text-center">
+              <div className="rounded-lg border border-dashed bg-muted/15 px-6 py-10 text-center">
                 <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted">
-                  <ShoppingCart aria-hidden className="size-6 text-muted-foreground" />
+                  <Package aria-hidden className="size-6 text-muted-foreground" />
                 </div>
                 <h2 className="mt-5 text-balance font-semibold text-foreground text-lg md:text-xl">
-                  You don&apos;t have orders yet
+                  No hay pedidos todavía
                 </h2>
                 <p className="mx-auto mt-2 max-w-lg text-muted-foreground text-sm leading-relaxed">
-                  When customers place orders through WhatsApp or the inbox, they will appear in the table below with
-                  delivery details and status.
+                  Los pedidos aparecerán aquí cuando se creen desde WhatsApp o manualmente.
                 </p>
-                <Button asChild className="mt-6" size="default" type="button">
-                  <Link href="/inbox">Create your first order</Link>
+                <Button asChild className="mt-6 gap-2" size="default" type="button">
+                  <Link href="/orders/creation">
+                    <Plus aria-hidden className="size-4" />
+                    Crear pedido
+                  </Link>
                 </Button>
               </div>
             ) : null}
 
-            <OrdersCatalogTable customerNameById={customerNameById} data={orders} />
+            {hasOrders && !ordersFetchFailed ? (
+              <div className="flex min-h-0 flex-1 flex-col gap-4">
+                <header className="shrink-0">
+                  <h2 className="font-semibold text-base tracking-tight text-foreground">Listado de pedidos</h2>
+                  <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
+                    Código, cliente, fechas, ítems, estado y canal de cada pedido.
+                  </p>
+                </header>
+                <OrdersCatalogTable customerNameById={customerNameById} data={orders} />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

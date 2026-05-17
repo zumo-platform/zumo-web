@@ -50,7 +50,13 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
         : null;
 
   const lines = Array.isArray(o.lines) ? o.lines : [];
-  const lineCount = lines.length;
+  const explicitCount =
+    typeof o.lineCount === "number" && Number.isFinite(o.lineCount)
+      ? o.lineCount
+      : typeof o.itemCount === "number" && Number.isFinite(o.itemCount)
+        ? o.itemCount
+        : null;
+  const lineCount = explicitCount ?? lines.length;
 
   const conversationId =
     o.conversationId === null || o.conversationId === undefined
@@ -131,20 +137,25 @@ async function fetchOrdersByStatus(
   }
 }
 
+export type DashboardOrdersFetchResult =
+  | { ok: true; orders: DashboardOrderListRow[] }
+  | { ok: false };
+
 /**
  * Loads orders for every dashboard status and merges them (newest first).
- * Returns `null` only when every request fails for every bearer candidate.
+ * Empty `orders` means the tenant has no orders — not an error.
+ * `ok: false` only when every request fails for every bearer candidate.
  */
 export async function fetchAllOrdersDashboard(
   apiUrl: string,
   idToken?: string | null,
   accessToken?: string | null,
-): Promise<DashboardOrderListRow[] | null> {
+): Promise<DashboardOrdersFetchResult> {
   const base = apiUrl.replace(/\/+$/, "");
-  if (!base) return null;
+  if (!base) return { ok: false };
 
   const bearerCandidates = uniqBearerCandidates(idToken, accessToken);
-  if (bearerCandidates.length === 0) return null;
+  if (bearerCandidates.length === 0) return { ok: false };
 
   const upstreamBase = joinApiGatewayPath(base, "dashboard/orders");
 
@@ -164,7 +175,7 @@ export async function fetchAllOrdersDashboard(
     }
 
     if (anyOk) {
-      return mergeAndSortOrders(flat);
+      return { ok: true, orders: mergeAndSortOrders(flat) };
     }
 
     const retriable =
@@ -172,10 +183,98 @@ export async function fetchAllOrdersDashboard(
     if (!retriable) break;
   }
 
-  return null;
+  return { ok: false };
 }
 
 /** Client / Route Handler envelope `{ orders?: … }` for a single status response. */
 export function parseDashboardOrdersEnvelope(data: unknown): DashboardOrderListRow[] {
   return parseOrdersEnvelope(data);
+}
+
+export type CreateOrderLineInput = Readonly<{
+  productId: number | null;
+  productNameRaw: string;
+  quantity: number;
+  unit: string;
+  unitPrice?: number | null;
+  notes?: string;
+}>;
+
+export type CreateOrderInput = Readonly<{
+  customerId: number;
+  lines: CreateOrderLineInput[];
+  deliveryDate?: string | null;
+  deliveryTimeWindow?: string | null;
+  deliveryNotes?: string;
+  notes?: string;
+}>;
+
+export class CreateDashboardOrderError extends Error {
+  readonly status: number;
+  readonly details?: Record<string, string[]>;
+  readonly lineIndex?: number;
+  readonly responseBody?: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    status: number,
+    options?: {
+      details?: Record<string, string[]>;
+      lineIndex?: number;
+      responseBody?: Record<string, unknown>;
+    },
+  ) {
+    super(message);
+    this.name = "CreateDashboardOrderError";
+    this.status = status;
+    this.details = options?.details;
+    this.lineIndex = options?.lineIndex;
+    this.responseBody = options?.responseBody;
+  }
+}
+
+/** Browser / Route Handler: POST `/api/backend/dashboard/orders`. */
+export async function createDashboardOrderViaProxy(
+  input: CreateOrderInput,
+): Promise<{ orderId: string }> {
+  const res = await fetch("/api/backend/dashboard/orders", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const details = body.details;
+    const fieldErrors =
+      details && typeof details === "object" && !Array.isArray(details)
+        ? (details as Record<string, string[]>)
+        : undefined;
+    const lineIndex =
+      typeof body.lineIndex === "number" && Number.isFinite(body.lineIndex)
+        ? body.lineIndex
+        : undefined;
+    const msg =
+      typeof body.error === "string" && body.error.trim().length > 0
+        ? body.error.trim()
+        : `No se pudo crear el pedido (HTTP ${String(res.status)}).`;
+    throw new CreateDashboardOrderError(msg, res.status, {
+      details: fieldErrors,
+      lineIndex,
+      responseBody: body,
+    });
+  }
+
+  const order = body.order as Record<string, unknown> | undefined;
+  const orderId = typeof order?.orderId === "string" ? order.orderId.trim() : "";
+  if (!orderId) {
+    throw new CreateDashboardOrderError("Respuesta inválida del servidor.", 502, {
+      responseBody: body,
+    });
+  }
+
+  return { orderId };
 }

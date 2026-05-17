@@ -1,20 +1,17 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { OrdersExperience } from "@/components/workspace/orders-experience";
+import { CreateOrderForm } from "@/components/workspace/create-order-form";
 import { getServerApiBaseUrl } from "@/lib/api";
 import { fetchCustomersDashboard } from "@/lib/dashboard-customers";
-import { fetchAllOrdersDashboard } from "@/lib/dashboard-orders";
+import { activeProducts, fetchProductsDashboard } from "@/lib/dashboard-products";
 import { getAuthSession } from "@/lib/session";
 
 export const metadata: Metadata = {
-  title: "Pedidos",
+  title: "Nuevo pedido",
 };
 
-/** Fresh list after manual creation / redirects from /orders/creation */
-export const dynamic = "force-dynamic";
-
-export default async function OrdersPage() {
+export default async function OrderCreationPage() {
   const { accessToken, idToken } = await getAuthSession();
 
   if (!idToken && !accessToken) {
@@ -22,14 +19,16 @@ export default async function OrdersPage() {
   }
 
   const apiUrl = getServerApiBaseUrl();
-  const [initialOrdersResult, initialCustomers] = await Promise.all([
-    fetchAllOrdersDashboard(apiUrl, idToken, accessToken),
+  const [customers, productsRaw] = await Promise.all([
     fetchCustomersDashboard(apiUrl, idToken, accessToken),
+    fetchProductsDashboard(apiUrl, idToken, accessToken),
   ]);
+
+  const products = activeProducts(productsRaw ?? []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
-      <OrdersExperience initialCustomers={initialCustomers} initialOrdersResult={initialOrdersResult} />
+      <CreateOrderForm customers={customers ?? []} products={products} />
     </div>
   );
 }
