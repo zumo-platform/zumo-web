@@ -317,7 +317,6 @@ export function OrdersCatalogTable({
     [customerNameById, confirmingOrderId, handleConfirmFromTable, openDetail],
   );
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
   const table = useReactTable({
     data,
     columns,

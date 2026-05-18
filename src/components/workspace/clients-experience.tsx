@@ -26,10 +26,16 @@ type ClientsListSection = "general" | "import";
 export function ClientsExperience({
   initialCustomers,
   variant,
+  creationInitialPhone,
+  creationReturnToInbox,
 }: Readonly<{
   variant: ClientsExperienceVariant;
   /** List variant: supplier portfolio from GET /dashboard/customers (`null` = fetch error). */
   initialCustomers?: DashboardCustomerRow[] | null;
+  /** Creation: pre-filled contact phone (E.164 or parseable). */
+  creationInitialPhone?: string;
+  /** Creation: after save, return to inbox instead of client list. */
+  creationReturnToInbox?: boolean;
 }>) {
   const router = useRouter();
   const [section, setSection] = useState<ClientsListSection>("general");
@@ -51,8 +57,12 @@ export function ClientsExperience({
   }, [router]);
 
   const afterSave = useCallback(() => {
+    if (creationReturnToInbox) {
+      router.replace("/inbox");
+      return;
+    }
     router.replace("/clients");
-  }, [router]);
+  }, [creationReturnToInbox, router]);
 
   const listDescription = showEmpty
     ? "Registra y organiza a tus compradores para acelerar pedidos y dar mejor seguimiento."
@@ -98,7 +108,12 @@ export function ClientsExperience({
   if (variant === "creation") {
     main = (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <AddCustomerForm onCancel={goClientsIndex} onSaved={afterSave} />
+        <AddCustomerForm
+          key={creationInitialPhone ?? "__no_phone__"}
+          initialPrimaryPhoneE164={creationInitialPhone?.trim() || undefined}
+          onCancel={goClientsIndex}
+          onSaved={afterSave}
+        />
       </div>
     );
   } else if (section === "import") {

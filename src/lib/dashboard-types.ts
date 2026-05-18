@@ -2,11 +2,17 @@ export interface Conversation {
   conversationId: string;
   customerId: number;
   supplierId: number;
+  contactId?: string | null;
+  channel: string;
   status: string;
+  summary?: string | null;
+  lastMessageAt?: string | null;
   expiresAt?: string | null;
   createdAt?: string;
-  updatedAt?: string;
   customerName: string;
+  customerPhone: string;
+  /** Prefer API value; if absent, treat empty `customerName` as unknown. */
+  isUnknownCustomer?: boolean;
 }
 
 export interface Message {
@@ -34,6 +40,8 @@ export interface Order {
   deliveryNotes?: string | null;
   deliveryDate?: string | null;
   createdAt?: string;
+  /** 0–1 from backend when present */
+  aiConfidence?: number | string | null;
 }
 
 export interface SellerMe {

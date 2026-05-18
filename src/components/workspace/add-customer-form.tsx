@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { CountryCode } from "libphonenumber-js";
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { Loader2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -83,16 +83,33 @@ function optionalTrim(value: string | undefined): string | undefined {
   return t.length ? t : undefined;
 }
 
+function prefilledPrimaryPhone(
+  initialPrimaryPhoneE164: string | undefined,
+): { country: CountryCode; national: string } {
+  const raw = initialPrimaryPhoneE164?.trim();
+  if (!raw) return { country: "CR", national: "" };
+  const parsed = parsePhoneNumberFromString(raw);
+  if (!parsed?.isValid()) return { country: "CR", national: "" };
+  return {
+    country: (parsed.country ?? "CR") as CountryCode,
+    national: parsed.nationalNumber,
+  };
+}
+
 export function AddCustomerForm({
   onCancel,
   onSaved,
+  initialPrimaryPhoneE164,
 }: Readonly<{
   onCancel: () => void;
   onSaved: () => void;
+  /** Ej. número en E.164 pre-cargado desde el inbox (`?phone=…`). */
+  initialPrimaryPhoneE164?: string;
 }>) {
   const uid = useId();
-  const [phoneCountry, setPhoneCountry] = useState<CountryCode>("CR");
-  const [phoneNational, setPhoneNational] = useState("");
+  const pf = prefilledPrimaryPhone(initialPrimaryPhoneE164);
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>(pf.country);
+  const [phoneNational, setPhoneNational] = useState(pf.national);
   const [phoneSubmitError, setPhoneSubmitError] = useState(false);
 
   const {
