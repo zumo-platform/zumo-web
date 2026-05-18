@@ -278,3 +278,57 @@ export async function createDashboardOrderViaProxy(
 
   return { orderId };
 }
+
+export class DashboardOrderActionError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "DashboardOrderActionError";
+    this.status = status;
+  }
+}
+
+async function parseOrderActionError(res: Response, fallback: string): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return typeof body.error === "string" && body.error.trim().length > 0
+    ? body.error.trim()
+    : fallback;
+}
+
+/** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/confirm`. */
+export async function confirmDashboardOrderViaProxy(orderId: string): Promise<void> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}/confirm`, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new DashboardOrderActionError(
+      await parseOrderActionError(res, "No se pudo confirmar el pedido."),
+      res.status,
+    );
+  }
+}
+
+/** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/reject`. */
+export async function rejectDashboardOrderViaProxy(
+  orderId: string,
+  reason?: string,
+): Promise<void> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}/reject`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(reason?.trim() ? { reason: reason.trim() } : {}),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new DashboardOrderActionError(
+      await parseOrderActionError(res, "No se pudo rechazar el pedido."),
+      res.status,
+    );
+  }
+}

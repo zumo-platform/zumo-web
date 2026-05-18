@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   type ColumnDef,
@@ -9,7 +9,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { MessageCircle, MoreHorizontal, Monitor } from "lucide-react";
+import { CheckCircle2, Loader2, MessageCircle, MoreHorizontal, Monitor } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -25,7 +25,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { DashboardOrderListRow } from "@/lib/dashboard-orders";
+import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
+import {
+  confirmDashboardOrderViaProxy,
+  type DashboardOrderListRow,
+} from "@/lib/dashboard-orders";
 import { cn } from "@/lib/utils";
 
 const dateFormatter = new Intl.DateTimeFormat("es", { dateStyle: "medium" });
@@ -104,13 +108,39 @@ export function OrdersCatalogTable({
   data,
   customerNameById,
   showInlineEmpty = true,
+  onOrderStatusChange,
 }: Readonly<{
   data: DashboardOrderListRow[];
   customerNameById: ReadonlyMap<number, string>;
   /** When false, parent renders the empty state (no duplicate row in table). */
   showInlineEmpty?: boolean;
+  onOrderStatusChange?: (orderId: string, status: string) => void;
 }>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+
+  const openDetail = useCallback((orderId: string) => {
+    setDetailOrderId(orderId);
+    setDetailOpen(true);
+  }, []);
+
+  const handleConfirmFromTable = useCallback(
+    async (orderId: string) => {
+      setConfirmingOrderId(orderId);
+      try {
+        await confirmDashboardOrderViaProxy(orderId);
+        toast.success("Pedido confirmado");
+        onOrderStatusChange?.(orderId, "in_progress");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo confirmar el pedido.");
+      } finally {
+        setConfirmingOrderId(null);
+      }
+    },
+    [onOrderStatusChange],
+  );
 
   const columns = useMemo<ColumnDef<DashboardOrderListRow>[]>(
     () => [
@@ -195,11 +225,34 @@ export function OrdersCatalogTable({
       {
         id: "status",
         header: "Estado",
-        cell: ({ row }) => (
-          <Badge variant={statusBadgeVariant(row.original.status)}>
-            {statusLabel(row.original.status)}
-          </Badge>
-        ),
+        cell: ({ row }) => {
+          const o = row.original;
+          const isPending = o.status === "pending";
+          const isConfirming = confirmingOrderId === o.orderId;
+
+          return (
+            <div className="flex min-w-[9.5rem] flex-col items-start gap-1.5">
+              <Badge variant={statusBadgeVariant(o.status)}>{statusLabel(o.status)}</Badge>
+              {isPending ? (
+                <Button
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={isConfirming}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleConfirmFromTable(o.orderId)}
+                >
+                  {isConfirming ? (
+                    <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 aria-hidden className="size-3.5" />
+                  )}
+                  Confirmar
+                </Button>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         id: "channel",
@@ -245,13 +298,7 @@ export function OrdersCatalogTable({
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() =>
-                    toast.message("Detalle del pedido", {
-                      description: `Próximamente (${o.orderId}).`,
-                    })
-                  }
-                >
+                <DropdownMenuItem onSelect={() => openDetail(o.orderId)}>
                   Ver detalle
                 </DropdownMenuItem>
                 {o.conversationId ? (
@@ -267,7 +314,7 @@ export function OrdersCatalogTable({
         },
       },
     ],
-    [customerNameById],
+    [customerNameById, confirmingOrderId, handleConfirmFromTable, openDetail],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
@@ -309,6 +356,7 @@ export function OrdersCatalogTable({
                     key={header.id}
                     className={cn(
                       header.column.id === "select" && "w-10 px-2",
+                      header.column.id === "status" && "min-w-[9.5rem]",
                       header.column.id === "channel" && "w-[7.5rem]",
                       header.column.id === "actions" && "w-10 px-2",
                       (header.column.id === "lineCount" || header.column.id === "orderCreation") &&
@@ -342,6 +390,23 @@ export function OrdersCatalogTable({
           </TableBody>
         </Table>
       </div>
+
+      <OrderDetailSheet
+        customerNameFallback={
+          detailOrderId
+            ? customerNameById.get(
+                data.find((o) => o.orderId === detailOrderId)?.customerId ?? -1,
+              )
+            : undefined
+        }
+        onOpenChange={setDetailOpen}
+        onOrderStatusChange={onOrderStatusChange}
+        open={detailOpen}
+        orderId={detailOrderId}
+        syncedStatus={
+          detailOrderId ? (data.find((o) => o.orderId === detailOrderId)?.status ?? null) : null
+        }
+      />
     </div>
   );
 }

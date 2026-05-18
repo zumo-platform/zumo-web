@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Loader2, Package, Plus } from "lucide-react";
 import Link from "next/link";
@@ -134,6 +134,12 @@ export function OrdersExperience({
     return m;
   }, [customerList]);
 
+  const handleOrderStatusChange = useCallback((orderId: string, status: string) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)),
+    );
+  }, []);
+
   const pendingClient = !ordersReady || customerList === undefined;
 
   if (pendingClient) {
@@ -208,7 +214,11 @@ export function OrdersExperience({
                     Código, cliente, fechas, ítems, estado y canal de cada pedido.
                   </p>
                 </header>
-                <OrdersCatalogTable customerNameById={customerNameById} data={orders} />
+                <OrdersCatalogTable
+                  customerNameById={customerNameById}
+                  data={orders}
+                  onOrderStatusChange={handleOrderStatusChange}
+                />
               </div>
             ) : null}
           </div>
