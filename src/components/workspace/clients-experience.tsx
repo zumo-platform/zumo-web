@@ -109,8 +109,9 @@ export function ClientsExperience({
     main = (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AddCustomerForm
-          key={creationInitialPhone ?? "__no_phone__"}
+          key={`${creationInitialPhone ?? ""}:${creationReturnToInbox ? "inbox" : "std"}`}
           initialPrimaryPhoneE164={creationInitialPhone?.trim() || undefined}
+          showInboxCreationHint={Boolean(creationReturnToInbox)}
           onCancel={goClientsIndex}
           onSaved={afterSave}
         />

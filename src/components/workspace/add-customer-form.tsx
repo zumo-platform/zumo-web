@@ -4,12 +4,13 @@ import { useId, useState } from "react";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { PhoneNumberField } from "@/components/auth/phone-number-field";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -100,11 +101,13 @@ export function AddCustomerForm({
   onCancel,
   onSaved,
   initialPrimaryPhoneE164,
+  showInboxCreationHint,
 }: Readonly<{
   onCancel: () => void;
   onSaved: () => void;
   /** Ej. número en E.164 pre-cargado desde el inbox (`?phone=…`). */
   initialPrimaryPhoneE164?: string;
+  showInboxCreationHint?: boolean;
 }>) {
   const uid = useId();
   const pf = prefilledPrimaryPhone(initialPrimaryPhoneE164);
@@ -261,6 +264,15 @@ export function AddCustomerForm({
     >
       <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+          {showInboxCreationHint ? (
+            <Alert variant="default">
+              <Info aria-hidden className="text-muted-foreground" />
+              <AlertTitle>Cliente desde WhatsApp</AlertTitle>
+              <AlertDescription>
+                Creando cliente desde un mensaje de WhatsApp. El teléfono está pre-cargado.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <p className="text-muted-foreground text-sm leading-relaxed">
             Los datos siguen tu esquema de clientes en Zumo. No se guarda nada hasta que pulses{" "}
             <span className="font-medium text-foreground">Guardar</span>.
