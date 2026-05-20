@@ -1,6 +1,7 @@
 export interface Conversation {
   conversationId: string;
-  customerId: number;
+  /** Null for unregistered WhatsApp contacts (not in clientes table yet). */
+  customerId: number | null;
   supplierId: number;
   contactId?: string | null;
   channel: string;

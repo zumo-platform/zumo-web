@@ -9,7 +9,7 @@ export function CustomerCard({
   conversation: Conversation;
   orders: readonly Order[];
 }>) {
-  const cid = conversation.customerId;
+  const cid = conversation.customerId ?? 0;
   const name = conversation.customerName.trim() || `Cliente #${String(cid)}`;
   const stats = computeCustomerOrderStats(cid, orders);
   const rel = stats.latestConfirmedCreatedAt ? lastOrderSpanishRelativeDays(stats.latestConfirmedCreatedAt) : null;

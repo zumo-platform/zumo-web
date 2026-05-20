@@ -17,9 +17,13 @@ export function ConversationListItem({
   const conv = conversation;
   const timeLabel = conversationListTimeLabel(conv.lastMessageAt ?? conv.createdAt ?? null);
   const unknown = isUnknownConversationCustomer(conv);
+  const phone = conv.customerPhone.trim();
   const titlePrimary = unknown
-    ? (conv.customerPhone.trim() || "Sin número")
-    : conv.customerName.trim() || `Cliente #${String(conv.customerId)}`;
+    ? phone.length > 0
+      ? phone
+      : "Sin número"
+    : conv.customerName.trim() ||
+      (conv.customerId != null ? `Cliente #${String(conv.customerId)}` : "Cliente");
 
   return (
     <li>

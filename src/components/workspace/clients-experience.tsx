@@ -59,9 +59,11 @@ export function ClientsExperience({
   const afterSave = useCallback(() => {
     if (creationReturnToInbox) {
       router.replace("/inbox");
+      router.refresh();
       return;
     }
     router.replace("/clients");
+    router.refresh();
   }, [creationReturnToInbox, router]);
 
   const listDescription = showEmpty
@@ -111,6 +113,7 @@ export function ClientsExperience({
         <AddCustomerForm
           key={`${creationInitialPhone ?? ""}:${creationReturnToInbox ? "inbox" : "std"}`}
           initialPrimaryPhoneE164={creationInitialPhone?.trim() || undefined}
+          lockPrimaryPhone={Boolean(creationReturnToInbox && creationInitialPhone?.trim())}
           showInboxCreationHint={Boolean(creationReturnToInbox)}
           onCancel={goClientsIndex}
           onSaved={afterSave}

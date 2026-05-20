@@ -102,15 +102,25 @@ export function AddCustomerForm({
   onSaved,
   initialPrimaryPhoneE164,
   showInboxCreationHint,
+  lockPrimaryPhone = false,
 }: Readonly<{
   onCancel: () => void;
   onSaved: () => void;
   /** Ej. número en E.164 pre-cargado desde el inbox (`?phone=…`). */
   initialPrimaryPhoneE164?: string;
   showInboxCreationHint?: boolean;
+  /** Inbox flow: teléfono fijado al número de WhatsApp (no editable). */
+  lockPrimaryPhone?: boolean;
 }>) {
   const uid = useId();
   const pf = prefilledPrimaryPhone(initialPrimaryPhoneE164);
+  const lockedPhoneE164 =
+    lockPrimaryPhone && initialPrimaryPhoneE164?.trim()
+      ? (() => {
+          const parsed = parsePhoneNumberFromString(initialPrimaryPhoneE164.trim());
+          return parsed?.isValid() ? parsed.format("E.164") : nationalToE164(pf.national, pf.country);
+        })()
+      : null;
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>(pf.country);
   const [phoneNational, setPhoneNational] = useState(pf.national);
   const [phoneSubmitError, setPhoneSubmitError] = useState(false);
@@ -150,7 +160,10 @@ export function AddCustomerForm({
 
   async function onSubmit(values: AddCustomerFormValues) {
     setPhoneSubmitError(false);
-    const phone = nationalToE164(phoneNational, phoneCountry);
+    const phone =
+      lockPrimaryPhone && lockedPhoneE164
+        ? lockedPhoneE164
+        : nationalToE164(phoneNational, phoneCountry);
     if (!phone) {
       setPhoneSubmitError(true);
       toast.error("Introduce un teléfono válido del contacto para el país seleccionado.");
@@ -269,7 +282,8 @@ export function AddCustomerForm({
               <Info aria-hidden className="text-muted-foreground" />
               <AlertTitle>Cliente desde WhatsApp</AlertTitle>
               <AlertDescription>
-                Creando cliente desde un mensaje de WhatsApp. El teléfono está pre-cargado.
+                Creando cliente desde un mensaje de WhatsApp. El teléfono del contacto coincide con el
+                número del hilo y no se puede cambiar.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -390,7 +404,12 @@ export function AddCustomerForm({
               </div>
               <PhoneNumberField
                 country={phoneCountry}
-                hint="No incluyas el código de país manualmente si eliges país arriba."
+                disabled={lockPrimaryPhone}
+                hint={
+                  lockPrimaryPhone
+                    ? "Este número proviene del mensaje de WhatsApp y quedará como contacto principal del cliente."
+                    : "No incluyas el código de país manualmente si eliges país arriba."
+                }
                 id={`${uid}-primaryPhone`}
                 label="Teléfono del contacto"
                 locale="es"
