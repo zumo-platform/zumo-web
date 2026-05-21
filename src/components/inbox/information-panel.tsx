@@ -41,7 +41,7 @@ export function InformationPanel({
 }>) {
   if (!conversation) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
+      <div className="flex min-h-[min(100%,24rem)] items-center justify-center p-6">
         <EmptyState
           description="Abrí un hilo para ver el cliente y el pedido extraído."
           icon={Info}

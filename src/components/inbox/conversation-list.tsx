@@ -1,11 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import { MessageSquare } from "lucide-react";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Conversation } from "@/lib/dashboard-types";
 
 import { ConversationListItem } from "./conversation-list-item";
+import { InboxScrollPane } from "./inbox-scroll-pane";
 
 function EmptyState({
   icon: Icon,
@@ -38,34 +38,38 @@ export function ConversationList({
 }>) {
   if (loading) {
     return (
-      <div className="min-h-0 flex-1 space-y-3 p-3">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div className="space-y-2 rounded-lg border border-transparent px-2 py-2" key={i}>
-            <Skeleton className="h-4 w-[85%]" />
-            <div className="flex justify-between gap-2">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-3 w-10" />
+      <InboxScrollPane>
+        <div className="space-y-3 p-3">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div className="space-y-2 rounded-lg border border-transparent px-2 py-2" key={i}>
+              <Skeleton className="h-4 w-[85%]" />
+              <div className="flex justify-between gap-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-10" />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </InboxScrollPane>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <div className="min-h-0 flex-1 p-4">
-        <EmptyState
-          description="Los mensajes aparecerán acá cuando un cliente te escriba por WhatsApp."
-          icon={MessageSquare}
-          title="Aún no hay conversaciones"
-        />
-      </div>
+      <InboxScrollPane>
+        <div className="p-4">
+          <EmptyState
+            description="Los mensajes aparecerán acá cuando un cliente te escriba por WhatsApp."
+            icon={MessageSquare}
+            title="Aún no hay conversaciones"
+          />
+        </div>
+      </InboxScrollPane>
     );
   }
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <InboxScrollPane>
       <ul className="space-y-0.5 p-2">
         {conversations.map((conv) => (
           <ConversationListItem
@@ -76,6 +80,6 @@ export function ConversationList({
           />
         ))}
       </ul>
-    </ScrollArea>
+    </InboxScrollPane>
   );
 }

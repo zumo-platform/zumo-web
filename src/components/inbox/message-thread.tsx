@@ -3,10 +3,10 @@ import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Loader2, MessageSquare } from "lucide-react";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Message } from "@/lib/dashboard-types";
 
 import { buildMessageThreadItems } from "./inbox-helpers";
+import { InboxScrollPane } from "./inbox-scroll-pane";
 import { MessageBubble } from "./message-bubble";
 
 function EmptyState({
@@ -27,6 +27,12 @@ function EmptyState({
   );
 }
 
+function ThreadEmpty({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">{children}</div>
+  );
+}
+
 export function MessageThread({
   conversationId,
   messages,
@@ -37,48 +43,76 @@ export function MessageThread({
   loading: boolean;
 }>) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollPaneRef = useRef<HTMLDivElement>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const lastConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const last = messages.at(-1);
+    const lastId = last?.messageId ?? null;
+    const convChanged = conversationId !== lastConversationIdRef.current;
+    const newMessage = lastId !== null && lastId !== lastMessageIdRef.current;
+
+    if (convChanged || newMessage) {
+      const pane = scrollPaneRef.current;
+      if (pane) {
+        pane.scrollTop = pane.scrollHeight;
+      } else {
+        bottomRef.current?.scrollIntoView({ behavior: convChanged ? "auto" : "smooth" });
+      }
+    }
+
+    lastMessageIdRef.current = lastId;
+    lastConversationIdRef.current = conversationId;
+  }, [messages, conversationId]);
 
   const items = buildMessageThreadItems(messages);
+  const showInitialLoader = loading && messages.length === 0;
 
   if (!conversationId) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
+      <ThreadEmpty>
         <EmptyState
           description="Elegí un hilo de la lista para leer los mensajes."
           icon={MessageSquare}
           title="Seleccioná una conversación"
         />
-      </div>
+      </ThreadEmpty>
     );
   }
 
-  if (loading) {
+  if (showInitialLoader) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <ThreadEmpty>
         <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
-      </div>
+      </ThreadEmpty>
     );
   }
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
+      <ThreadEmpty>
         <EmptyState
           description="Cuando el cliente escriba, los mensajes van a aparecer acá."
           icon={MessageSquare}
           title="Sin mensajes todavía"
         />
-      </div>
+      </ThreadEmpty>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <ScrollArea className="min-h-0 flex-1">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      {loading ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-3 right-4 z-10 flex items-center gap-1.5 rounded-md bg-background/90 px-2 py-1 text-muted-foreground text-xs shadow-sm"
+        >
+          <Loader2 className="size-3.5 animate-spin" />
+          Actualizando…
+        </div>
+      ) : null}
+      <InboxScrollPane ref={scrollPaneRef}>
         <div className="flex flex-col gap-2 px-4 py-4">
           {items.map((item) =>
             item.kind === "divider" ? (
@@ -93,7 +127,7 @@ export function MessageThread({
           )}
           <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </InboxScrollPane>
     </div>
   );
 }

@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
-import type { SellerMe } from "@/lib/dashboard-types";
+import { fetchWhatsappStatus } from "@/lib/dashboard-api";
+import type { SellerMe, WhatsappStatusResult } from "@/lib/dashboard-types";
 import { getAuthSession } from "@/lib/session";
 
 import packageJson from "../../../../package.json";
@@ -31,9 +32,11 @@ export default async function WorkspaceLayout({
 
   let seller = fallbackSeller;
   let supplier: SellerMe["supplier"] | null = null;
+  let whatsappStatus: WhatsappStatusResult | null = null;
+
+  const bearerCandidates = [...new Set([idToken, accessToken].filter((t): t is string => Boolean(t)))];
 
   if (apiUrl) {
-    const bearerCandidates = [...new Set([idToken, accessToken].filter((t): t is string => Boolean(t)))];
     try {
       const url = joinApiGatewayPath(apiUrl, "sellers/me");
 
@@ -55,11 +58,17 @@ export default async function WorkspaceLayout({
     }
   }
 
+  for (const bearer of bearerCandidates) {
+    whatsappStatus = await fetchWhatsappStatus(bearer);
+    if (whatsappStatus) break;
+  }
+
   return (
     <WorkspaceShell
       appVersion={packageJson.version}
       seller={seller}
       supplier={supplier}
+      whatsappStatus={whatsappStatus}
     >
       {children}
     </WorkspaceShell>

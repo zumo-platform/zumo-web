@@ -45,6 +45,16 @@ export interface Order {
   aiConfidence?: number | string | null;
 }
 
+export type WhatsappTokenType = "system_user" | "temporary" | "none" | "unknown";
+
+export interface WhatsappStatusResult {
+  connected: boolean;
+  tokenValid: boolean;
+  tokenType: WhatsappTokenType;
+  expiresAt: string | null;
+  message: string;
+}
+
 export interface SellerMe {
   seller: {
     sellerId: number;
@@ -59,7 +69,8 @@ export interface SellerMe {
     businessName: string;
     businessEmail: string;
     whatsappPhoneNumberId: string | null;
-    whatsappWabaId: string | null;
+    wabaId: string | null;
+    partnerSolutionId: string | null;
     onboardingStatus: string;
     onboardingComplete: boolean;
   };

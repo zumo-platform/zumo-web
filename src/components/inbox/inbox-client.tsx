@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { backendGet, isUnknownConversationCustomer } from "@/components/inbox/inbox-helpers";
+import { InboxScrollPane } from "@/components/inbox/inbox-scroll-pane";
 import { InformationPanel } from "@/components/inbox/information-panel";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ErrorAlert } from "@/components/workspace/error-alert";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
@@ -61,8 +61,8 @@ export function InboxClient() {
     }
   }, []);
 
-  const fetchMessages = useCallback(async (convId: string) => {
-    setMsgsLoading(true);
+  const fetchMessages = useCallback(async (convId: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setMsgsLoading(true);
     setMsgsFetchError(null);
     try {
       const data = await backendGet<{ messages?: Message[] }>(
@@ -70,11 +70,24 @@ export function InboxClient() {
       );
       setMessages(data.messages ?? []);
     } catch (err) {
-      setMessages([]);
+      if (!opts?.silent) setMessages([]);
       setMsgsFetchError(err instanceof Error ? err.message : "No se pudieron cargar los mensajes.");
     } finally {
-      setMsgsLoading(false);
+      if (!opts?.silent) setMsgsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+    };
   }, []);
 
   useEffect(() => {
@@ -86,26 +99,32 @@ export function InboxClient() {
     void init();
   }, [fetchConversations, refreshOrders]);
 
+  const prevSelectedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!selectedId) {
       setMessages([]);
       setMsgsFetchError(null);
+      prevSelectedIdRef.current = null;
       return;
     }
+    if (prevSelectedIdRef.current !== selectedId) {
+      setMessages([]);
+    }
+    prevSelectedIdRef.current = selectedId;
     void fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
       void fetchConversations();
-      if (selectedId) void fetchMessages(selectedId);
+      if (selectedId) void fetchMessages(selectedId, { silent: true });
     }, 8000);
     return () => window.clearInterval(id);
   }, [fetchConversations, fetchMessages, selectedId]);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
-    setMessages([]);
     setMsgsFetchError(null);
   }, []);
 
@@ -127,8 +146,8 @@ export function InboxClient() {
         title="Inbox"
       />
 
-      <div className="flex min-h-0 flex-1 divide-x divide-border">
-        <aside className="flex min-h-0 w-[min(100%,18rem)] shrink-0 flex-col sm:w-72">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,20rem)] divide-x divide-border overflow-hidden sm:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,20rem)]">
+        <aside className="flex min-h-0 flex-col overflow-hidden">
           <PanelHeading>Conversaciones</PanelHeading>
           {convsFetchError ? (
             <div className="shrink-0 border-b p-3">
@@ -140,17 +159,15 @@ export function InboxClient() {
               />
             </div>
           ) : null}
-          <div className="flex min-h-0 flex-1 flex-col">
-            <ConversationList
-              conversations={conversations}
-              loading={convsLoading}
-              selectedId={selectedId}
-              onSelect={handleSelect}
-            />
-          </div>
+          <ConversationList
+            conversations={conversations}
+            loading={convsLoading}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+          />
         </aside>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <PanelHeading>{threadTitle}</PanelHeading>
           {msgsFetchError && selectedId ? (
             <div className="shrink-0 border-b p-3">
@@ -162,24 +179,22 @@ export function InboxClient() {
               />
             </div>
           ) : null}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <MessageThread conversationId={selectedId} messages={messages} loading={msgsLoading} />
-          </div>
-          <Separator />
-          <div className="shrink-0 bg-muted/20 px-4 py-3">
+          <MessageThread conversationId={selectedId} messages={messages} loading={msgsLoading} />
+          <Separator className="shrink-0" />
+          <div className="shrink-0 border-t bg-background px-4 py-3">
             <Input disabled placeholder="Responder (próximamente)" />
           </div>
         </main>
 
-        <aside className="flex min-h-0 w-[min(100%,18rem)] shrink-0 flex-col sm:w-80">
+        <aside className="flex min-h-0 flex-col overflow-hidden">
           <PanelHeading>Información</PanelHeading>
-          <ScrollArea className="min-h-0 flex-1">
+          <InboxScrollPane>
             <InformationPanel
               conversation={selectedConversation}
               orders={orders}
               onOrdersDirty={() => void refreshOrders()}
             />
-          </ScrollArea>
+          </InboxScrollPane>
         </aside>
       </div>
     </div>
