@@ -1,6 +1,6 @@
 import type { Conversation, Order } from "@/lib/dashboard-types";
 
-import { computeCustomerOrderStats, lastOrderSpanishRelativeDays } from "./inbox-helpers";
+import { computeCustomerOrderStats, lastOrderSpanishRelativeDays } from "./whatsapp-helpers";
 
 export function CustomerCard({
   conversation,

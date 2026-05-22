@@ -7,8 +7,8 @@ import type { Conversation, Order } from "@/lib/dashboard-types";
 
 import { CustomerCard } from "./customer-card";
 import { DraftOrderCard } from "./draft-order-card";
-import { isUnknownConversationCustomer, ordersForConversationDraftStates } from "./inbox-helpers";
 import { UnknownCustomerBanner } from "./unknown-customer-banner";
+import { isUnknownConversationCustomer, ordersForConversationDraftStates } from "./whatsapp-helpers";
 
 function EmptyState({
   icon: Icon,

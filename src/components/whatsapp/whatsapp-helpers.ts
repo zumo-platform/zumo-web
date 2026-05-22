@@ -30,9 +30,22 @@ export function roleBubbleClass(role: Message["role"]): string {
     case "assistant":
     case "seller":
       return "self-end bg-primary text-primary-foreground";
+    case "system":
+      return "hidden";
     default:
       return "self-center bg-muted/60 text-muted-foreground text-xs italic";
   }
+}
+
+function isInternalMessageContent(content: string | undefined): boolean {
+  const text = content?.trim() ?? "";
+  return text.startsWith("[ORDER_STATE]") || text.startsWith("[PIPELINE_");
+}
+
+export function isRenderableThreadMessage(message: Message): boolean {
+  if (message.role === "system") return false;
+  if (isInternalMessageContent(message.content)) return false;
+  return true;
 }
 
 /** Message bubble footer time — HH:mm */
@@ -112,7 +125,9 @@ export type ThreadItem =
   | { kind: "message"; message: Message };
 
 export function buildMessageThreadItems(messages: readonly Message[]): ThreadItem[] {
-  const sorted = [...messages].sort((a, b) => {
+  const sorted = [...messages]
+    .filter((msg) => isRenderableThreadMessage(msg))
+    .sort((a, b) => {
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return ta - tb;

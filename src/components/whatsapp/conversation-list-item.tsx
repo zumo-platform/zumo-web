@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/lib/dashboard-types";
 import { cn } from "@/lib/utils";
 
-import { conversationListTimeLabel, isUnknownConversationCustomer } from "./inbox-helpers";
+import { conversationListTimeLabel, isUnknownConversationCustomer } from "./whatsapp-helpers";
 
 export function ConversationListItem({
   conversation,

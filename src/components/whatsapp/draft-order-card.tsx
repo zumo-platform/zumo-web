@@ -21,7 +21,7 @@ import {
 } from "@/lib/dashboard-orders";
 import type { Order } from "@/lib/dashboard-types";
 
-import { formatAiConfidencePct } from "./inbox-helpers";
+import { formatAiConfidencePct } from "./whatsapp-helpers";
 
 export type DraftOrderCardVariant = "active" | "blocked";
 

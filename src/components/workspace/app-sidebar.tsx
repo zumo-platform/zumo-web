@@ -60,12 +60,7 @@ type NavItem =
 
 const mainNav: NavItem[] = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
-  {
-    disabled: true,
-    tooltip: "Pronto",
-    icon: MessageSquare,
-    label: "WhatsApp",
-  },
+  { href: "/whatsapp", icon: MessageSquare, label: "WhatsApp" },
   { href: "/orders", icon: ShoppingCart, label: "Pedidos" },
   {
     disabled: true,
@@ -111,7 +106,7 @@ export function AppSidebar({
               "flex min-w-0 items-center gap-1 text-sidebar-foreground",
               "group-data-[collapsible=icon]:justify-center",
             )}
-            href="/inbox"
+            href="/whatsapp"
           >
             <span className="group-data-[collapsible=icon]:hidden">
               <ZumoWordmark className="max-h-7 max-w-[min(100%,6.5rem)] md:max-h-8" />

@@ -101,15 +101,15 @@ export function AddCustomerForm({
   onCancel,
   onSaved,
   initialPrimaryPhoneE164,
-  showInboxCreationHint,
+  showWhatsappCreationHint,
   lockPrimaryPhone = false,
 }: Readonly<{
   onCancel: () => void;
   onSaved: () => void;
-  /** Ej. número en E.164 pre-cargado desde el inbox (`?phone=…`). */
+  /** Ej. número en E.164 pre-cargado desde WhatsApp (`?phone=…`). */
   initialPrimaryPhoneE164?: string;
-  showInboxCreationHint?: boolean;
-  /** Inbox flow: teléfono fijado al número de WhatsApp (no editable). */
+  showWhatsappCreationHint?: boolean;
+  /** WhatsApp flow: teléfono fijado al número del hilo (no editable). */
   lockPrimaryPhone?: boolean;
 }>) {
   const uid = useId();
@@ -277,7 +277,7 @@ export function AddCustomerForm({
     >
       <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-          {showInboxCreationHint ? (
+          {showWhatsappCreationHint ? (
             <Alert variant="default">
               <Info aria-hidden className="text-muted-foreground" />
               <AlertTitle>Cliente desde WhatsApp</AlertTitle>

@@ -27,15 +27,15 @@ export function ClientsExperience({
   initialCustomers,
   variant,
   creationInitialPhone,
-  creationReturnToInbox,
+  creationReturnToWhatsapp,
 }: Readonly<{
   variant: ClientsExperienceVariant;
   /** List variant: supplier portfolio from GET /dashboard/customers (`null` = fetch error). */
   initialCustomers?: DashboardCustomerRow[] | null;
   /** Creation: pre-filled contact phone (E.164 or parseable). */
   creationInitialPhone?: string;
-  /** Creation: after save, return to inbox instead of client list. */
-  creationReturnToInbox?: boolean;
+  /** Creation: after save, return to WhatsApp instead of client list. */
+  creationReturnToWhatsapp?: boolean;
 }>) {
   const router = useRouter();
   const [section, setSection] = useState<ClientsListSection>("general");
@@ -57,14 +57,14 @@ export function ClientsExperience({
   }, [router]);
 
   const afterSave = useCallback(() => {
-    if (creationReturnToInbox) {
-      router.replace("/inbox");
+    if (creationReturnToWhatsapp) {
+      router.replace("/whatsapp");
       router.refresh();
       return;
     }
     router.replace("/clients");
     router.refresh();
-  }, [creationReturnToInbox, router]);
+  }, [creationReturnToWhatsapp, router]);
 
   const listDescription = showEmpty
     ? "Registra y organiza a tus compradores para acelerar pedidos y dar mejor seguimiento."
@@ -111,10 +111,10 @@ export function ClientsExperience({
     main = (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AddCustomerForm
-          key={`${creationInitialPhone ?? ""}:${creationReturnToInbox ? "inbox" : "std"}`}
+          key={`${creationInitialPhone ?? ""}:${creationReturnToWhatsapp ? "whatsapp" : "std"}`}
           initialPrimaryPhoneE164={creationInitialPhone?.trim() || undefined}
-          lockPrimaryPhone={Boolean(creationReturnToInbox && creationInitialPhone?.trim())}
-          showInboxCreationHint={Boolean(creationReturnToInbox)}
+          lockPrimaryPhone={Boolean(creationReturnToWhatsapp && creationInitialPhone?.trim())}
+          showWhatsappCreationHint={Boolean(creationReturnToWhatsapp)}
           onCancel={goClientsIndex}
           onSaved={afterSave}
         />

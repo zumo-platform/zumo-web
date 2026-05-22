@@ -33,7 +33,7 @@ export function ClientsPageHeader({
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="/inbox">Inicio</Link>
+              <Link href="/whatsapp">Inicio</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />

@@ -40,7 +40,7 @@ Backend pieces for signup / invites are **not all exposed on the HTTP API yet**;
 3. Invitee opens **`/accept-invite?token=…`** (planned).
 4. Sets password / completes profile.
 5. Backend creates **Cognito** user + **`sellers`** row (**`supplier_id`** + **`role`** from invite).
-6. User lands on **`/inbox`** (workspace).
+6. User lands on **`/whatsapp`** (workspace).
 
 ## Zustand — good fits for Zumo
 
@@ -62,7 +62,7 @@ zumo-web/
 │   │   ├── (marketing)/[locale]/   # EN/ES marketing, privacy, terms
 │   │   ├── (platform)/
 │   │   │   ├── (auth)/             # /login, /register → signup tab
-│   │   │   └── (workspace)/        # /inbox, /orders, /clients, /profile
+│   │   │   └── (workspace)/        # /inbox, /whatsapp, /orders, /clients, /profile
 │   │   ├── privacy/page.tsx        # → redirect /es/privacy
 │   │   ├── terms/page.tsx          # → redirect /es/terms
 │   │   ├── layout.tsx              # Root layout (fonts, toaster)
@@ -86,8 +86,9 @@ Not all paths exist yet; planned additions:
 | Area | Purpose |
 |------|---------|
 | **`src/app/(platform)/layout.tsx`** | Auth gate + shared shell (sidebar) |
-| **`src/app/(platform)/(workspace)/inbox/page.tsx`** | Three-column inbox (expand beyond placeholder) |
-| **`src/components/inbox/`** | e.g. `conversation-list`, `thread-view`, `draft-order-panel` |
+| **`src/app/(platform)/(workspace)/whatsapp/page.tsx`** | Three-column WhatsApp conversations UI |
+| **`src/app/(platform)/(workspace)/inbox/page.tsx`** | Inbox placeholder (future unified inbox) |
+| **`src/components/whatsapp/`** | e.g. `conversation-list`, `thread-view`, `draft-order-panel` |
 | **`src/lib/auth.ts`** | Auth.js / Cognito configuration |
 | **`src/lib/api.ts`** | Typed **`fetch`** helper for **`NEXT_PUBLIC_API_URL`** |
 
@@ -126,7 +127,7 @@ Run only **one** `next dev` per clone. If you see **Unable to acquire lock** und
 | `/privacy`, `/terms` | Redirect → `/es/privacy`, `/es/terms` |
 | `/login` | Sign in / sign up (`?tab=signup`) |
 | `/register` | Redirect → `/login?tab=signup` |
-| `/inbox`, `/orders`, `/clients`, `/profile` | Workspace (inbox, orders, clients empty state when no customers, profile) |
+| `/inbox`, `/whatsapp`, `/orders`, `/clients`, `/profile` | Workspace (inbox placeholder, WhatsApp, orders, clients, profile) |
 
 ## Build & production
 

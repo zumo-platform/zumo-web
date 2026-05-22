@@ -1,13 +1,15 @@
 import type { Message } from "@/lib/dashboard-types";
 import { cn } from "@/lib/utils";
 
-import { formatMessageTime, roleBubbleClass } from "./inbox-helpers";
+import { formatMessageTime, isRenderableThreadMessage, roleBubbleClass } from "./whatsapp-helpers";
 
 export function MessageBubble({
   message,
 }: Readonly<{
   message: Message;
 }>) {
+  if (!isRenderableThreadMessage(message)) return null;
+
   return (
     <div
       className={cn(

@@ -43,9 +43,9 @@ export function OrdersHeaderActions({
         Exportar
       </Button>
       <Button asChild size="sm" className="gap-2" type="button">
-        <Link href="/inbox">
+        <Link href="/whatsapp">
           <ShoppingCart aria-hidden className="size-4" />
-          Ir al inbox
+          Ir a WhatsApp
         </Link>
       </Button>
     </div>

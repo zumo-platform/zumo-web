@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Conversation } from "@/lib/dashboard-types";
 
 import { ConversationListItem } from "./conversation-list-item";
-import { InboxScrollPane } from "./inbox-scroll-pane";
+import { WhatsappScrollPane } from "./whatsapp-scroll-pane";
 
 function EmptyState({
   icon: Icon,
@@ -38,7 +38,7 @@ export function ConversationList({
 }>) {
   if (loading) {
     return (
-      <InboxScrollPane>
+      <WhatsappScrollPane>
         <div className="space-y-3 p-3">
           {Array.from({ length: 7 }).map((_, i) => (
             <div className="space-y-2 rounded-lg border border-transparent px-2 py-2" key={i}>
@@ -50,13 +50,13 @@ export function ConversationList({
             </div>
           ))}
         </div>
-      </InboxScrollPane>
+      </WhatsappScrollPane>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <InboxScrollPane>
+      <WhatsappScrollPane>
         <div className="p-4">
           <EmptyState
             description="Los mensajes aparecerán acá cuando un cliente te escriba por WhatsApp."
@@ -64,12 +64,12 @@ export function ConversationList({
             title="Aún no hay conversaciones"
           />
         </div>
-      </InboxScrollPane>
+      </WhatsappScrollPane>
     );
   }
 
   return (
-    <InboxScrollPane>
+    <WhatsappScrollPane>
       <ul className="space-y-0.5 p-2">
         {conversations.map((conv) => (
           <ConversationListItem
@@ -80,6 +80,6 @@ export function ConversationList({
           />
         ))}
       </ul>
-    </InboxScrollPane>
+    </WhatsappScrollPane>
   );
 }

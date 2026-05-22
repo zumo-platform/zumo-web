@@ -44,7 +44,7 @@ export default async function OrderEditPlaceholderPage({
               <Link href="/orders">Volver a Pedidos</Link>
             </Button>
             <Button asChild type="button" variant="secondary">
-              <Link href="/inbox">Ir al inbox</Link>
+              <Link href="/whatsapp">Ir a WhatsApp</Link>
             </Button>
           </CardFooter>
         </Card>

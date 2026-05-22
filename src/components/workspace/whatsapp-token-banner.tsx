@@ -8,6 +8,18 @@ import type { WhatsappStatusResult } from "@/lib/dashboard-types";
 
 const META_APP_URL = "https://developers.facebook.com/apps/1449079386459388";
 
+function formatExpiresAt(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString("es-CR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return null;
+  }
+}
+
 function getBannerConfig(status: WhatsappStatusResult | null): {
   color: "red" | "yellow";
   text: string;
@@ -31,9 +43,12 @@ function getBannerConfig(status: WhatsappStatusResult | null): {
   }
 
   if (!status.tokenValid) {
+    const when = formatExpiresAt(status.expiresAt);
     return {
       color: "red",
-      text: "⚠️ Tu token de WhatsApp venció. Los mensajes no se están procesando.",
+      text: when
+        ? `⚠️ Tu token de WhatsApp venció (${when}). Generá un token permanente en Meta y volvé a desplegar.`
+        : "⚠️ Tu token de WhatsApp venció o no es válido. Usá un token permanente (System User), actualizá .env.local y ejecutá deploy.",
     };
   }
 

@@ -7,7 +7,7 @@ export function UnknownCustomerBanner({
 }: Readonly<{
   phone: string;
 }>) {
-  const q = `/clients/creation?phone=${encodeURIComponent(phone)}&from=inbox`;
+  const q = `/clients/creation?phone=${encodeURIComponent(phone)}&from=whatsapp`;
 
   return (
     <div className="rounded-lg border border-amber-500/35 bg-amber-500/5 p-4">

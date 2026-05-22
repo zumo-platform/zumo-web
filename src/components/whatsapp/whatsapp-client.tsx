@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ConversationList } from "@/components/inbox/conversation-list";
-import { backendGet, isUnknownConversationCustomer } from "@/components/inbox/inbox-helpers";
-import { InboxScrollPane } from "@/components/inbox/inbox-scroll-pane";
-import { InformationPanel } from "@/components/inbox/information-panel";
-import { MessageThread } from "@/components/inbox/message-thread";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { ConversationList } from "@/components/whatsapp/conversation-list";
+import { InformationPanel } from "@/components/whatsapp/information-panel";
+import { MessageThread } from "@/components/whatsapp/message-thread";
+import { backendGet, isUnknownConversationCustomer } from "@/components/whatsapp/whatsapp-helpers";
+import { WhatsappScrollPane } from "@/components/whatsapp/whatsapp-scroll-pane";
 import { ErrorAlert } from "@/components/workspace/error-alert";
-import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import type { Conversation, Message, Order } from "@/lib/dashboard-types";
 
 function PanelHeading({ children }: Readonly<{ children: ReactNode }>) {
@@ -21,7 +20,7 @@ function PanelHeading({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-export function InboxClient() {
+export function WhatsappClient() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -141,18 +140,13 @@ export function InboxClient() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <WorkspacePageHeader
-        description="Mensajes de WhatsApp y información del cliente en un solo lugar."
-        title="Inbox"
-      />
-
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,20rem)] divide-x divide-border overflow-hidden sm:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,20rem)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,18rem)_minmax(0,calc((100%-18rem-22rem)*0.9))_minmax(22rem,calc(22rem+(100%-18rem-22rem)*0.1))] divide-x divide-border overflow-hidden">
         <aside className="flex min-h-0 flex-col overflow-hidden">
           <PanelHeading>Conversaciones</PanelHeading>
           {convsFetchError ? (
             <div className="shrink-0 border-b p-3">
               <ErrorAlert
-                code="INB-001"
+                code="WA-001"
                 message={convsFetchError}
                 title="No se pudieron cargar las conversaciones"
                 onRetry={() => void fetchConversations()}
@@ -172,7 +166,7 @@ export function InboxClient() {
           {msgsFetchError && selectedId ? (
             <div className="shrink-0 border-b p-3">
               <ErrorAlert
-                code="INB-002"
+                code="WA-002"
                 message={msgsFetchError}
                 title="No se pudieron cargar los mensajes"
                 onRetry={() => void fetchMessages(selectedId)}
@@ -188,13 +182,13 @@ export function InboxClient() {
 
         <aside className="flex min-h-0 flex-col overflow-hidden">
           <PanelHeading>Información</PanelHeading>
-          <InboxScrollPane>
+          <WhatsappScrollPane>
             <InformationPanel
               conversation={selectedConversation}
               orders={orders}
               onOrdersDirty={() => void refreshOrders()}
             />
-          </InboxScrollPane>
+          </WhatsappScrollPane>
         </aside>
       </div>
     </div>

@@ -161,7 +161,7 @@ export function OrdersExperience({
       ? "Los pedidos se muestran, pero no pudimos cargar los nombres de clientes (se muestra el ID)."
       : hasOrders
         ? `Tenés ${orders.length} ${orders.length === 1 ? "pedido" : "pedidos"}. Seleccioná filas para edición masiva (próximamente).`
-        : "Consultá y gestioná los pedidos confirmados y en curso. Los borradores seguís gestionándolos desde el inbox.";
+        : "Consultá y gestioná los pedidos confirmados y en curso. Los borradores seguís gestionándolos desde WhatsApp.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">

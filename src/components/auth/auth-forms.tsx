@@ -156,7 +156,7 @@ export function AuthForms({
       if (!verify.ok) {
         toast.error("Sesión iniciada pero no se pudo verificar tu perfil.");
       }
-      router.push("/inbox");
+      router.push("/whatsapp");
     } else if (status === 403 && data.error === "UserNotConfirmedException") {
       setSavedEmail(email.trim().toLowerCase());
       setSavedPassword(password);
@@ -259,7 +259,7 @@ export function AuthForms({
         locale,
       );
       if (loginOk) {
-        router.push("/inbox");
+        router.push("/whatsapp");
       } else {
         toast.success("¡Cuenta confirmada! Inicia sesión.");
         toast.error(loginData?.message ?? messages.authNetworkError);

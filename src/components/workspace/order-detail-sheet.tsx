@@ -593,7 +593,7 @@ export function OrderDetailSheet({
               </Button>
               {order?.conversationId ? (
                 <Button asChild className="gap-1.5" size="sm" type="button" variant="secondary">
-                  <Link href="/inbox">
+                  <Link href="/whatsapp">
                     <MessageCircle aria-hidden className="size-4" />
                     Ir al chat
                   </Link>

@@ -303,10 +303,10 @@ export function OrdersCatalogTable({
                 </DropdownMenuItem>
                 {o.conversationId ? (
                   <DropdownMenuItem asChild>
-                    <Link href="/inbox">Abrir en inbox</Link>
+                    <Link href="/whatsapp">Abrir en WhatsApp</Link>
                   </DropdownMenuItem>
                 ) : (
-                  <DropdownMenuItem disabled>Abrir en inbox</DropdownMenuItem>
+                  <DropdownMenuItem disabled>Abrir en WhatsApp</DropdownMenuItem>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

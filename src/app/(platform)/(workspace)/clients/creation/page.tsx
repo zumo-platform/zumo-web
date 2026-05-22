@@ -25,7 +25,7 @@ export default async function ClientCreationPage({
     <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
       <ClientsExperience
         creationInitialPhone={params.phone ?? ""}
-        creationReturnToInbox={params.from === "inbox"}
+        creationReturnToWhatsapp={params.from === "whatsapp" || params.from === "inbox"}
         variant="creation"
       />
     </div>

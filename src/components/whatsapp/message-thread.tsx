@@ -5,9 +5,9 @@ import { Loader2, MessageSquare } from "lucide-react";
 
 import type { Message } from "@/lib/dashboard-types";
 
-import { buildMessageThreadItems } from "./inbox-helpers";
-import { InboxScrollPane } from "./inbox-scroll-pane";
 import { MessageBubble } from "./message-bubble";
+import { buildMessageThreadItems } from "./whatsapp-helpers";
+import { WhatsappScrollPane } from "./whatsapp-scroll-pane";
 
 function EmptyState({
   icon: Icon,
@@ -112,7 +112,7 @@ export function MessageThread({
           Actualizando…
         </div>
       ) : null}
-      <InboxScrollPane ref={scrollPaneRef}>
+      <WhatsappScrollPane ref={scrollPaneRef}>
         <div className="flex flex-col gap-2 px-4 py-4">
           {items.map((item) =>
             item.kind === "divider" ? (
@@ -127,7 +127,7 @@ export function MessageThread({
           )}
           <div ref={bottomRef} />
         </div>
-      </InboxScrollPane>
+      </WhatsappScrollPane>
     </div>
   );
 }
