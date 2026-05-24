@@ -25,6 +25,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import {
@@ -232,7 +238,17 @@ export function OrdersCatalogTable({
                 {code}
               </span>
               {o.status === "draft" && o.seenAt ? (
-                <Eye aria-label="Borrador visto" className="size-4 shrink-0 text-muted-foreground" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex shrink-0">
+                      <Eye aria-hidden className="size-4 text-muted-foreground" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    Borrador abierto por un vendedor. Ya no aparece en negrita como pendiente de
+                    revisión.
+                  </TooltipContent>
+                </Tooltip>
               ) : null}
             </div>
           );
@@ -421,7 +437,8 @@ export function OrdersCatalogTable({
   const selectedCount = table.getFilteredSelectedRowModel().rows.length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <TooltipProvider delayDuration={200}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
       {selectedCount > 0 ? (
         <div
           className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm"
@@ -499,6 +516,7 @@ export function OrdersCatalogTable({
           detailOrderId ? (data.find((o) => o.orderId === detailOrderId)?.status ?? null) : null
         }
       />
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

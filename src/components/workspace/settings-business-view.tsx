@@ -1,16 +1,37 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { useState } from "react";
+
+import { Loader2, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { patchDashboardSettingsViaProxy } from "@/lib/dashboard-settings";
 import type { SupplierSettings } from "@/lib/dashboard-types";
+import type { MarketingLocale } from "@/lib/marketing-locale";
+import {
+  WORKSPACE_LOCALE_OPTIONS,
+  parseWorkspaceLocale,
+  setWorkspaceLocaleCookie,
+} from "@/lib/workspace-locale";
+
+const READONLY_TOOLTIP = "Solo administradores pueden cambiar esta configuración";
 
 function formatConnectedAt(iso: string | null): string {
   if (!iso) return "";
@@ -28,7 +49,32 @@ export function SettingsBusinessView({
   business: SupplierSettings["business"];
   canEdit: boolean;
 }>) {
+  const router = useRouter();
   const connected = Boolean(business.whatsappConnectedAt || business.whatsappPhoneE164);
+  const [defaultLocale, setDefaultLocale] = useState<MarketingLocale>(
+    parseWorkspaceLocale(business.defaultLocale),
+  );
+  const [savingLocale, setSavingLocale] = useState(false);
+
+  async function saveLocale(next: MarketingLocale) {
+    if (!canEdit || savingLocale || next === defaultLocale) return;
+    const prev = defaultLocale;
+    setDefaultLocale(next);
+    setSavingLocale(true);
+    try {
+      const result = await patchDashboardSettingsViaProxy({ defaultLocale: next });
+      const saved = result.business?.defaultLocale ?? next;
+      setDefaultLocale(saved);
+      setWorkspaceLocaleCookie(saved);
+      toast.success(saved === "en" ? "Default language updated" : "Idioma predeterminado actualizado");
+      router.refresh();
+    } catch (err) {
+      setDefaultLocale(prev);
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
+    } finally {
+      setSavingLocale(false);
+    }
+  }
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -52,6 +98,45 @@ export function SettingsBusinessView({
             </Tooltip>
           ) : null}
         </div>
+
+        <section className="rounded-lg border bg-card p-5 shadow-sm">
+          <h3 className="mb-4 font-medium text-sm">Idioma</h3>
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Idioma predeterminado del panel para tu equipo. Las traducciones completas del
+              panel se irán aplicando progresivamente.
+            </p>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex max-w-xs items-center gap-2">
+                  {savingLocale ? (
+                    <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-muted-foreground" />
+                  ) : null}
+                  <Select
+                    disabled={!canEdit || savingLocale}
+                    value={defaultLocale}
+                    onValueChange={(value) => void saveLocale(parseWorkspaceLocale(value))}
+                  >
+                    <SelectTrigger id="default-locale">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WORKSPACE_LOCALE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Label className="sr-only" htmlFor="default-locale">
+                    Idioma predeterminado
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              {!canEdit ? <TooltipContent side="bottom">{READONLY_TOOLTIP}</TooltipContent> : null}
+            </Tooltip>
+          </div>
+        </section>
 
         <section className="rounded-lg border bg-card p-5 shadow-sm">
           <h3 className="mb-4 font-medium text-sm">WhatsApp</h3>

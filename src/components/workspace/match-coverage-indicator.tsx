@@ -11,6 +11,7 @@ import {
 import {
   matchCoveragePercent,
   matchCoverageRingTone,
+  matchCoverageTooltip,
   type MatchCoverageRingTone,
 } from "@/lib/match-coverage";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ export function MatchCoverageIndicator({
 }>) {
   const pct = matchCoveragePercent(matchCoverage);
   const ringSize = size === "md" ? 32 : 28;
+  const tooltip = matchCoverageTooltip(matchCoverage, isTouchless);
 
   if (matchCoverage === null) {
     return (
@@ -101,32 +103,32 @@ export function MatchCoverageIndicator({
   }
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 tabular-nums",
-        size === "md" ? "text-sm" : "text-xs",
-        className,
-      )}
-    >
-      <CoverageRing coverage={matchCoverage} size={ringSize} />
-      <span className="font-medium text-foreground">{lineCount}</span>
-      <span className="text-muted-foreground">✓</span>
-      <span className="font-medium">{pct}%</span>
-      {isTouchless ? (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex text-amber-500" tabIndex={0}>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={cn(
+              "inline-flex cursor-help items-center gap-1.5 tabular-nums",
+              size === "md" ? "text-sm" : "text-xs",
+              className,
+            )}
+          >
+            <CoverageRing coverage={matchCoverage} size={ringSize} />
+            <span className="font-medium text-foreground">{lineCount}</span>
+            <span className="text-muted-foreground">✓</span>
+            <span className="font-medium">{pct}%</span>
+            {isTouchless ? (
+              <span className="inline-flex text-amber-500">
                 <Zap aria-hidden className="size-3.5 fill-current" />
                 <span className="sr-only">Touchless</span>
               </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              Procesado automáticamente sin intervención
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : null}
-    </span>
+            ) : null}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-left" side="top">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

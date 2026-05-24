@@ -32,7 +32,7 @@ export function ProductsPageHeader({
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage>Productos</BreadcrumbPage>
+            <BreadcrumbPage>Inventario</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -40,7 +40,7 @@ export function ProductsPageHeader({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="text-balance font-semibold text-2xl tracking-tight text-foreground md:text-3xl">
-            Productos
+            Inventario
           </h1>
           <p className="max-w-2xl text-muted-foreground text-sm leading-relaxed md:text-[15px]">
             {description}

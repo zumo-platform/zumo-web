@@ -51,7 +51,9 @@ export function SettingsAiForm({
     setAutoCommitEnabled(next);
     setSavingAutoCommit(true);
     try {
-      const ai = await patchDashboardSettingsViaProxy({ aiAutoCommitEnabled: next });
+      const result = await patchDashboardSettingsViaProxy({ aiAutoCommitEnabled: next });
+      const ai = result.ai;
+      if (!ai) throw new Error("Respuesta de configuración inválida.");
       setAutoCommitEnabled(ai.autoCommitEnabled);
       toast.success(
         ai.autoCommitEnabled
@@ -73,7 +75,9 @@ export function SettingsAiForm({
     setDraftExpirationHours(next);
     setSavingExpiration(true);
     try {
-      const ai = await patchDashboardSettingsViaProxy({ draftExpirationHours: next });
+      const result = await patchDashboardSettingsViaProxy({ draftExpirationHours: next });
+      const ai = result.ai;
+      if (!ai) throw new Error("Respuesta de configuración inválida.");
       setDraftExpirationHours(ai.draftExpirationHours);
       toast.success("Caducidad de borradores actualizada");
       router.refresh();

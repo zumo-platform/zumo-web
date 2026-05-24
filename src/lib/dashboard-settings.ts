@@ -1,5 +1,6 @@
 import { joinApiGatewayPath } from "@/lib/api";
 import type { SupplierSettings } from "@/lib/dashboard-types";
+import { parseWorkspaceLocale, setWorkspaceLocaleCookie } from "@/lib/workspace-locale";
 
 function uniqBearerCandidates(idToken?: string | null, accessToken?: string | null): string[] {
   return [
@@ -68,12 +69,15 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
         ? businessRaw.whatsappConnectedAt.trim()
         : null;
 
+  const defaultLocale = parseWorkspaceLocale(businessRaw.defaultLocale);
+
   return {
     business: {
       businessName: businessName || "—",
       businessEmail: businessEmail || "—",
       whatsappPhoneE164,
       whatsappConnectedAt,
+      defaultLocale,
     },
     ai: {
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,
@@ -184,12 +188,18 @@ export async function fetchSellersDashboard(
 export type PatchSupplierSettingsInput = Readonly<{
   aiAutoCommitEnabled?: boolean;
   draftExpirationHours?: DraftExpirationHours;
+  defaultLocale?: "es" | "en";
+}>;
+
+export type PatchSupplierSettingsResult = Readonly<{
+  ai?: SupplierSettings["ai"];
+  business?: Pick<SupplierSettings["business"], "defaultLocale">;
 }>;
 
 /** Browser / Route Handler: PATCH `/api/backend/dashboard/settings`. */
 export async function patchDashboardSettingsViaProxy(
   input: PatchSupplierSettingsInput,
-): Promise<SupplierSettings["ai"]> {
+): Promise<PatchSupplierSettingsResult> {
   const res = await fetch("/api/backend/dashboard/settings", {
     method: "PATCH",
     credentials: "same-origin",
@@ -213,14 +223,34 @@ export async function patchDashboardSettingsViaProxy(
       ? (body.ai as Record<string, unknown>)
       : null;
 
-  if (!aiRaw) {
+  const businessRaw =
+    body.business && typeof body.business === "object" && !Array.isArray(body.business)
+      ? (body.business as Record<string, unknown>)
+      : null;
+
+  const result: {
+    ai?: SupplierSettings["ai"];
+    business?: Pick<SupplierSettings["business"], "defaultLocale">;
+  } = {};
+
+  if (aiRaw) {
+    result.ai = {
+      autoCommitEnabled: aiRaw.autoCommitEnabled === true,
+      draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
+    };
+  }
+
+  if (businessRaw && businessRaw.defaultLocale !== undefined) {
+    const defaultLocale = parseWorkspaceLocale(businessRaw.defaultLocale);
+    result.business = { defaultLocale };
+    setWorkspaceLocaleCookie(defaultLocale);
+  }
+
+  if (!result.ai && !result.business) {
     throw new Error("Respuesta de configuración inválida.");
   }
 
-  return {
-    autoCommitEnabled: aiRaw.autoCommitEnabled === true,
-    draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
-  };
+  return result;
 }
 
 export function sellerCanEditSettings(role: string): boolean {

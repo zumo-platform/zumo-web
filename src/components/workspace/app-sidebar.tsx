@@ -4,12 +4,12 @@ import { useState } from "react";
 
 import {
   Calendar,
-  FileText,
   HelpCircle,
   Inbox,
   Loader2,
   LogOut,
   MessageSquare,
+  Package,
   Settings,
   ShoppingCart,
   Store,
@@ -69,7 +69,7 @@ const mainNav: NavItem[] = [
     label: "Calendario",
   },
   { href: "/clients", icon: Store, label: "Clientes" },
-  { href: "/products", icon: FileText, label: "Productos" },
+  { href: "/products", icon: Package, label: "Inventario" },
   {
     disabled: true,
     tooltip: "Pronto",

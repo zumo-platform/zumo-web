@@ -5,6 +5,20 @@ import { joinApiGatewayPath } from "@/lib/api";
 /** Matches backend `MAX_UNLIMITED_STOCK_SENTINEL` (bulk “unlimited” stock UX). */
 export const DASHBOARD_PRODUCT_UNLIMITED_STOCK = "999999999999999";
 
+/** Human-readable on-hand quantity for catalog tables. */
+export function formatProductStockLabel(stockQuantity: string): string {
+  if (stockQuantity === DASHBOARD_PRODUCT_UNLIMITED_STOCK) {
+    return "Ilimitado";
+  }
+  try {
+    return BigInt(stockQuantity).toLocaleString("es");
+  } catch {
+    const n = Number(stockQuantity);
+    if (!Number.isFinite(n)) return stockQuantity;
+    return Math.trunc(n).toLocaleString("es");
+  }
+}
+
 export type DashboardProductRow = Readonly<{
   productId: number;
   name: string;
@@ -93,6 +107,22 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
 /** Active catalog rows (omit soft-deleted). */
 export function activeProducts(rows: readonly DashboardProductRow[]): DashboardProductRow[] {
   return rows.filter((p) => p.deletedAt == null || p.deletedAt === "");
+}
+
+/** Active + selectable in order editor (status active). */
+export function selectableProducts(rows: readonly DashboardProductRow[]): DashboardProductRow[] {
+  return activeProducts(rows).filter((p) => p.status === "active");
+}
+
+/** Client-side catalog load via Route Handler. */
+export async function fetchProductsViaProxy(): Promise<DashboardProductRow[]> {
+  const res = await fetch("/api/backend/dashboard/products", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as unknown;
+  if (!res.ok) return [];
+  return parseDashboardProductsEnvelope(data);
 }
 
 /** Prefer id_token (custom tenant claims); fall back to access_token for gateways that reject IDs. */

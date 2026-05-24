@@ -467,6 +467,162 @@ export async function deleteDashboardDraftViaProxy(orderId: string): Promise<voi
   }
 }
 
+export type PatchOrderLineInput = Readonly<{
+  productId: number;
+  quantity: number;
+}>;
+
+export type PatchOrderInput = Readonly<{
+  deliveryDate: string | null;
+  lines: PatchOrderLineInput[];
+}>;
+
+export type DashboardOrderDetailLine = Readonly<{
+  productId: number | null;
+  productName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number | null;
+  lineSubtotal: number | null;
+}>;
+
+export type DashboardOrderDetail = Readonly<{
+  orderId: string;
+  displayCode: string | null;
+  customerId: number;
+  status: string;
+  createdAt: string | null;
+  deliveryDate: string | null;
+  subtotal: number | null;
+  total: number | null;
+  lines: DashboardOrderDetailLine[];
+  matchCoverage: number | null;
+  isTouchless: boolean;
+}>;
+
+function asNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function parsePositiveInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value.trim());
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function readStringFieldOrNull(o: Record<string, unknown>, key: string): string | null {
+  const value = o[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Parse full order detail from GET /dashboard/orders/{orderId}. */
+export function parseDashboardOrderDetail(
+  raw: unknown,
+  fallbackOrderId: string,
+): DashboardOrderDetail | null {
+  const root = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  if (!root) return null;
+
+  const o =
+    root.order && typeof root.order === "object" && !Array.isArray(root.order)
+      ? (root.order as Record<string, unknown>)
+      : root;
+
+  const orderId = readStringFieldOrNull(o, "orderId") ?? fallbackOrderId;
+  const customerId = parsePositiveInt(o.customerId);
+  if (!customerId) return null;
+
+  const linesRaw = Array.isArray(o.lines) ? o.lines : [];
+  const lines: DashboardOrderDetailLine[] = [];
+  for (const item of linesRaw) {
+    if (!item || typeof item !== "object") continue;
+    const line = item as Record<string, unknown>;
+    const quantity = asNumberOrNull(line.quantity);
+    if (quantity === null || quantity <= 0) continue;
+    lines.push({
+      productId: parsePositiveInt(line.productId),
+      productName:
+        readStringFieldOrNull(line, "productName") ??
+        readStringFieldOrNull(line, "productNameRaw") ??
+        "—",
+      quantity,
+      unit: readStringFieldOrNull(line, "unit") ?? "—",
+      unitPrice: asNumberOrNull(line.unitPrice),
+      lineSubtotal: asNumberOrNull(line.lineSubtotal),
+    });
+  }
+
+  return {
+    orderId,
+    displayCode:
+      readStringFieldOrNull(o, "displayCode") ?? readStringFieldOrNull(o, "display_code"),
+    customerId,
+    status: readStringFieldOrNull(o, "status") ?? "draft",
+    createdAt: readStringFieldOrNull(o, "createdAt"),
+    deliveryDate: readStringFieldOrNull(o, "deliveryDate"),
+    subtotal: asNumberOrNull(o.subtotal),
+    total: asNumberOrNull(o.total),
+    lines,
+    matchCoverage: parseMatchCoverage(o.matchCoverage),
+    isTouchless: o.isTouchless === true,
+  };
+}
+
+/** Browser / Route Handler: GET `/api/backend/dashboard/orders/{orderId}`. */
+export async function fetchDashboardOrderDetailViaProxy(
+  orderId: string,
+): Promise<DashboardOrderDetail | null> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = (await res.json().catch(() => ({}))) as unknown;
+  if (!res.ok) return null;
+  return parseDashboardOrderDetail(body, orderId);
+}
+
+/** Browser / Route Handler: PATCH `/api/backend/dashboard/orders/{orderId}`. */
+export async function patchDashboardOrderViaProxy(
+  orderId: string,
+  input: PatchOrderInput,
+): Promise<DashboardOrderDetail> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const msg =
+      typeof body.error === "string" && body.error.trim().length > 0
+        ? body.error.trim()
+        : "No se pudo guardar el pedido.";
+    throw new DashboardOrderActionError(msg, res.status);
+  }
+
+  const detail = parseDashboardOrderDetail(body, orderId);
+  if (!detail) {
+    throw new DashboardOrderActionError("Respuesta inválida del servidor.", 502);
+  }
+  return detail;
+}
+
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/reject`. */
 export async function rejectDashboardOrderViaProxy(
   orderId: string,

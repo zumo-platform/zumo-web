@@ -68,6 +68,7 @@ export type SupplierSettings = {
     businessEmail: string;
     whatsappPhoneE164?: string | null;
     whatsappConnectedAt?: string | null;
+    defaultLocale: "es" | "en";
   };
   ai: {
     autoCommitEnabled: boolean;

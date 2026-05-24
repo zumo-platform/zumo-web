@@ -79,7 +79,7 @@ export function ProductsExperience({
       <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
         <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground text-sm">
           <Loader2 aria-hidden className="size-5 animate-spin" />
-          Cargando productos…
+          Cargando inventario…
         </div>
       </div>
     );
@@ -123,7 +123,7 @@ export function ProductsExperience({
   const catalogBody = (
     <div className="mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col">
       <header className="shrink-0 pb-4">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">Catálogo</h2>
+        <h2 className="text-base font-semibold tracking-tight text-foreground">Inventario</h2>
         <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
           Listado sincronizado con el servidor: foto, inventario, precio y categorías según tus datos.
         </p>
@@ -136,8 +136,8 @@ export function ProductsExperience({
 
   const listDescription =
     visible.length > 1
-      ? `Tienes ${visible.length} productos. Listado sincronizado con el servidor; la edición de filas desde el panel llegará próximamente.`
-      : "Tu catálogo tiene 1 producto. Listado sincronizado con el servidor; la edición desde el panel llegará próximamente.";
+      ? `Tenés ${visible.length} ítems en inventario. Listado sincronizado con el servidor; la edición de filas desde el panel llegará próximamente.`
+      : "Tu inventario tiene 1 ítem. Listado sincronizado con el servidor; la edición desde el panel llegará próximamente.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">

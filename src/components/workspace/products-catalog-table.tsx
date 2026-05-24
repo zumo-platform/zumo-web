@@ -32,21 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DASHBOARD_PRODUCT_UNLIMITED_STOCK, type DashboardProductRow } from "@/lib/dashboard-products";
+import { formatProductStockLabel, type DashboardProductRow } from "@/lib/dashboard-products";
 import { cn } from "@/lib/utils";
-
-function formatInventoryLabel(stockQuantity: string): string {
-  if (stockQuantity === DASHBOARD_PRODUCT_UNLIMITED_STOCK) {
-    return "Ilimitado";
-  }
-  try {
-    return BigInt(stockQuantity).toLocaleString("es");
-  } catch {
-    const n = Number(stockQuantity);
-    if (!Number.isFinite(n)) return stockQuantity;
-    return Math.trunc(n).toLocaleString("es");
-  }
-}
 
 function formatPriceLabel(price: string | null): string {
   if (price === null || price === "") return "—";
@@ -250,7 +237,7 @@ export function ProductsCatalogTable({
         id: "inventory",
         header: "Inventario",
         cell: ({ row }) => (
-          <span className="tabular-nums text-sm">{formatInventoryLabel(row.original.stockQuantity)}</span>
+          <span className="tabular-nums text-sm">{formatProductStockLabel(row.original.stockQuantity)}</span>
         ),
       },
       {

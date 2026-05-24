@@ -11,7 +11,7 @@ import {
 import { getAuthSession } from "@/lib/session";
 
 export const metadata: Metadata = {
-  title: "Productos",
+  title: "Inventario",
 };
 
 export default async function ProductsPage() {
