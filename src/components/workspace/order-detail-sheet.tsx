@@ -4,14 +4,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import {
   AlertCircle,
-  CheckCircle2,
   Download,
   Loader2,
   MessageCircle,
-  XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,10 +28,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  confirmDashboardOrderViaProxy,
-  rejectDashboardOrderViaProxy,
-} from "@/lib/dashboard-orders";
+import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
+import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
+import { markDashboardOrderSeenViaProxy, type DashboardOrderPatch } from "@/lib/dashboard-orders";
+import { parseMatchCoverage } from "@/lib/match-coverage";
+import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import { cn } from "@/lib/utils";
 
 export type OrderDetailSheetProps = Readonly<{
@@ -43,7 +41,9 @@ export type OrderDetailSheetProps = Readonly<{
   onOpenChange: (open: boolean) => void;
   customerNameFallback?: string;
   onConfirmed?: (orderId: string) => void;
-  onOrderStatusChange?: (orderId: string, status: string) => void;
+  onOrderStatusChange?: (orderId: string, status: string, patch?: DashboardOrderPatch) => void;
+  onOrderSeen?: (orderId: string) => void;
+  onOrderRemoved?: (orderId: string) => void;
   /** Keeps sheet status in sync when the list row updates (e.g. confirm from table). */
   syncedStatus?: string | null;
 }>;
@@ -59,6 +59,7 @@ type OrderDetailLine = Readonly<{
 
 type OrderDetail = Readonly<{
   orderId: string;
+  displayCode: string | null;
   customerId: number;
   status: string;
   createdAt: string | null;
@@ -69,6 +70,8 @@ type OrderDetail = Readonly<{
   subtotal: number | null;
   total: number | null;
   lines: OrderDetailLine[];
+  matchCoverage: number | null;
+  isTouchless: boolean;
 }>;
 
 type CustomerDetail = Readonly<{
@@ -113,10 +116,6 @@ function parsePositiveCustomerId(value: unknown): number | null {
   return null;
 }
 
-function shortenOrderId(orderId: string): string {
-  if (orderId.length <= 14) return orderId;
-  return `${orderId.slice(0, 10)}…${orderId.slice(-4)}`;
-}
 
 function statusLabel(status: string): string {
   switch (status) {
@@ -124,6 +123,8 @@ function statusLabel(status: string): string {
       return "Borrador";
     case "pending":
       return "Pendiente";
+    case "confirmed":
+      return "Confirmado";
     case "in_progress":
       return "En preparación";
     case "in_route":
@@ -261,6 +262,7 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
 
   return {
     orderId,
+    displayCode: asStringOrNull(o.displayCode) ?? asStringOrNull(o.display_code),
     customerId,
     status,
     createdAt: asStringOrNull(o.createdAt),
@@ -271,6 +273,8 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
     subtotal: asNumberOrNull(o.subtotal),
     total: asNumberOrNull(o.total),
     lines,
+    matchCoverage: parseMatchCoverage(o.matchCoverage),
+    isTouchless: o.isTouchless === true,
   };
 }
 
@@ -332,6 +336,8 @@ export function OrderDetailSheet({
   customerNameFallback,
   onConfirmed,
   onOrderStatusChange,
+  onOrderSeen,
+  onOrderRemoved,
   syncedStatus,
 }: OrderDetailSheetProps) {
   const productsCatalogRef = useRef<Map<number, ProductLookup> | null>(null);
@@ -341,8 +347,6 @@ export function OrderDetailSheet({
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [productsByPid, setProductsByPid] = useState<Map<number, ProductLookup>>(new Map());
-  const [confirming, setConfirming] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
   const loadOrder = useCallback(async (id: string, signal: AbortSignal) => {
@@ -374,6 +378,13 @@ export function OrderDetailSheet({
 
       if (signal.aborted) return;
       setOrder(parsedOrder);
+
+      if (parsedOrder.status === "draft") {
+        onOrderSeen?.(parsedOrder.orderId);
+        void markDashboardOrderSeenViaProxy(parsedOrder.orderId).catch(() => {
+          /* best-effort */
+        });
+      }
 
       let catalog = productsCatalogRef.current;
       if (!catalog) {
@@ -417,7 +428,7 @@ export function OrderDetailSheet({
         setLoading(false);
       }
     }
-  }, []);
+  }, [onOrderSeen]);
 
   useEffect(() => {
     if (!open || !orderId) return undefined;
@@ -442,8 +453,6 @@ export function OrderDetailSheet({
     setOrder(null);
     setCustomer(null);
     setProductsByPid(new Map());
-    setConfirming(false);
-    setRejecting(false);
   }, [open]);
 
   const displayStatus = order?.status ?? "draft";
@@ -527,39 +536,6 @@ export function OrderDetailSheet({
     URL.revokeObjectURL(url);
   }, [order, productsByPid]);
 
-  const handleConfirm = useCallback(async () => {
-    if (!order || order.status !== "pending" || confirming || rejecting) return;
-
-    setConfirming(true);
-    try {
-      await confirmDashboardOrderViaProxy(order.orderId);
-      toast.success("Pedido confirmado");
-      setOrder((prev) => (prev ? { ...prev, status: "in_progress" } : prev));
-      onConfirmed?.(order.orderId);
-      onOrderStatusChange?.(order.orderId, "in_progress");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo confirmar el pedido.");
-    } finally {
-      setConfirming(false);
-    }
-  }, [order, confirming, rejecting, onConfirmed, onOrderStatusChange]);
-
-  const handleReject = useCallback(async () => {
-    if (!order || order.status !== "pending" || confirming || rejecting) return;
-
-    setRejecting(true);
-    try {
-      await rejectDashboardOrderViaProxy(order.orderId);
-      toast.success("Pedido rechazado");
-      setOrder((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
-      onOrderStatusChange?.(order.orderId, "cancelled");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo rechazar el pedido.");
-    } finally {
-      setRejecting(false);
-    }
-  }, [order, confirming, rejecting, onOrderStatusChange]);
-
   const exportDisabled = loading || !order || order.lines.length === 0;
   const chatDisabled = loading || !order?.conversationId;
 
@@ -570,13 +546,24 @@ export function OrderDetailSheet({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-2">
               <SheetTitle className="text-left text-lg">
-                Pedido {orderId ? shortenOrderId(orderId) : "—"}
+                Pedido{" "}
+                {orderId
+                  ? formatOrderDisplayCode(orderId, order?.displayCode)
+                  : "—"}
               </SheetTitle>
               <SheetDescription className="text-left">{customerDisplayName}</SheetDescription>
               {order ? (
-                <Badge className="w-fit" variant={statusBadgeVariant(displayStatus)}>
-                  {statusText}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="w-fit" variant={statusBadgeVariant(displayStatus)}>
+                    {statusText}
+                  </Badge>
+                  <MatchCoverageIndicator
+                    isTouchless={order.isTouchless}
+                    lineCount={order.lines.length}
+                    matchCoverage={order.matchCoverage}
+                    size="md"
+                  />
+                </div>
               ) : null}
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -636,7 +623,9 @@ export function OrderDetailSheet({
             <div className="space-y-6">
               <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                 <DetailRow label="Código del pedido">
-                  <span className="font-mono">{order.orderId}</span>
+                  <span className="font-mono">
+                    {formatOrderDisplayCode(order.orderId, order.displayCode)}
+                  </span>
                 </DetailRow>
                 <DetailRow label="Fecha de creación (hora)">
                   {formatCreatedDateTime(order.createdAt)}
@@ -732,38 +721,33 @@ export function OrderDetailSheet({
               ? `Confirmado el ${formatConfirmedAt(order.confirmedAt)}`
               : displayStatus === "pending"
                 ? "Pendiente de confirmación."
-                : `Estado actual: ${statusText}.`}
+                : displayStatus === "draft"
+                  ? "Borrador extraído por el AI."
+                  : `Estado actual: ${statusText}.`}
           </p>
-          {order?.status === "pending" ? (
-            <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
-              <Button
-                className="gap-1.5"
-                disabled={confirming || rejecting || loading}
-                type="button"
-                variant="destructive"
-                onClick={() => void handleReject()}
-              >
-                {rejecting ? (
-                  <Loader2 aria-hidden className="size-4 animate-spin" />
-                ) : (
-                  <XCircle aria-hidden className="size-4" />
-                )}
-                Rechazar pedido
-              </Button>
-              <Button
-                className="gap-1.5"
-                disabled={confirming || rejecting || loading}
-                type="button"
-                onClick={() => void handleConfirm()}
-              >
-                {confirming ? (
-                  <Loader2 aria-hidden className="size-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 aria-hidden className="size-4" />
-                )}
-                Confirmar pedido
-              </Button>
-            </div>
+          {order && (order.status === "draft" || order.status === "pending") ? (
+            <OrderLifecycleActions
+              layout="inline"
+              orderId={order.orderId}
+              status={order.status}
+              onRemoved={(id) => {
+                onOrderRemoved?.(id);
+                onOpenChange(false);
+              }}
+              onStatusChange={(id, status, patch) => {
+                setOrder((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        status,
+                        displayCode: patch?.displayCode ?? prev.displayCode,
+                      }
+                    : prev,
+                );
+                onOrderStatusChange?.(id, status, patch);
+                if (status === "confirmed") onConfirmed?.(id);
+              }}
+            />
           ) : null}
         </footer>
       </SheetContent>

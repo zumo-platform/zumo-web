@@ -1,10 +1,12 @@
 /** Types + server fetch for GET /dashboard/orders (per status; merged for list views). */
 
 import { joinApiGatewayPath } from "@/lib/api";
+import { parseMatchCoverage } from "@/lib/match-coverage";
 
 export const DASHBOARD_ORDER_STATUSES = [
   "draft",
   "pending",
+  "confirmed",
   "in_progress",
   "in_route",
   "delivered",
@@ -13,16 +15,72 @@ export const DASHBOARD_ORDER_STATUSES = [
 
 export type DashboardOrderStatus = (typeof DASHBOARD_ORDER_STATUSES)[number];
 
+export const DEFAULT_ORDER_STATUS_FILTER: DashboardOrderStatus[] = [
+  "draft",
+  "pending",
+  "confirmed",
+];
+
+export const ORDER_STATUS_FILTER_OPTIONS: ReadonlyArray<{
+  value: DashboardOrderStatus;
+  label: string;
+}> = [
+  { value: "draft", label: "Borradores" },
+  { value: "pending", label: "Pendientes" },
+  { value: "confirmed", label: "Confirmados" },
+  { value: "in_progress", label: "En preparación" },
+  { value: "in_route", label: "En ruta" },
+  { value: "delivered", label: "Entregados" },
+  { value: "cancelled", label: "Cancelados" },
+];
+
+/** Parse `?status=draft,pending` from URL; defaults to active-work statuses. */
+export function parseOrderStatusFilter(raw: string | undefined): DashboardOrderStatus[] {
+  if (!raw?.trim()) return [...DEFAULT_ORDER_STATUS_FILTER];
+  const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const allowed = new Set<string>(DASHBOARD_ORDER_STATUSES);
+  const valid = parts.filter((p): p is DashboardOrderStatus => allowed.has(p));
+  return valid.length > 0 ? valid : [...DEFAULT_ORDER_STATUS_FILTER];
+}
+
+export function orderStatusFilterToParam(statuses: readonly DashboardOrderStatus[]): string {
+  return statuses.join(",");
+}
+
 export type DashboardOrderListRow = Readonly<{
   orderId: string;
+  displayCode: string | null;
   customerId: number;
   status: string;
   createdAt: string | null;
   deliveryDate: string | null;
   confirmedAt: string | null;
+  seenAt: string | null;
+  expiresAt: string | null;
+  isExpired: boolean;
   lineCount: number;
   conversationId: string | null;
+  matchCoverage: number | null;
+  isTouchless: boolean;
 }>;
+
+export type DashboardOrderPatch = Partial<
+  Pick<DashboardOrderListRow, "displayCode" | "seenAt" | "expiresAt" | "isExpired">
+>;
+
+export type DashboardOrderStatusChangeHandler = (
+  orderId: string,
+  status: string,
+  patch?: DashboardOrderPatch,
+) => void;
+
+function readStringField(o: Record<string, unknown>, key: string): string | null {
+  const value = o[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
   if (!raw || typeof raw !== "object") return null;
@@ -65,15 +123,48 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
         ? o.conversationId.trim()
         : null;
 
+  const matchCoverage = parseMatchCoverage(o.matchCoverage);
+  const isTouchless = o.isTouchless === true;
+
+  const displayCode =
+    readStringField(o, "displayCode") ?? readStringField(o, "display_code");
+
+  const seenAt =
+    o.seenAt === null || o.seenAt === undefined
+      ? null
+      : typeof o.seenAt === "string" && o.seenAt.length > 0
+        ? o.seenAt
+        : null;
+
+  const expiresAt =
+    o.expiresAt === null || o.expiresAt === undefined
+      ? null
+      : typeof o.expiresAt === "string" && o.expiresAt.length > 0
+        ? o.expiresAt
+        : null;
+
+  const isExpired =
+    o.isExpired === true ||
+    (status === "draft" &&
+      expiresAt !== null &&
+      Number.isFinite(Date.parse(expiresAt)) &&
+      Date.parse(expiresAt) < Date.now());
+
   return {
     orderId,
+    displayCode,
     customerId: cid,
     status: status || "draft",
     createdAt,
     deliveryDate,
     confirmedAt,
+    seenAt,
+    expiresAt,
+    isExpired,
     lineCount,
     conversationId,
+    matchCoverage,
+    isTouchless,
   };
 }
 
@@ -150,6 +241,7 @@ export async function fetchAllOrdersDashboard(
   apiUrl: string,
   idToken?: string | null,
   accessToken?: string | null,
+  statuses: readonly DashboardOrderStatus[] = DEFAULT_ORDER_STATUS_FILTER,
 ): Promise<DashboardOrdersFetchResult> {
   const base = apiUrl.replace(/\/+$/, "");
   if (!base) return { ok: false };
@@ -158,11 +250,12 @@ export async function fetchAllOrdersDashboard(
   if (bearerCandidates.length === 0) return { ok: false };
 
   const upstreamBase = joinApiGatewayPath(base, "dashboard/orders");
+  const statusList = statuses.length > 0 ? statuses : DEFAULT_ORDER_STATUS_FILTER;
 
   for (let i = 0; i < bearerCandidates.length; i++) {
     const bearer = bearerCandidates[i];
     const batchResults = await Promise.all(
-      DASHBOARD_ORDER_STATUSES.map((s) => fetchOrdersByStatus(upstreamBase, bearer, s)),
+      statusList.map((s) => fetchOrdersByStatus(upstreamBase, bearer, s)),
     );
 
     const flat: DashboardOrderListRow[] = [];
@@ -289,11 +382,41 @@ export class DashboardOrderActionError extends Error {
   }
 }
 
+/** Parse a single order from list/detail/action API payloads. */
+export function parseDashboardOrderRow(raw: unknown): DashboardOrderListRow | null {
+  return parseOrderListRow(raw);
+}
+
 async function parseOrderActionError(res: Response, fallback: string): Promise<string> {
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return typeof body.error === "string" && body.error.trim().length > 0
     ? body.error.trim()
     : fallback;
+}
+
+/** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/convert`. */
+export async function convertDashboardOrderViaProxy(
+  orderId: string,
+): Promise<DashboardOrderListRow | null> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}/convert`, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const msg =
+      typeof body.error === "string" && body.error.trim().length > 0
+        ? body.error.trim()
+        : "No se pudo convertir el borrador.";
+    throw new DashboardOrderActionError(msg, res.status);
+  }
+
+  const orderRaw =
+    body.order && typeof body.order === "object" ? body.order : body;
+  return parseDashboardOrderRow(orderRaw);
 }
 
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/confirm`. */
@@ -307,6 +430,38 @@ export async function confirmDashboardOrderViaProxy(orderId: string): Promise<vo
   if (!res.ok) {
     throw new DashboardOrderActionError(
       await parseOrderActionError(res, "No se pudo confirmar el pedido."),
+      res.status,
+    );
+  }
+}
+
+/** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/seen`. */
+export async function markDashboardOrderSeenViaProxy(orderId: string): Promise<void> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}/seen`, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new DashboardOrderActionError(
+      await parseOrderActionError(res, "No se pudo marcar el borrador como visto."),
+      res.status,
+    );
+  }
+}
+
+/** Browser / Route Handler: DELETE `/api/backend/dashboard/orders/{orderId}`. */
+export async function deleteDashboardDraftViaProxy(orderId: string): Promise<void> {
+  const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new DashboardOrderActionError(
+      await parseOrderActionError(res, "No se pudo eliminar el borrador."),
       res.status,
     );
   }

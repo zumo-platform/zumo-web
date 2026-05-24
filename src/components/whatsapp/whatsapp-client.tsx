@@ -2,13 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { ConversationList } from "@/components/whatsapp/conversation-list";
 import { InformationPanel } from "@/components/whatsapp/information-panel";
+import { MessageComposer } from "@/components/whatsapp/message-composer";
 import { MessageThread } from "@/components/whatsapp/message-thread";
 import { backendGet, isUnknownConversationCustomer } from "@/components/whatsapp/whatsapp-helpers";
-import { WhatsappScrollPane } from "@/components/whatsapp/whatsapp-scroll-pane";
 import { ErrorAlert } from "@/components/workspace/error-alert";
 import type { Conversation, Message, Order } from "@/lib/dashboard-types";
 
@@ -117,10 +115,11 @@ export function WhatsappClient() {
   useEffect(() => {
     const id = window.setInterval(() => {
       void fetchConversations();
+      void refreshOrders();
       if (selectedId) void fetchMessages(selectedId, { silent: true });
     }, 8000);
     return () => window.clearInterval(id);
-  }, [fetchConversations, fetchMessages, selectedId]);
+  }, [fetchConversations, fetchMessages, refreshOrders, selectedId]);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -174,21 +173,22 @@ export function WhatsappClient() {
             </div>
           ) : null}
           <MessageThread conversationId={selectedId} messages={messages} loading={msgsLoading} />
-          <Separator className="shrink-0" />
-          <div className="shrink-0 border-t bg-background px-4 py-3">
-            <Input disabled placeholder="Responder (próximamente)" />
-          </div>
+          <MessageComposer
+            conversationId={selectedId}
+            onSent={(msg) => {
+              setMessages((prev) => [...prev, msg]);
+              void fetchConversations();
+            }}
+          />
         </main>
 
         <aside className="flex min-h-0 flex-col overflow-hidden">
           <PanelHeading>Información</PanelHeading>
-          <WhatsappScrollPane>
-            <InformationPanel
-              conversation={selectedConversation}
-              orders={orders}
-              onOrdersDirty={() => void refreshOrders()}
-            />
-          </WhatsappScrollPane>
+          <InformationPanel
+            conversation={selectedConversation}
+            orders={orders}
+            onOrdersDirty={() => void refreshOrders()}
+          />
         </aside>
       </div>
     </div>

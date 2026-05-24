@@ -31,19 +31,49 @@ export interface OrderLine {
   unit: string;
 }
 
+export type OrderStatus =
+  | "draft"
+  | "pending"
+  | "confirmed"
+  | "in_progress"
+  | "in_route"
+  | "delivered"
+  | "cancelled";
+
 export interface Order {
   orderId: string;
   supplierId: number;
   customerId: number;
   conversationId?: string | null;
-  status: string;
+  displayCode?: string | null;
+  status: OrderStatus | string;
   lines: OrderLine[] | null;
   deliveryNotes?: string | null;
   deliveryDate?: string | null;
   createdAt?: string;
+  seenAt?: string | null;
+  expiresAt?: string | null;
+  isExpired?: boolean;
   /** 0–1 from backend when present */
   aiConfidence?: number | string | null;
+  /** 0–1 share of lines confidently matched (Rekki coverage). */
+  matchCoverage?: number | string | null;
+  /** Permanent when AI auto-confirmed with zero seller edits. */
+  isTouchless?: boolean;
 }
+
+export type SupplierSettings = {
+  business: {
+    businessName: string;
+    businessEmail: string;
+    whatsappPhoneE164?: string | null;
+    whatsappConnectedAt?: string | null;
+  };
+  ai: {
+    autoCommitEnabled: boolean;
+    draftExpirationHours: 24 | 48 | 72 | 168;
+  };
+};
 
 export type WhatsappTokenType = "system_user" | "temporary" | "none" | "unknown";
 

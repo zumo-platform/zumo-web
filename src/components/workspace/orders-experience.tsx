@@ -1,29 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Loader2, Package, Plus } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { OrderStatusFilterChips } from "@/components/workspace/order-status-filter-chips";
 import { OrdersCatalogTable } from "@/components/workspace/orders-catalog-table";
 import { OrdersHeaderActions } from "@/components/workspace/orders-header-actions";
 import { OrdersPageHeader } from "@/components/workspace/orders-page-header";
 import { parseDashboardCustomersEnvelope, type DashboardCustomerRow } from "@/lib/dashboard-customers";
 import {
-  DASHBOARD_ORDER_STATUSES,
+  DEFAULT_ORDER_STATUS_FILTER,
   mergeAndSortOrders,
+  orderStatusFilterToParam,
   parseDashboardOrdersEnvelope,
+  parseOrderStatusFilter,
   type DashboardOrderListRow,
+  type DashboardOrderPatch,
+  type DashboardOrderStatus,
   type DashboardOrdersFetchResult,
 } from "@/lib/dashboard-orders";
 
-async function fetchAllOrdersFromProxy(): Promise<DashboardOrdersFetchResult> {
+async function fetchOrdersFromProxy(
+  statuses: readonly DashboardOrderStatus[],
+): Promise<DashboardOrdersFetchResult> {
   const origin = window.location.origin;
   const flat: DashboardOrderListRow[] = [];
   let anySuccess = false;
+  const statusList = statuses.length > 0 ? statuses : DEFAULT_ORDER_STATUS_FILTER;
 
-  for (const status of DASHBOARD_ORDER_STATUSES) {
+  for (const status of statusList) {
     const url = `${origin}/api/backend/dashboard/orders?status=${encodeURIComponent(status)}`;
     try {
       const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
@@ -56,11 +65,23 @@ async function fetchCustomersFromProxy(): Promise<{ ok: true; rows: DashboardCus
 export function OrdersExperience({
   initialOrdersResult,
   initialCustomers,
+  initialStatusFilter,
 }: Readonly<{
   initialOrdersResult: DashboardOrdersFetchResult;
   initialCustomers: DashboardCustomerRow[] | null;
+  initialStatusFilter: DashboardOrderStatus[];
 }>) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const hydratedCustomers = initialCustomers !== null;
+
+  const statusFilter = useMemo((): DashboardOrderStatus[] => {
+    const raw = searchParams.get("status");
+    if (raw !== null) return parseOrderStatusFilter(raw);
+    return initialStatusFilter.length > 0
+      ? [...initialStatusFilter]
+      : [...DEFAULT_ORDER_STATUS_FILTER];
+  }, [searchParams, initialStatusFilter]);
 
   const [orders, setOrders] = useState<DashboardOrderListRow[]>(() =>
     initialOrdersResult.ok ? initialOrdersResult.orders : [],
@@ -71,6 +92,7 @@ export function OrdersExperience({
     hydratedCustomers ? (initialCustomers ?? []) : undefined,
   );
   const [customersFetchFailed, setCustomersFetchFailed] = useState(false);
+  const [refetching, setRefetching] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +102,7 @@ export function OrdersExperience({
       if (!initialOrdersResult.ok) {
         tasks.push(
           (async () => {
-            const result = await fetchAllOrdersFromProxy();
+            const result = await fetchOrdersFromProxy(statusFilter);
             if (cancelled) return;
             if (result.ok) {
               setOrdersFetchFailed(false);
@@ -118,7 +140,51 @@ export function OrdersExperience({
     return () => {
       cancelled = true;
     };
-  }, [hydratedCustomers, initialOrdersResult.ok]);
+  }, [hydratedCustomers, initialOrdersResult.ok, statusFilter]);
+
+  const handleStatusFilterChange = useCallback(
+    (next: DashboardOrderStatus[]) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("status", orderStatusFilterToParam(next));
+      router.replace(`/orders?${params.toString()}`, { scroll: false });
+      setRefetching(true);
+      void fetchOrdersFromProxy(next).then((result) => {
+        setRefetching(false);
+        if (result.ok) {
+          setOrdersFetchFailed(false);
+          setOrders(result.orders);
+          setOrdersReady(true);
+        } else {
+          setOrdersFetchFailed(true);
+        }
+      });
+    },
+    [router, searchParams],
+  );
+
+  const skipInitialStatusRefetch = useRef(initialOrdersResult.ok);
+
+  useEffect(() => {
+    if (skipInitialStatusRefetch.current) {
+      skipInitialStatusRefetch.current = false;
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const result = await fetchOrdersFromProxy(statusFilter);
+      if (cancelled) return;
+      if (result.ok) {
+        setOrdersFetchFailed(false);
+        setOrders(result.orders);
+        setOrdersReady(true);
+      } else {
+        setOrdersFetchFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [statusFilter]);
 
   const customerList = useMemo((): DashboardCustomerRow[] | undefined => {
     if (!hydratedCustomers && customerRows === undefined) return undefined;
@@ -134,9 +200,23 @@ export function OrdersExperience({
     return m;
   }, [customerList]);
 
-  const handleOrderStatusChange = useCallback((orderId: string, status: string) => {
+  const handleOrderStatusChange = useCallback(
+    (orderId: string, status: string, patch?: DashboardOrderPatch) => {
+      setOrders((prev) =>
+        prev.map((o) => (o.orderId === orderId ? { ...o, status, ...patch } : o)),
+      );
+    },
+    [],
+  );
+
+  const handleOrderRemoved = useCallback((orderId: string) => {
+    setOrders((prev) => prev.filter((o) => o.orderId !== orderId));
+  }, []);
+
+  const handleOrderSeen = useCallback((orderId: string) => {
+    const seenAt = new Date().toISOString();
     setOrders((prev) =>
-      prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)),
+      prev.map((o) => (o.orderId === orderId ? { ...o, seenAt } : o)),
     );
   }, []);
 
@@ -161,7 +241,7 @@ export function OrdersExperience({
       ? "Los pedidos se muestran, pero no pudimos cargar los nombres de clientes (se muestra el ID)."
       : hasOrders
         ? `Tenés ${orders.length} ${orders.length === 1 ? "pedido" : "pedidos"}. Seleccioná filas para edición masiva (próximamente).`
-        : "Consultá y gestioná los pedidos confirmados y en curso. Los borradores seguís gestionándolos desde WhatsApp.";
+        : "No hay pedidos con los filtros seleccionados. Ajustá los estados o creá un pedido manualmente.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -208,15 +288,25 @@ export function OrdersExperience({
 
             {hasOrders && !ordersFetchFailed ? (
               <div className="flex min-h-0 flex-1 flex-col gap-4">
-                <header className="shrink-0">
-                  <h2 className="font-semibold text-base tracking-tight text-foreground">Listado de pedidos</h2>
-                  <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
-                    Código, cliente, fechas, ítems, estado y canal de cada pedido.
-                  </p>
+                <header className="shrink-0 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-semibold text-base tracking-tight text-foreground">Listado de pedidos</h2>
+                      <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
+                        Código, cliente, fechas, ítems, estado y canal de cada pedido.
+                      </p>
+                    </div>
+                    {refetching ? (
+                      <Loader2 aria-hidden className="size-4 animate-spin text-muted-foreground" />
+                    ) : null}
+                  </div>
+                  <OrderStatusFilterChips selected={statusFilter} onChange={handleStatusFilterChange} />
                 </header>
                 <OrdersCatalogTable
                   customerNameById={customerNameById}
                   data={orders}
+                  onOrderRemoved={handleOrderRemoved}
+                  onOrderSeen={handleOrderSeen}
                   onOrderStatusChange={handleOrderStatusChange}
                 />
               </div>

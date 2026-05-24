@@ -17,8 +17,13 @@ export async function backendPost<T>(path: string, body?: unknown): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err?.error ?? `HTTP ${String(res.status)}`);
+    const err = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+    throw new Error(
+      err?.message?.trim() || err?.error?.trim() || `HTTP ${String(res.status)}`,
+    );
   }
   return res.json() as Promise<T>;
 }
@@ -172,11 +177,42 @@ export function ordersForConversationDraftStates(
   orders: readonly Order[],
   conversationId: string,
 ): Order[] {
-  return orders.filter(
-    (o) =>
-      (o.conversationId ?? "").trim() === conversationId.trim() &&
-      (o.status === "draft" || o.status === "pending"),
-  );
+  return orders
+    .filter(
+      (o) =>
+        (o.conversationId ?? "").trim() === conversationId.trim() &&
+        (o.status === "draft" || o.status === "pending"),
+    )
+    .sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    });
+}
+
+export function formatOrderCreatedDateTime(iso?: string | null): string {
+  if (!iso?.trim()) return "—";
+  try {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "—";
+    return d.toLocaleString("es", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return "—";
+  }
+}
+
+export function conversationPocName(conversation: Conversation): string {
+  const name = conversation.customerName.trim();
+  if (name) return name;
+  const phone = conversation.customerPhone.trim();
+  return phone || "Contacto";
 }
 
 /** Orders considered “confirmed” lifecycle for último pedido (not draft/pending). */

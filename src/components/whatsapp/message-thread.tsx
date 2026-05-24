@@ -27,9 +27,16 @@ function EmptyState({
   );
 }
 
+const CHAT_BG = "#F1F5F9";
+
 function ThreadEmpty({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">{children}</div>
+    <div
+      className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6"
+      style={{ backgroundColor: CHAT_BG }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -102,7 +109,10 @@ export function MessageThread({
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+      style={{ backgroundColor: CHAT_BG }}
+    >
       {loading ? (
         <div
           aria-hidden
@@ -112,7 +122,7 @@ export function MessageThread({
           Actualizando…
         </div>
       ) : null}
-      <WhatsappScrollPane ref={scrollPaneRef}>
+      <WhatsappScrollPane ref={scrollPaneRef} className="bg-[#F1F5F9]">
         <div className="flex flex-col gap-2 px-4 py-4">
           {items.map((item) =>
             item.kind === "divider" ? (

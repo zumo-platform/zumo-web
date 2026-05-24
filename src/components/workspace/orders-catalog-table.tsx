@@ -9,7 +9,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { CheckCircle2, Loader2, MessageCircle, MoreHorizontal, Monitor } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, MessageCircle, MoreHorizontal, Monitor } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -25,11 +25,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import {
   confirmDashboardOrderViaProxy,
+  convertDashboardOrderViaProxy,
+  markDashboardOrderSeenViaProxy,
+  type DashboardOrderPatch,
   type DashboardOrderListRow,
 } from "@/lib/dashboard-orders";
+import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import { cn } from "@/lib/utils";
 
 const dateFormatter = new Intl.DateTimeFormat("es", { dateStyle: "medium" });
@@ -70,6 +75,8 @@ function statusLabel(status: string): string {
       return "Borrador";
     case "pending":
       return "Pendiente";
+    case "confirmed":
+      return "Confirmado";
     case "in_progress":
       return "En preparación";
     case "in_route":
@@ -94,14 +101,22 @@ function statusBadgeVariant(
     case "pending":
     case "draft":
       return "outline";
+    case "confirmed":
+      return "default";
     default:
       return "default";
   }
 }
 
-function shortenOrderId(orderId: string): string {
-  if (orderId.length <= 14) return orderId;
-  return `${orderId.slice(0, 10)}…${orderId.slice(-4)}`;
+function markDraftSeenIfNeeded(
+  order: DashboardOrderListRow,
+  onOrderSeen?: (orderId: string) => void,
+): void {
+  if (order.status !== "draft" || order.seenAt) return;
+  onOrderSeen?.(order.orderId);
+  void markDashboardOrderSeenViaProxy(order.orderId).catch(() => {
+    /* best-effort — optimistic update already applied */
+  });
 }
 
 export function OrdersCatalogTable({
@@ -109,34 +124,63 @@ export function OrdersCatalogTable({
   customerNameById,
   showInlineEmpty = true,
   onOrderStatusChange,
+  onOrderSeen,
+  onOrderRemoved,
 }: Readonly<{
   data: DashboardOrderListRow[];
   customerNameById: ReadonlyMap<number, string>;
   /** When false, parent renders the empty state (no duplicate row in table). */
   showInlineEmpty?: boolean;
-  onOrderStatusChange?: (orderId: string, status: string) => void;
+  onOrderStatusChange?: (orderId: string, status: string, patch?: DashboardOrderPatch) => void;
+  onOrderSeen?: (orderId: string) => void;
+  onOrderRemoved?: (orderId: string) => void;
 }>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+  const [actionOrderId, setActionOrderId] = useState<string | null>(null);
 
-  const openDetail = useCallback((orderId: string) => {
-    setDetailOrderId(orderId);
-    setDetailOpen(true);
-  }, []);
+  const openDetail = useCallback(
+    (orderId: string) => {
+      const row = data.find((o) => o.orderId === orderId);
+      if (row) markDraftSeenIfNeeded(row, onOrderSeen);
+      setDetailOrderId(orderId);
+      setDetailOpen(true);
+    },
+    [data, onOrderSeen],
+  );
 
   const handleConfirmFromTable = useCallback(
     async (orderId: string) => {
-      setConfirmingOrderId(orderId);
+      setActionOrderId(orderId);
       try {
         await confirmDashboardOrderViaProxy(orderId);
         toast.success("Pedido confirmado");
-        onOrderStatusChange?.(orderId, "in_progress");
+        onOrderStatusChange?.(orderId, "confirmed");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "No se pudo confirmar el pedido.");
       } finally {
-        setConfirmingOrderId(null);
+        setActionOrderId(null);
+      }
+    },
+    [onOrderStatusChange],
+  );
+
+  const handleConvertFromTable = useCallback(
+    async (orderId: string) => {
+      setActionOrderId(orderId);
+      try {
+        const updated = await convertDashboardOrderViaProxy(orderId);
+        toast.success("Borrador convertido en pedido");
+        onOrderStatusChange?.(orderId, "pending", {
+          displayCode: updated?.displayCode ?? null,
+          expiresAt: null,
+          isExpired: false,
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo convertir el borrador.");
+      } finally {
+        setActionOrderId(null);
       }
     },
     [onOrderStatusChange],
@@ -173,11 +217,24 @@ export function OrdersCatalogTable({
         accessorKey: "orderId",
         header: "Código",
         cell: ({ row }) => {
-          const id = row.original.orderId;
+          const o = row.original;
+          const code = formatOrderDisplayCode(o.orderId, o.displayCode);
+          const unreadDraft = o.status === "draft" && !o.seenAt;
           return (
-            <span className="block max-w-[min(200px,32vw)] truncate font-mono text-sm" title={id}>
-              {shortenOrderId(id)}
-            </span>
+            <div className="flex max-w-[min(200px,32vw)] items-center gap-1.5">
+              <span
+                className={cn(
+                  "truncate font-mono text-sm",
+                  unreadDraft && "font-semibold text-foreground",
+                )}
+                title={o.displayCode ?? o.orderId}
+              >
+                {code}
+              </span>
+              {o.status === "draft" && o.seenAt ? (
+                <Eye aria-label="Borrador visto" className="size-4 shrink-0 text-muted-foreground" />
+              ) : null}
+            </div>
           );
         },
       },
@@ -218,9 +275,16 @@ export function OrdersCatalogTable({
       {
         id: "lineCount",
         header: "Ítems",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-sm">{row.original.lineCount.toLocaleString("es")}</span>
-        ),
+        cell: ({ row }) => {
+          const o = row.original;
+          return (
+            <MatchCoverageIndicator
+              isTouchless={o.isTouchless}
+              lineCount={o.lineCount}
+              matchCoverage={o.matchCoverage}
+            />
+          );
+        },
       },
       {
         id: "status",
@@ -228,21 +292,39 @@ export function OrdersCatalogTable({
         cell: ({ row }) => {
           const o = row.original;
           const isPending = o.status === "pending";
-          const isConfirming = confirmingOrderId === o.orderId;
+          const isDraft = o.status === "draft";
+          const isActing = actionOrderId === o.orderId;
 
           return (
             <div className="flex min-w-[9.5rem] flex-col items-start gap-1.5">
               <Badge variant={statusBadgeVariant(o.status)}>{statusLabel(o.status)}</Badge>
+              {isDraft ? (
+                <Button
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={isActing}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleConvertFromTable(o.orderId)}
+                >
+                  {isActing ? (
+                    <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 aria-hidden className="size-3.5" />
+                  )}
+                  Convertir
+                </Button>
+              ) : null}
               {isPending ? (
                 <Button
                   className="h-7 gap-1 px-2 text-xs"
-                  disabled={isConfirming}
+                  disabled={isActing}
                   size="sm"
                   type="button"
                   variant="outline"
                   onClick={() => void handleConfirmFromTable(o.orderId)}
                 >
-                  {isConfirming ? (
+                  {isActing ? (
                     <Loader2 aria-hidden className="size-3.5 animate-spin" />
                   ) : (
                     <CheckCircle2 aria-hidden className="size-3.5" />
@@ -301,6 +383,9 @@ export function OrdersCatalogTable({
                 <DropdownMenuItem onSelect={() => openDetail(o.orderId)}>
                   Ver detalle
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/orders/${encodeURIComponent(o.orderId)}`}>Abrir página</Link>
+                </DropdownMenuItem>
                 {o.conversationId ? (
                   <DropdownMenuItem asChild>
                     <Link href="/whatsapp">Abrir en WhatsApp</Link>
@@ -314,7 +399,13 @@ export function OrdersCatalogTable({
         },
       },
     ],
-    [customerNameById, confirmingOrderId, handleConfirmFromTable, openDetail],
+    [
+      customerNameById,
+      actionOrderId,
+      handleConfirmFromTable,
+      handleConvertFromTable,
+      openDetail,
+    ],
   );
 
   const table = useReactTable({
@@ -399,6 +490,8 @@ export function OrdersCatalogTable({
             : undefined
         }
         onOpenChange={setDetailOpen}
+        onOrderRemoved={onOrderRemoved}
+        onOrderSeen={onOrderSeen}
         onOrderStatusChange={onOrderStatusChange}
         open={detailOpen}
         orderId={detailOrderId}
