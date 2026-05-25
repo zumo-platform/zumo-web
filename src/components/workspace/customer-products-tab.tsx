@@ -16,6 +16,7 @@ import {
 import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { formatUnitAbbreviation } from "@/lib/product-unit";
 import { formatOrderMoney } from "@/lib/order-product-search";
+import { useSupplierTimeFormatters } from "@/lib/workspace-preferences-context";
 import { cn } from "@/lib/utils";
 
 function isProductAvailable(product: DashboardProductRow | undefined): boolean {
@@ -25,15 +26,18 @@ function isProductAvailable(product: DashboardProductRow | undefined): boolean {
 
 export function CustomerProductsTab({
   productIds,
+  productFirstOrderedAt,
   catalogById,
   onAddProducts,
   onRemoveProduct,
 }: Readonly<{
   productIds: readonly number[];
+  productFirstOrderedAt: Readonly<Record<number, string>>;
   catalogById: ReadonlyMap<number, DashboardProductRow>;
   onAddProducts: () => void;
   onRemoveProduct: (productId: number) => void;
 }>) {
+  const { formatInstantDate } = useSupplierTimeFormatters();
   const rows = useMemo(() => {
     return productIds
       .map((id) => ({ productId: id, product: catalogById.get(id) }))
@@ -75,6 +79,7 @@ export function CustomerProductsTab({
               <TableHead>Producto</TableHead>
               <TableHead>Unidad</TableHead>
               <TableHead>Presentación</TableHead>
+              <TableHead>Primer pedido</TableHead>
               <TableHead className="text-right">Precio</TableHead>
               <TableHead className="w-24" />
             </TableRow>
@@ -91,6 +96,11 @@ export function CustomerProductsTab({
                   <TableCell>{product?.name ?? `Producto #${productId}`}</TableCell>
                   <TableCell>{product ? formatUnitAbbreviation(product.unit) : "—"}</TableCell>
                   <TableCell>{product?.presentation ?? "—"}</TableCell>
+                  <TableCell>
+                    {productFirstOrderedAt[productId]
+                      ? formatInstantDate(productFirstOrderedAt[productId])
+                      : "—"}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {product?.price != null ? formatOrderMoney(Number(product.price)) : "—"}
                   </TableCell>

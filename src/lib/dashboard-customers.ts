@@ -164,6 +164,8 @@ export type DashboardCustomerFullDetail = Readonly<{
   contacts: DashboardCustomerContact[];
   orders: DashboardCustomerOrder[];
   productIds: number[];
+  /** ISO timestamp of the customer's earliest order containing each product. */
+  productFirstOrderedAt: Readonly<Record<number, string>>;
 }>;
 
 export type CustomerDraftState = Readonly<{
@@ -319,11 +321,46 @@ function parseCustomerOrder(raw: unknown): DashboardCustomerOrder | null {
   };
 }
 
+function buildProductFirstOrderedAtFromOrders(
+  orders: readonly DashboardCustomerOrder[],
+): Record<number, string> {
+  const map: Record<number, string> = {};
+  const sorted = [...orders].sort((a, b) => {
+    const ta = a.createdAt ? Date.parse(a.createdAt) : Number.POSITIVE_INFINITY;
+    const tb = b.createdAt ? Date.parse(b.createdAt) : Number.POSITIVE_INFINITY;
+    return ta - tb;
+  });
+
+  for (const order of sorted) {
+    if (!order.createdAt) continue;
+    for (const line of order.lines) {
+      const productId = line.productId;
+      if (productId === null || map[productId] !== undefined) continue;
+      map[productId] = order.createdAt;
+    }
+  }
+
+  return map;
+}
+
+function parseProductFirstOrderedAt(raw: unknown): Record<number, string> {
+  const map: Record<number, string> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return map;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const productId = Number(key);
+    if (!Number.isInteger(productId) || productId <= 0) continue;
+    if (typeof value !== "string" || !value.trim()) continue;
+    map[productId] = value.trim();
+  }
+  return map;
+}
+
 function parseCustomerFullDetail(
   customerRaw: unknown,
   contactsRaw: unknown,
   ordersRaw: unknown,
   productIdsRaw: unknown,
+  productFirstOrderedAtRaw?: unknown,
 ): DashboardCustomerFullDetail | null {
   const base = parseCustomerDetail(customerRaw);
   if (!base) return null;
@@ -386,6 +423,10 @@ function parseCustomerFullDetail(
     contacts,
     orders,
     productIds,
+    productFirstOrderedAt: {
+      ...buildProductFirstOrderedAtFromOrders(orders),
+      ...parseProductFirstOrderedAt(productFirstOrderedAtRaw),
+    },
   };
 }
 
@@ -522,6 +563,7 @@ export async function fetchCustomerFullDetailViaProxy(
     body.contacts,
     body.orders,
     body.productIds,
+    body.productFirstOrderedAt,
   );
 }
 

@@ -269,6 +269,7 @@ export function CustomerDetailExperience({
               <TabsContent className="mt-0" value="products">
                 <CustomerProductsTab
                   catalogById={catalogById}
+                  productFirstOrderedAt={detail.productFirstOrderedAt}
                   productIds={draft.productIds}
                   onAddProducts={() => setPickerOpen(true)}
                   onRemoveProduct={(productId) =>
