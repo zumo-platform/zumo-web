@@ -1,6 +1,9 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/lib/dashboard-types";
+import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 import { cn } from "@/lib/utils";
 
 import { conversationListTimeLabel, isUnknownConversationCustomer } from "./whatsapp-helpers";
@@ -14,8 +17,12 @@ export function ConversationListItem({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }>) {
+  const { timeZone } = useWorkspacePreferences();
   const conv = conversation;
-  const timeLabel = conversationListTimeLabel(conv.lastMessageAt ?? conv.createdAt ?? null);
+  const timeLabel = conversationListTimeLabel(
+    conv.lastMessageAt ?? conv.createdAt ?? null,
+    timeZone,
+  );
   const unknown = isUnknownConversationCustomer(conv);
   const phone = conv.customerPhone.trim();
   const titlePrimary = unknown

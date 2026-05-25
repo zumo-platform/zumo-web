@@ -48,10 +48,18 @@ import {
 import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import type { Conversation, Order } from "@/lib/dashboard-types";
 import { parseMatchCoverage } from "@/lib/match-coverage";
-import { defaultDeliveryDateForOrder } from "@/lib/order-delivery-date";
+import {
+  defaultDeliveryDateForOrder,
+  minDeliveryDateInput,
+} from "@/lib/order-delivery-date";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import { formatOrderMoney, parseProductPrice } from "@/lib/order-product-search";
 import { formatUnitAbbreviation } from "@/lib/product-unit";
+import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
+import {
+  useSupplierTimeFormatters,
+  useWorkspacePreferences,
+} from "@/lib/workspace-preferences-context";
 import { cn } from "@/lib/utils";
 
 import { OrderProductCatalogDialog } from "./order-product-catalog-dialog";
@@ -59,7 +67,6 @@ import { OrderProductSearch } from "./order-product-search";
 import {
   conversationPocName,
   formatAiConfidencePct,
-  formatOrderCreatedDateTime,
 } from "./whatsapp-helpers";
 
 export type DraftOrderSheetVariant = "active" | "blocked";
@@ -147,6 +154,9 @@ function DraftOrderSheetContent({
 }>) {
   const blocked = variant === "blocked";
   const editable = !blocked && (order.status === "draft" || order.status === "pending");
+  const { timeZone, autoCommitEnabled } = useWorkspacePreferences();
+  const { formatInstantDateTime } = useSupplierTimeFormatters();
+  const minDeliveryDate = minDeliveryDateInput(timeZone);
 
   const [localStatus, setLocalStatus] = useState(order.status);
   const [localDisplayCode, setLocalDisplayCode] = useState(order.displayCode ?? null);
@@ -160,7 +170,7 @@ function DraftOrderSheetContent({
   const [sellerName, setSellerName] = useState<string>("—");
   const [lines, setLines] = useState<EditableLine[]>([]);
   const [deliveryDate, setDeliveryDate] = useState(() =>
-    defaultDeliveryDateForOrder(order.deliveryDate),
+    defaultDeliveryDateForOrder(order.deliveryDate, timeZone),
   );
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
 
@@ -190,11 +200,13 @@ function DraftOrderSheetContent({
   );
 
   const hasUnmatched = lines.some((l) => l.unmatched);
+  const deliveryDateValid = isValidDeliveryDateInput(deliveryDate, timeZone);
   const canSave =
     editable &&
     !saving &&
     lines.some((l) => !l.unmatched) &&
-    !hasUnmatched;
+    !hasUnmatched &&
+    deliveryDateValid;
 
   const loadEditorData = useCallback(async () => {
     if (!editable) return;
@@ -212,7 +224,7 @@ function DraftOrderSheetContent({
       const selectable = selectableProducts(productRows);
       const catalog = new Map(selectable.map((p) => [p.productId, p]));
       const nextLines = buildEditableLines(orderDetail, catalog);
-      const nextDelivery = defaultDeliveryDateForOrder(orderDetail.deliveryDate);
+      const nextDelivery = defaultDeliveryDateForOrder(orderDetail.deliveryDate, timeZone);
 
       const customerDetail = await fetchCustomerDetailViaProxy(orderDetail.customerId);
       let assignedSeller = "Sin vendedor asignado";
@@ -240,7 +252,7 @@ function DraftOrderSheetContent({
     } finally {
       setLoading(false);
     }
-  }, [editable, order.orderId]);
+  }, [editable, order.orderId, timeZone]);
 
   useEffect(() => {
     void loadEditorData();
@@ -278,8 +290,13 @@ function DraftOrderSheetContent({
     );
   }
 
-  async function handleSave() {
-    if (!canSave) return;
+  async function handleSave(): Promise<boolean> {
+    if (!canSave) {
+      if (!deliveryDateValid) {
+        toast.error("Seleccioná una fecha de entrega válida (hoy o posterior).");
+      }
+      return false;
+    }
     const payloadLines = lines
       .filter((l) => l.productId !== null && !l.unmatched)
       .map((l) => ({ productId: l.productId as number, quantity: l.quantity }));
@@ -303,16 +320,27 @@ function DraftOrderSheetContent({
       );
       toast.success("Pedido guardado.");
       onAfterChange?.();
+      return true;
     } catch (err) {
       const msg =
         err instanceof DashboardOrderActionError
           ? err.message
           : "No se pudo guardar el pedido.";
       toast.error(msg);
+      return false;
     } finally {
       setSaving(false);
     }
   }
+
+  const persistBeforeLifecycle = useCallback(async (): Promise<boolean> => {
+    const payloadLines = lines
+      .filter((l) => l.productId !== null && !l.unmatched)
+      .map((l) => ({ productId: l.productId as number, quantity: l.quantity }));
+    const currentSnapshot = JSON.stringify({ deliveryDate, lines: payloadLines });
+    if (currentSnapshot === savedSnapshot) return true;
+    return handleSave();
+  }, [deliveryDate, lines, savedSnapshot]);
 
   const customerLabel = customer?.name ?? pocName;
   const locationLabel = formatCustomerAddress(customer);
@@ -340,9 +368,10 @@ function DraftOrderSheetContent({
           </div>
         </div>
         <SheetDescription className="text-left">
-          {pocName} · {formatOrderCreatedDateTime(order.createdAt)}
+          {pocName} · {formatInstantDateTime(order.createdAt)}
         </SheetDescription>
         <MatchCoverageIndicator
+          autoCommitEnabled={autoCommitEnabled}
           className="text-left"
           lineCount={lines.length || (order.lines?.length ?? 0)}
           matchCoverage={parseMatchCoverage(detail?.matchCoverage ?? order.matchCoverage)}
@@ -371,10 +400,16 @@ function DraftOrderSheetContent({
                 <Label htmlFor="delivery-date">Fecha de entrega</Label>
                 <Input
                   id="delivery-date"
+                  min={minDeliveryDate}
                   type="date"
                   value={deliveryDate}
                   onChange={(e) => setDeliveryDate(e.target.value)}
                 />
+                {!deliveryDateValid ? (
+                  <p className="text-destructive text-xs">
+                    La fecha de entrega debe ser hoy o posterior.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Ubicación</Label>
@@ -539,8 +574,10 @@ function DraftOrderSheetContent({
           <OrderLifecycleActions
             blocked={blocked}
             blockedTitle={confirmDisabledTitle}
+            deliveryDateValid={deliveryDateValid}
             orderId={order.orderId}
             status={localStatus}
+            onBeforeAction={persistBeforeLifecycle}
             onDone={() => onOpenChange(false)}
             onRemoved={(id) => {
               onOrderRemoved?.(id);

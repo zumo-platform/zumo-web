@@ -74,18 +74,21 @@ export function MatchCoverageIndicator({
   lineCount,
   matchCoverage,
   isTouchless = false,
+  autoCommitEnabled = false,
   className,
   size = "sm",
 }: Readonly<{
   lineCount: number;
   matchCoverage: number | null;
   isTouchless?: boolean;
+  autoCommitEnabled?: boolean;
   className?: string;
   size?: "sm" | "md";
 }>) {
   const pct = matchCoveragePercent(matchCoverage);
   const ringSize = size === "md" ? 32 : 28;
   const tooltip = matchCoverageTooltip(matchCoverage, isTouchless);
+  const showTouchlessBolt = autoCommitEnabled && isTouchless;
 
   if (matchCoverage === null) {
     return (
@@ -117,7 +120,7 @@ export function MatchCoverageIndicator({
             <span className="font-medium text-foreground">{lineCount}</span>
             <span className="text-muted-foreground">✓</span>
             <span className="font-medium">{pct}%</span>
-            {isTouchless ? (
+            {showTouchlessBolt ? (
               <span className="inline-flex text-amber-500">
                 <Zap aria-hidden className="size-3.5 fill-current" />
                 <span className="sr-only">Touchless</span>

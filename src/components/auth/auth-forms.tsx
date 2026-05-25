@@ -193,6 +193,7 @@ export function AuthForms({
         email: rawEmail,
         password,
         phone,
+        country: phoneCountry,
       },
       locale,
     );

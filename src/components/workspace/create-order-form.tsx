@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Trash2 } from "lucide-react";
@@ -40,7 +40,10 @@ import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
 import { createDashboardOrderViaProxy, type CreateOrderInput } from "@/lib/dashboard-orders";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { mapOrderError, type MappedOrderError } from "@/lib/order-error-codes";
+import { minDeliveryDateInput } from "@/lib/order-delivery-date";
+import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import { cn } from "@/lib/utils";
+import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
 const FREE_PRODUCT_VALUE = "__free__";
 const MAX_LINES = 80;
@@ -63,16 +66,25 @@ const lineSchema = z
     }
   });
 
-const formSchema = z.object({
-  customerId: z.coerce.number().int().positive("Seleccioná un cliente."),
-  lines: z.array(lineSchema).min(1, "Agregá al menos una línea de producto.").max(MAX_LINES),
-  deliveryDate: z.string().optional(),
-  deliveryTimeWindow: z.string().max(80).optional(),
-  deliveryNotes: z.string().max(500).optional(),
-  notes: z.string().max(500).optional(),
-});
+function buildFormSchema(timeZone: string) {
+  return z.object({
+    customerId: z.coerce.number().int().positive("Seleccioná un cliente."),
+    lines: z.array(lineSchema).min(1, "Agregá al menos una línea de producto.").max(MAX_LINES),
+    deliveryDate: z
+      .string()
+      .trim()
+      .min(1, "La fecha de entrega es obligatoria.")
+      .regex(/^\d{4}-\d{2}-\d{2}$/u, "Formato inválido (YYYY-MM-DD).")
+      .refine((value) => isValidDeliveryDateInput(value, timeZone), {
+        message: "La fecha de entrega debe ser hoy o posterior.",
+      }),
+    deliveryTimeWindow: z.string().max(80).optional(),
+    deliveryNotes: z.string().max(500).optional(),
+    notes: z.string().max(500).optional(),
+  });
+}
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<ReturnType<typeof buildFormSchema>>;
 
 function FieldCharCount({
   control,
@@ -210,6 +222,9 @@ export function CreateOrderForm({
 }>) {
   const router = useRouter();
   const formId = useId();
+  const { timeZone } = useWorkspacePreferences();
+  const minDeliveryDate = minDeliveryDateInput(timeZone);
+  const formSchema = useMemo(() => buildFormSchema(timeZone), [timeZone]);
   const [orderError, setOrderError] = useState<MappedOrderError | null>(null);
 
   const {
@@ -244,7 +259,7 @@ export function CreateOrderForm({
         quantity: line.quantity,
         unit: line.unit.trim(),
       })),
-      deliveryDate: values.deliveryDate?.trim() ? values.deliveryDate.trim() : null,
+      deliveryDate: values.deliveryDate.trim(),
       deliveryTimeWindow: values.deliveryTimeWindow?.trim() || undefined,
       deliveryNotes: values.deliveryNotes?.trim() || undefined,
       notes: values.notes?.trim() || undefined,
@@ -387,12 +402,21 @@ export function CreateOrderForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Entrega</CardTitle>
-          <CardDescription>Opcional</CardDescription>
+          <CardDescription>Fecha de entrega obligatoria</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="deliveryDate">Fecha de entrega</Label>
-            <Input id="deliveryDate" type="date" {...register("deliveryDate")} />
+            <Input
+              id="deliveryDate"
+              min={minDeliveryDate}
+              required
+              type="date"
+              {...register("deliveryDate")}
+            />
+            {errors.deliveryDate ? (
+              <p className="text-destructive text-sm">{errors.deliveryDate.message}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="deliveryTimeWindow">Ventana horaria</Label>

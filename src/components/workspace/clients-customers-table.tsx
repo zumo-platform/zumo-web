@@ -11,6 +11,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -33,8 +34,20 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
 import { cn } from "@/lib/utils";
+import { useSupplierTimeFormatters } from "@/lib/workspace-preferences-context";
 
 const PAGE_SIZES = [10, 30, 50, 100] as const;
+
+function formatLatestOrderLabel(
+  displayCode: string | null,
+  createdAt: string | null,
+  formatInstantDateTime: (iso: string | null | undefined) => string,
+): string {
+  const when = formatInstantDateTime(createdAt);
+  if (when === "—") return "—";
+  if (displayCode) return `${displayCode} · ${when}`;
+  return when;
+}
 
 function CellText({
   className,
@@ -49,6 +62,7 @@ function CellText({
 }
 
 export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustomerRow[] }>) {
+  const { formatInstantDateTime } = useSupplierTimeFormatters();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const columns = useMemo<ColumnDef<DashboardCustomerRow>[]>(
@@ -81,7 +95,15 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
       {
         accessorKey: "name",
         header: "Nombre cliente",
-        cell: ({ row }) => <CellText title={row.original.name}>{row.original.name}</CellText>,
+        cell: ({ row }) => (
+          <Link
+            className="block truncate font-medium hover:underline"
+            href={`/clients/${row.original.customerId}`}
+            title={row.original.name}
+          >
+            {row.original.name}
+          </Link>
+        ),
       },
       {
         accessorKey: "clientCode",
@@ -106,6 +128,29 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
           <CellText title={row.original.sellerAssigned ?? "Sin asignar"}>
             {row.original.sellerAssigned ?? "Sin asignar"}
           </CellText>
+        ),
+      },
+      {
+        id: "latestOrder",
+        header: "Último pedido",
+        cell: ({ row }) => {
+          const label = formatLatestOrderLabel(
+            row.original.latestOrderDisplayCode,
+            row.original.latestOrderAt,
+            formatInstantDateTime,
+          );
+          return (
+            <CellText className="whitespace-nowrap tabular-nums" title={label}>
+              {label}
+            </CellText>
+          );
+        },
+      },
+      {
+        accessorKey: "orderCount",
+        header: "Total pedidos",
+        cell: ({ row }) => (
+          <CellText className="tabular-nums">{String(row.original.orderCount)}</CellText>
         ),
       },
       {
@@ -143,23 +188,11 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>Acciones</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() =>
-                  toast.message("Ver detalle del cliente", {
-                    description: `Próximamente (ID ${row.original.customerId}).`,
-                  })
-                }
-              >
-                Ver detalle
+              <DropdownMenuItem asChild>
+                <Link href={`/clients/${row.original.customerId}`}>Ver detalle</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
-                  toast.message("Editar cliente", {
-                    description: "Próximamente.",
-                  })
-                }
-              >
-                Editar
+              <DropdownMenuItem asChild>
+                <Link href={`/clients/${row.original.customerId}`}>Editar</Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -177,7 +210,7 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
         ),
       },
     ],
-    [],
+    [formatInstantDateTime],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable

@@ -41,38 +41,18 @@ import {
   type DashboardOrderListRow,
 } from "@/lib/dashboard-orders";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
+import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import { cn } from "@/lib/utils";
+import {
+  useSupplierTimeFormatters,
+  useWorkspacePreferences,
+} from "@/lib/workspace-preferences-context";
 
-const dateFormatter = new Intl.DateTimeFormat("es", { dateStyle: "medium" });
-const timeFormatter = new Intl.DateTimeFormat("es", { timeStyle: "short" });
-
-function formatOrderDate(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return dateFormatter.format(new Date(iso));
-  } catch {
-    return "—";
-  }
-}
-
-function formatOrderTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return timeFormatter.format(new Date(iso));
-  } catch {
-    return "—";
-  }
-}
-
-function formatDeliveryDate(raw: string | null): string {
-  if (!raw || !raw.trim()) return "—";
-  const t = Date.parse(raw);
-  if (!Number.isFinite(t)) return raw.trim();
-  try {
-    return dateFormatter.format(new Date(t));
-  } catch {
-    return raw.trim();
-  }
+function orderHasValidDeliveryDate(
+  deliveryDate: string | null,
+  timeZone: string,
+): boolean {
+  return isValidDeliveryDateInput(deliveryDate, timeZone);
 }
 
 function statusLabel(status: string): string {
@@ -141,6 +121,9 @@ export function OrdersCatalogTable({
   onOrderSeen?: (orderId: string) => void;
   onOrderRemoved?: (orderId: string) => void;
 }>) {
+  const { timeZone, autoCommitEnabled } = useWorkspacePreferences();
+  const { formatInstantDate, formatInstantTime, formatStoredDateOnly } =
+    useSupplierTimeFormatters();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -271,21 +254,27 @@ export function OrdersCatalogTable({
         id: "orderCreated",
         header: "Fecha",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm">{formatOrderDate(row.original.createdAt)}</span>
+          <span className="whitespace-nowrap text-sm">
+            {formatInstantDate(row.original.createdAt)}
+          </span>
         ),
       },
       {
         id: "deliveryDate",
         header: "Entrega",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm">{formatDeliveryDate(row.original.deliveryDate)}</span>
+          <span className="whitespace-nowrap text-sm">
+            {formatStoredDateOnly(row.original.deliveryDate)}
+          </span>
         ),
       },
       {
         id: "orderCreation",
         header: "Hora",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm">{formatOrderTime(row.original.createdAt)}</span>
+          <span className="whitespace-nowrap text-sm">
+            {formatInstantTime(row.original.createdAt)}
+          </span>
         ),
       },
       {
@@ -295,6 +284,7 @@ export function OrdersCatalogTable({
           const o = row.original;
           return (
             <MatchCoverageIndicator
+              autoCommitEnabled={autoCommitEnabled}
               isTouchless={o.isTouchless}
               lineCount={o.lineCount}
               matchCoverage={o.matchCoverage}
@@ -310,6 +300,10 @@ export function OrdersCatalogTable({
           const isPending = o.status === "pending";
           const isDraft = o.status === "draft";
           const isActing = actionOrderId === o.orderId;
+          const hasDeliveryDate = orderHasValidDeliveryDate(o.deliveryDate, timeZone);
+          const lifecycleTitle = hasDeliveryDate
+            ? undefined
+            : "Seleccioná una fecha de entrega válida antes de continuar.";
 
           return (
             <div className="flex min-w-[9.5rem] flex-col items-start gap-1.5">
@@ -317,8 +311,9 @@ export function OrdersCatalogTable({
               {isDraft ? (
                 <Button
                   className="h-7 gap-1 px-2 text-xs"
-                  disabled={isActing}
+                  disabled={isActing || !hasDeliveryDate}
                   size="sm"
+                  title={lifecycleTitle}
                   type="button"
                   variant="outline"
                   onClick={() => void handleConvertFromTable(o.orderId)}
@@ -334,8 +329,9 @@ export function OrdersCatalogTable({
               {isPending ? (
                 <Button
                   className="h-7 gap-1 px-2 text-xs"
-                  disabled={isActing}
+                  disabled={isActing || !hasDeliveryDate}
                   size="sm"
+                  title={lifecycleTitle}
                   type="button"
                   variant="outline"
                   onClick={() => void handleConfirmFromTable(o.orderId)}
@@ -416,11 +412,16 @@ export function OrdersCatalogTable({
       },
     ],
     [
+      autoCommitEnabled,
       customerNameById,
       actionOrderId,
+      formatInstantDate,
+      formatInstantTime,
+      formatStoredDateOnly,
       handleConfirmFromTable,
       handleConvertFromTable,
       openDetail,
+      timeZone,
     ],
   );
 
@@ -506,6 +507,10 @@ export function OrdersCatalogTable({
               )
             : undefined
         }
+        navigationOrderIds={data.map((o) => o.orderId)}
+        onNavigateOrder={(id) => {
+          openDetail(id);
+        }}
         onOpenChange={setDetailOpen}
         onOrderRemoved={onOrderRemoved}
         onOrderSeen={onOrderSeen}

@@ -26,6 +26,8 @@ export async function signUp(input: {
   password: string;
   /** E.164 — stored as Cognito standard `phone_number` and copied to seller.phone in post-confirmation. */
   phone: string;
+  /** ISO 3166-1 alpha-2 from onboarding country selector (e.g. CR). */
+  country: string;
 }): Promise<void> {
   const ClientId = cognitoAppClientId();
   await cognito.send(
@@ -37,6 +39,7 @@ export async function signUp(input: {
         { Name: "email", Value: input.email.trim().toLowerCase() },
         { Name: "name", Value: input.fullName },
         { Name: "custom:businessName", Value: input.businessName },
+        { Name: "custom:country", Value: input.country.trim().toUpperCase() },
         { Name: "phone_number", Value: input.phone },
       ],
     }),

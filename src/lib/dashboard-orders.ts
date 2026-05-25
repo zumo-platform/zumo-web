@@ -296,7 +296,7 @@ export type CreateOrderLineInput = Readonly<{
 export type CreateOrderInput = Readonly<{
   customerId: number;
   lines: CreateOrderLineInput[];
-  deliveryDate?: string | null;
+  deliveryDate: string;
   deliveryTimeWindow?: string | null;
   deliveryNotes?: string;
   notes?: string;

@@ -1,4 +1,7 @@
+"use client";
+
 import type { Message } from "@/lib/dashboard-types";
+import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 import { cn } from "@/lib/utils";
 
 import { formatMessageTime, isRenderableThreadMessage, roleBubbleClass } from "./whatsapp-helpers";
@@ -8,6 +11,7 @@ export function MessageBubble({
 }: Readonly<{
   message: Message;
 }>) {
+  const { timeZone } = useWorkspacePreferences();
   if (!isRenderableThreadMessage(message)) return null;
 
   return (
@@ -19,7 +23,7 @@ export function MessageBubble({
     >
       <span>{message.content}</span>
       <span className="mt-1 text-right text-xs opacity-70 tabular-nums">
-        {formatMessageTime(message.createdAt)}
+        {formatMessageTime(message.createdAt, timeZone)}
       </span>
     </div>
   );

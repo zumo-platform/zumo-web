@@ -1,17 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Loader2,
   MessageCircle,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -28,11 +34,42 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  EditableCustomerAddressField,
+  EditableCustomerTextField,
+} from "@/components/workspace/customer-field-editor";
 import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
+import { EditableOrderLinesTable } from "@/components/workspace/editable-order-lines-table";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
-import { markDashboardOrderSeenViaProxy, type DashboardOrderPatch } from "@/lib/dashboard-orders";
+import { OrderProductCatalogDialog } from "@/components/whatsapp/order-product-catalog-dialog";
+import { OrderProductSearch } from "@/components/whatsapp/order-product-search";
+import {
+  buildEditableOrderLines,
+  editableLineSubtotal,
+  patchPayloadFromLines,
+  productToEditableLine,
+  type EditableOrderLine,
+} from "@/lib/editable-order-lines";
+import {
+  DashboardOrderActionError,
+  deleteDashboardDraftViaProxy,
+  markDashboardOrderSeenViaProxy,
+  parseDashboardOrderDetail,
+  patchDashboardOrderViaProxy,
+  rejectDashboardOrderViaProxy,
+  type DashboardOrderPatch,
+} from "@/lib/dashboard-orders";
+import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
+import { patchDashboardCustomerViaProxy } from "@/lib/dashboard-customers";
 import { parseMatchCoverage } from "@/lib/match-coverage";
+import { defaultDeliveryDateForOrder, minDeliveryDateInput } from "@/lib/order-delivery-date";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
+import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
+import {
+  useSupplierTimeFormatters,
+  useWorkspacePreferences,
+} from "@/lib/workspace-preferences-context";
+import { formatOrderMoney } from "@/lib/order-product-search";
 import { cn } from "@/lib/utils";
 
 export type OrderDetailSheetProps = Readonly<{
@@ -46,6 +83,9 @@ export type OrderDetailSheetProps = Readonly<{
   onOrderRemoved?: (orderId: string) => void;
   /** Keeps sheet status in sync when the list row updates (e.g. confirm from table). */
   syncedStatus?: string | null;
+  /** Visible table order ids for prev/next navigation. */
+  navigationOrderIds?: readonly string[];
+  onNavigateOrder?: (orderId: string) => void;
 }>;
 
 type OrderDetailLine = Readonly<{
@@ -81,6 +121,7 @@ type CustomerDetail = Readonly<{
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
+  region: string | null;
 }>;
 
 type ProductLookup = Readonly<{
@@ -157,63 +198,6 @@ function statusBadgeVariant(
 function csvField(v: string | number | null): string {
   const s = v === null || v === undefined ? "" : String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function formatCreatedDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Intl.DateTimeFormat("es", {
-      dateStyle: "medium",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(iso));
-  } catch {
-    return "—";
-  }
-}
-
-function formatDateOnly(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(new Date(iso));
-  } catch {
-    return "—";
-  }
-}
-
-function formatDeliveryDateStored(raw: string | null): string {
-  const trimmed = raw?.trim();
-  if (!trimmed) return "—";
-  try {
-    return new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(
-      new Date(`${trimmed}T12:00:00`),
-    );
-  } catch {
-    return trimmed;
-  }
-}
-
-function formatConfirmedAt(iso: string | null): string {
-  if (!iso) return "";
-  try {
-    return new Intl.DateTimeFormat("es", {
-      dateStyle: "medium",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function formatAddress(customer: CustomerDetail | null): string {
-  if (!customer) return "—";
-  const parts = [customer.addressLine1, customer.addressLine2, customer.city].filter(
-    (p): p is string => Boolean(p && p.trim()),
-  );
-  return parts.length > 0 ? parts.join(", ") : "—";
 }
 
 function lineUnitPriceTotal(line: OrderDetailLine): number | null {
@@ -294,6 +278,7 @@ function parseCustomerDetail(raw: unknown): CustomerDetail | null {
     addressLine1: asStringOrNull(c.addressLine1),
     addressLine2: asStringOrNull(c.addressLine2),
     city: asStringOrNull(c.city),
+    region: asStringOrNull(c.region),
   };
 }
 
@@ -339,7 +324,13 @@ export function OrderDetailSheet({
   onOrderSeen,
   onOrderRemoved,
   syncedStatus,
+  navigationOrderIds = [],
+  onNavigateOrder,
 }: OrderDetailSheetProps) {
+  const { timeZone, autoCommitEnabled } = useWorkspacePreferences();
+  const { formatInstantDate, formatInstantDateTime, formatStoredDateOnly } =
+    useSupplierTimeFormatters();
+  const minDeliveryDate = minDeliveryDateInput(timeZone);
   const productsCatalogRef = useRef<Map<number, ProductLookup> | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -348,6 +339,91 @@ export function OrderDetailSheet({
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [productsByPid, setProductsByPid] = useState<Map<number, ProductLookup>>(new Map());
   const [reloadToken, setReloadToken] = useState(0);
+  const [editLines, setEditLines] = useState<EditableOrderLine[]>([]);
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [productRows, setProductRows] = useState<DashboardProductRow[]>([]);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+
+  const navIndex =
+    orderId && navigationOrderIds.length > 0
+      ? navigationOrderIds.indexOf(orderId)
+      : -1;
+  const canGoPrev = navIndex > 0;
+  const canGoNext = navIndex >= 0 && navIndex < navigationOrderIds.length - 1;
+
+  const isEditable =
+    order?.status === "draft" || order?.status === "pending";
+
+  const orderProductIds = useMemo(
+    () =>
+      new Set(
+        editLines.map((l) => l.productId).filter((id): id is number => id !== null),
+      ),
+    [editLines],
+  );
+
+  const hasUnmatched = editLines.some((l) => l.unmatched);
+  const deliveryDateValid = isValidDeliveryDateInput(deliveryDate, timeZone);
+  const editOrderTotal = useMemo(
+    () => editLines.filter((l) => !l.unmatched).reduce((sum, l) => sum + editableLineSubtotal(l), 0),
+    [editLines],
+  );
+  const canSave =
+    isEditable &&
+    !saving &&
+    editLines.some((l) => !l.unmatched) &&
+    !hasUnmatched &&
+    deliveryDateValid;
+
+  const canRejectOrder =
+    order?.status === "draft" ||
+    order?.status === "pending" ||
+    order?.status === "confirmed" ||
+    order?.status === "in_progress";
+
+  const saveCustomerField = useCallback(
+    async (patch: Parameters<typeof patchDashboardCustomerViaProxy>[1]) => {
+      if (!order) return;
+      const updated = await patchDashboardCustomerViaProxy(order.customerId, patch);
+      if (updated) {
+        setCustomer({
+          name: updated.name,
+          legalName: updated.legalName,
+          governmentId: updated.governmentId,
+          addressLine1: updated.addressLine1,
+          addressLine2: updated.addressLine2,
+          city: updated.city,
+          region: updated.region,
+        });
+        toast.success("Cliente actualizado.");
+      }
+    },
+    [order],
+  );
+
+  const handleRejectOrder = useCallback(async () => {
+    if (!order || !canRejectOrder || rejecting) return;
+    setRejecting(true);
+    try {
+      if (order.status === "draft") {
+        await deleteDashboardDraftViaProxy(order.orderId);
+        toast.success("Borrador rechazado");
+        onOrderRemoved?.(order.orderId);
+        onOpenChange(false);
+      } else {
+        await rejectDashboardOrderViaProxy(order.orderId);
+        toast.success("Pedido rechazado");
+        setOrder((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
+        onOrderStatusChange?.(order.orderId, "cancelled");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo rechazar el pedido.");
+    } finally {
+      setRejecting(false);
+    }
+  }, [canRejectOrder, onOpenChange, onOrderRemoved, onOrderStatusChange, order, rejecting]);
 
   const loadOrder = useCallback(async (id: string, signal: AbortSignal) => {
     setLoading(true);
@@ -379,6 +455,9 @@ export function OrderDetailSheet({
       if (signal.aborted) return;
       setOrder(parsedOrder);
 
+      const editable =
+        parsedOrder.status === "draft" || parsedOrder.status === "pending";
+
       if (parsedOrder.status === "draft") {
         onOrderSeen?.(parsedOrder.orderId);
         void markDashboardOrderSeenViaProxy(parsedOrder.orderId).catch(() => {
@@ -387,20 +466,43 @@ export function OrderDetailSheet({
       }
 
       let catalog = productsCatalogRef.current;
-      if (!catalog) {
-        try {
-          const productsRes = await fetch("/api/backend/dashboard/products", {
-            credentials: "same-origin",
-            cache: "no-store",
-            signal,
-          });
-          const productsBody = (await productsRes.json().catch(() => ({}))) as unknown;
-          if (productsRes.ok && !signal.aborted) {
-            catalog = parseProductsMap(productsBody);
-            productsCatalogRef.current = catalog;
+      try {
+        const productRowsFetched = await fetchProductsViaProxy();
+        if (!signal.aborted) {
+          const selectable = selectableProducts(productRowsFetched);
+          if (editable) {
+            setProductRows(selectable);
+            const catalogById = new Map(selectable.map((p) => [p.productId, p]));
+            const detail = parseDashboardOrderDetail(orderBody, id);
+            if (detail) {
+              setEditLines(buildEditableOrderLines(detail, catalogById));
+              setDeliveryDate(defaultDeliveryDateForOrder(detail.deliveryDate, timeZone));
+            }
           }
-        } catch {
-          /* best-effort */
+          catalog = new Map(
+            productRowsFetched.map((p) => [
+              p.productId,
+              { sku: p.sku, presentation: p.presentation },
+            ]),
+          );
+          productsCatalogRef.current = catalog;
+        }
+      } catch {
+        if (!catalog) {
+          try {
+            const productsRes = await fetch("/api/backend/dashboard/products", {
+              credentials: "same-origin",
+              cache: "no-store",
+              signal,
+            });
+            const productsBody = (await productsRes.json().catch(() => ({}))) as unknown;
+            if (productsRes.ok && !signal.aborted) {
+              catalog = parseProductsMap(productsBody);
+              productsCatalogRef.current = catalog;
+            }
+          } catch {
+            /* best-effort */
+          }
         }
       }
 
@@ -453,6 +555,11 @@ export function OrderDetailSheet({
     setOrder(null);
     setCustomer(null);
     setProductsByPid(new Map());
+    setEditLines([]);
+    setDeliveryDate("");
+    setProductRows([]);
+    setCatalogOpen(false);
+    setSaving(false);
   }, [open]);
 
   const displayStatus = order?.status ?? "draft";
@@ -539,10 +646,154 @@ export function OrderDetailSheet({
   const exportDisabled = loading || !order || order.lines.length === 0;
   const chatDisabled = loading || !order?.conversationId;
 
+  function addProduct(product: DashboardProductRow) {
+    setEditLines((prev) => {
+      const existing = prev.find((l) => l.productId === product.productId);
+      if (existing) {
+        return prev.map((l) =>
+          l.productId === product.productId ? { ...l, quantity: l.quantity + 1 } : l,
+        );
+      }
+      return [...prev, productToEditableLine(product)];
+    });
+  }
+
+  function removeLine(key: string) {
+    setEditLines((prev) => prev.filter((l) => l.key !== key));
+  }
+
+  function changeQuantity(productId: number, delta: number) {
+    setEditLines((prev) =>
+      prev.map((l) => {
+        if (l.productId !== productId) return l;
+        return { ...l, quantity: Math.max(1, l.quantity + delta) };
+      }),
+    );
+  }
+
+  const applySavedOrder = useCallback(
+    (detail: ReturnType<typeof parseDashboardOrderDetail>) => {
+      if (!detail) return;
+      const catalogById = new Map(productRows.map((p) => [p.productId, p]));
+      setEditLines(buildEditableOrderLines(detail, catalogById));
+      setOrder({
+        orderId: detail.orderId,
+        displayCode: detail.displayCode,
+        customerId: detail.customerId,
+        status: detail.status,
+        createdAt: detail.createdAt,
+        deliveryDate: detail.deliveryDate,
+        confirmedAt: order?.confirmedAt ?? null,
+        conversationId: order?.conversationId ?? null,
+        currency: order?.currency ?? null,
+        subtotal: detail.subtotal,
+        total: detail.total,
+        lines: detail.lines.map((l) => ({
+          productId: l.productId,
+          productName: l.productName,
+          quantity: l.quantity,
+          unit: l.unit,
+          unitPrice: l.unitPrice,
+          lineSubtotal: l.lineSubtotal,
+        })),
+        matchCoverage: detail.matchCoverage,
+        isTouchless: detail.isTouchless,
+      });
+    },
+    [order?.confirmedAt, order?.conversationId, order?.currency, productRows],
+  );
+
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!order || !canSave) {
+      if (!deliveryDateValid) {
+        toast.error("Seleccioná una fecha de entrega válida (hoy o posterior).");
+      }
+      return false;
+    }
+    setSaving(true);
+    try {
+      const updated = await patchDashboardOrderViaProxy(order.orderId, {
+        deliveryDate,
+        lines: patchPayloadFromLines(editLines),
+      });
+      applySavedOrder(updated);
+      toast.success("Pedido guardado.");
+      return true;
+    } catch (err) {
+      const msg =
+        err instanceof DashboardOrderActionError
+          ? err.message
+          : "No se pudo guardar el pedido.";
+      toast.error(msg);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [applySavedOrder, canSave, deliveryDate, deliveryDateValid, editLines, order]);
+
+  const persistBeforeLifecycle = useCallback(async (): Promise<boolean> => {
+    if (!order || !isEditable) return deliveryDateValid;
+    return handleSave();
+  }, [deliveryDateValid, handleSave, isEditable, order]);
+
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
       <SheetContent className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-3xl">
         <SheetHeader className="shrink-0 space-y-3 border-b px-6 py-4 pr-9">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <Button
+                aria-label="Pedido anterior"
+                disabled={!canGoPrev || loading}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  if (canGoPrev && onNavigateOrder) {
+                    onNavigateOrder(navigationOrderIds[navIndex - 1]!);
+                  }
+                }}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button
+                aria-label="Pedido siguiente"
+                disabled={!canGoNext || loading}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  if (canGoNext && onNavigateOrder) {
+                    onNavigateOrder(navigationOrderIds[navIndex + 1]!);
+                  }
+                }}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+              {navigationOrderIds.length > 1 && navIndex >= 0 ? (
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {navIndex + 1} / {navigationOrderIds.length}
+                </span>
+              ) : null}
+            </div>
+            {order && canRejectOrder ? (
+              <Button
+                className="gap-1.5"
+                disabled={rejecting || loading}
+                size="sm"
+                type="button"
+                variant="destructive"
+                onClick={() => void handleRejectOrder()}
+              >
+                {rejecting ? (
+                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                ) : (
+                  <XCircle aria-hidden className="size-4" />
+                )}
+                Rechazar pedido
+              </Button>
+            ) : null}
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-2">
               <SheetTitle className="text-left text-lg">
@@ -558,6 +809,7 @@ export function OrderDetailSheet({
                     {statusText}
                   </Badge>
                   <MatchCoverageIndicator
+                    autoCommitEnabled={autoCommitEnabled}
                     isTouchless={order.isTouchless}
                     lineCount={order.lines.length}
                     matchCoverage={order.matchCoverage}
@@ -567,6 +819,16 @@ export function OrderDetailSheet({
               ) : null}
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {isEditable ? (
+                <button
+                  className="text-sm underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!canSave || saving}
+                  type="button"
+                  onClick={() => void handleSave()}
+                >
+                  {saving ? "Guardando…" : "Guardar"}
+                </button>
+              ) : null}
               <Button
                 className="gap-1.5"
                 disabled={exportDisabled}
@@ -628,23 +890,92 @@ export function OrderDetailSheet({
                   </span>
                 </DetailRow>
                 <DetailRow label="Fecha de creación (hora)">
-                  {formatCreatedDateTime(order.createdAt)}
+                  {formatInstantDateTime(order.createdAt)}
                 </DetailRow>
-                <DetailRow label="Fecha de creación">{formatDateOnly(order.createdAt)}</DetailRow>
+                <DetailRow label="Fecha de creación">{formatInstantDate(order.createdAt)}</DetailRow>
                 <DetailRow label="Fecha de entrega">
-                  {formatDeliveryDateStored(order.deliveryDate)}
+                  {isEditable ? (
+                    <div className="space-y-1">
+                      <Input
+                        className="max-w-xs"
+                        min={minDeliveryDate}
+                        type="date"
+                        value={deliveryDate}
+                        onChange={(e) => setDeliveryDate(e.target.value)}
+                      />
+                      {!deliveryDateValid ? (
+                        <p className="text-destructive text-xs">
+                          La fecha de entrega debe ser hoy o posterior.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    formatStoredDateOnly(order.deliveryDate)
+                  )}
                 </DetailRow>
                 <DetailRow label="Razón social">
-                  {customer?.legalName ?? customer?.name ?? "—"}
+                  <EditableCustomerTextField
+                    fallbackDisplay={customer?.name ?? null}
+                    placeholder="Razón social"
+                    value={customer?.legalName ?? null}
+                    onSave={async (next) => saveCustomerField({ legalName: next })}
+                  />
                 </DetailRow>
-                <DetailRow label="Identificación">{customer?.governmentId ?? "—"}</DetailRow>
+                <DetailRow label="Identificación">
+                  <EditableCustomerTextField
+                    placeholder="Identificación"
+                    value={customer?.governmentId ?? null}
+                    onSave={async (next) => saveCustomerField({ governmentId: next })}
+                  />
+                </DetailRow>
                 <DetailRow className="sm:col-span-2" label="Dirección de entrega">
-                  {formatAddress(customer)}
+                  <EditableCustomerAddressField
+                    addressLine1={customer?.addressLine1 ?? null}
+                    city={customer?.city ?? null}
+                    region={customer?.region ?? null}
+                    onSave={async (patch) =>
+                      saveCustomerField({
+                        addressLine1: patch.addressLine1,
+                        city: patch.city,
+                        region: patch.region,
+                      })
+                    }
+                  />
                 </DetailRow>
               </dl>
 
               <Separator />
 
+              {isEditable ? (
+                <div className="space-y-4">
+                  {hasUnmatched ? (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 text-xs dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                      Hay productos sin coincidencia en el catálogo. Eliminá esas líneas antes de
+                      guardar.
+                    </p>
+                  ) : null}
+                  <div className="space-y-2">
+                    <Label>Agregar productos</Label>
+                    <OrderProductSearch
+                      orderProductIds={orderProductIds}
+                      products={productRows}
+                      onOpenCatalog={() => setCatalogOpen(true)}
+                      onSelectProduct={addProduct}
+                    />
+                  </div>
+                  <EditableOrderLinesTable
+                    lines={editLines}
+                    onChangeQuantity={changeQuantity}
+                    onRemoveLine={removeLine}
+                  />
+                  <div className="flex justify-end">
+                    <p className="font-semibold text-sm">
+                      Valor total:{" "}
+                      <span className="tabular-nums">{formatOrderMoney(editOrderTotal)}</span>
+                    </p>
+                  </div>
+                </div>
+              ) : (
               <div className="rounded-lg border bg-card shadow-sm">
                 <Table>
                   <TableHeader>
@@ -700,7 +1031,9 @@ export function OrderDetailSheet({
                   </TableBody>
                 </Table>
               </div>
+              )}
 
+              {!isEditable ? (
               <div className="ml-auto max-w-xs space-y-2 text-right text-sm">
                 <div className="flex justify-between gap-4">
                   <span className="text-muted-foreground">Subtotal</span>
@@ -711,6 +1044,7 @@ export function OrderDetailSheet({
                   <span className="font-semibold tabular-nums">{formatMoney(computedTotal)}</span>
                 </div>
               </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -718,7 +1052,7 @@ export function OrderDetailSheet({
         <footer className="sticky bottom-0 flex shrink-0 flex-col gap-3 border-t bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-muted-foreground text-xs">
             {order?.confirmedAt
-              ? `Confirmado el ${formatConfirmedAt(order.confirmedAt)}`
+              ? `Confirmado el ${formatInstantDateTime(order.confirmedAt)}`
               : displayStatus === "pending"
                 ? "Pendiente de confirmación."
                 : displayStatus === "draft"
@@ -727,9 +1061,12 @@ export function OrderDetailSheet({
           </p>
           {order && (order.status === "draft" || order.status === "pending") ? (
             <OrderLifecycleActions
+              deliveryDateValid={deliveryDateValid}
               layout="inline"
               orderId={order.orderId}
+              showEditLink={false}
               status={order.status}
+              onBeforeAction={persistBeforeLifecycle}
               onRemoved={(id) => {
                 onOrderRemoved?.(id);
                 onOpenChange(false);
@@ -750,6 +1087,17 @@ export function OrderDetailSheet({
             />
           ) : null}
         </footer>
+        {order && isEditable ? (
+          <OrderProductCatalogDialog
+            onConfirm={(selected) => {
+              for (const product of selected) addProduct(product);
+            }}
+            onOpenChange={setCatalogOpen}
+            open={catalogOpen}
+            orderProductIds={orderProductIds}
+            products={productRows}
+          />
+        ) : null}
       </SheetContent>
     </Sheet>
   );

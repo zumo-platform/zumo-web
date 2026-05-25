@@ -5,6 +5,8 @@ import { getServerApiBaseUrl } from "@/lib/api";
 import { fetchCustomersDashboard } from "@/lib/dashboard-customers";
 import { getAuthSession } from "@/lib/session";
 
+export const dynamic = "force-dynamic";
+
 export default async function ClientsPage() {
   const { accessToken, idToken } = await getAuthSession();
 

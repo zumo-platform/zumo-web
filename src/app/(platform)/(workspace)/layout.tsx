@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
 import { fetchWhatsappStatus } from "@/lib/dashboard-api";
+import { fetchSettingsDashboard } from "@/lib/dashboard-settings";
 import type { SellerMe, WhatsappStatusResult } from "@/lib/dashboard-types";
 import { getAuthSession } from "@/lib/session";
+import { DEFAULT_SUPPLIER_TIMEZONE } from "@/lib/supplier-timezone";
 
 import packageJson from "../../../../package.json";
 
@@ -33,6 +35,10 @@ export default async function WorkspaceLayout({
   let seller = fallbackSeller;
   let supplier: SellerMe["supplier"] | null = null;
   let whatsappStatus: WhatsappStatusResult | null = null;
+  let workspacePreferences = {
+    timeZone: DEFAULT_SUPPLIER_TIMEZONE,
+    autoCommitEnabled: false,
+  };
 
   const bearerCandidates = [...new Set([idToken, accessToken].filter((t): t is string => Boolean(t)))];
 
@@ -56,6 +62,19 @@ export default async function WorkspaceLayout({
     } catch {
       // fallback seller keeps shell usable
     }
+
+    const settings = await fetchSettingsDashboard(apiUrl, idToken, accessToken);
+    if (settings) {
+      workspacePreferences = {
+        timeZone: settings.business.timezone,
+        autoCommitEnabled: settings.ai.autoCommitEnabled,
+      };
+    } else if (supplier?.timezone?.trim()) {
+      workspacePreferences = {
+        timeZone: supplier.timezone.trim(),
+        autoCommitEnabled: false,
+      };
+    }
   }
 
   for (const bearer of bearerCandidates) {
@@ -69,6 +88,7 @@ export default async function WorkspaceLayout({
       seller={seller}
       supplier={supplier}
       whatsappStatus={whatsappStatus}
+      workspacePreferences={workspacePreferences}
     >
       {children}
     </WorkspaceShell>

@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   const locale = localeFromRequest(request);
 
   try {
-    const { fullName, businessName, email, password, phone } = await request.json();
+    const { fullName, businessName, email, password, phone, country } = await request.json();
 
     if (!cognitoAppClientId()) {
       return NextResponse.json(
@@ -23,20 +23,20 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!email || !password || !fullName || !businessName || !phone) {
+    if (!email || !password || !fullName || !businessName || !phone || !country) {
       return NextResponse.json(
         {
           error: "ValidationError",
           message:
             locale === "es"
-              ? "Nombre, empresa, correo, contraseña y teléfono son obligatorios."
-              : "fullName, businessName, email, password, and phone (E.164) are required.",
+              ? "Nombre, empresa, correo, contraseña, país y teléfono son obligatorios."
+              : "fullName, businessName, email, password, country, and phone (E.164) are required.",
         },
         { status: 400 },
       );
     }
 
-    await signUp({ fullName, businessName, email, password, phone });
+    await signUp({ fullName, businessName, email, password, phone, country });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

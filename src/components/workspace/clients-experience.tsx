@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -17,7 +17,10 @@ import { ClientsCustomersTable } from "@/components/workspace/clients-customers-
 import { ClientsEmptyState } from "@/components/workspace/clients-empty-state";
 import { ClientsHeaderActions } from "@/components/workspace/clients-header-actions";
 import { ClientsPageHeader } from "@/components/workspace/clients-page-header";
-import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
+import {
+  fetchCustomersViaProxy,
+  type DashboardCustomerRow,
+} from "@/lib/dashboard-customers";
 
 export type ClientsExperienceVariant = "list" | "creation";
 
@@ -39,8 +42,24 @@ export function ClientsExperience({
 }>) {
   const router = useRouter();
   const [section, setSection] = useState<ClientsListSection>("general");
+  const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | null>(() =>
+    variant === "list" ? (initialCustomers ?? null) : null,
+  );
 
-  const customerRows = variant === "list" ? (initialCustomers ?? null) : null;
+  useEffect(() => {
+    if (variant !== "list") return;
+
+    let cancelled = false;
+    void (async () => {
+      const rows = await fetchCustomersViaProxy();
+      if (cancelled) return;
+      setCustomerRows(rows);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [variant]);
 
   const apiError = variant === "list" && customerRows === null;
   const showEmpty = variant === "list" && customerRows !== null && customerRows.length === 0;

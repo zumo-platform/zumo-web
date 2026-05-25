@@ -1,5 +1,6 @@
 import { joinApiGatewayPath } from "@/lib/api";
 import type { SupplierSettings } from "@/lib/dashboard-types";
+import { DEFAULT_SUPPLIER_TIMEZONE } from "@/lib/supplier-timezone";
 import { parseWorkspaceLocale, setWorkspaceLocaleCookie } from "@/lib/workspace-locale";
 
 function uniqBearerCandidates(idToken?: string | null, accessToken?: string | null): string[] {
@@ -71,6 +72,10 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
 
   const defaultLocale = parseWorkspaceLocale(businessRaw.defaultLocale);
 
+  const timezoneRaw =
+    typeof businessRaw.timezone === "string" ? businessRaw.timezone.trim() : "";
+  const timezone = timezoneRaw || DEFAULT_SUPPLIER_TIMEZONE;
+
   return {
     business: {
       businessName: businessName || "—",
@@ -78,6 +83,7 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
       whatsappPhoneE164,
       whatsappConnectedAt,
       defaultLocale,
+      timezone,
     },
     ai: {
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,

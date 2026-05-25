@@ -69,6 +69,7 @@ export type SupplierSettings = {
     whatsappPhoneE164?: string | null;
     whatsappConnectedAt?: string | null;
     defaultLocale: "es" | "en";
+    timezone: string;
   };
   ai: {
     autoCommitEnabled: boolean;
@@ -99,6 +100,8 @@ export interface SellerMe {
     supplierId: number;
     businessName: string;
     businessEmail: string;
+    country?: string;
+    timezone?: string;
     whatsappPhoneNumberId: string | null;
     wabaId: string | null;
     partnerSolutionId: string | null;

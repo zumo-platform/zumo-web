@@ -6,8 +6,7 @@ import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-in
 import type { Order } from "@/lib/dashboard-types";
 import { parseMatchCoverage } from "@/lib/match-coverage";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
-
-import { formatOrderCreatedDateTime } from "./whatsapp-helpers";
+import { useSupplierTimeFormatters, useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
 function statusBadgeLabel(status: string): string {
   switch (status) {
@@ -31,6 +30,8 @@ export function DraftOrderPreviewCard({
   pocName: string;
   onOpen: () => void;
 }>) {
+  const { autoCommitEnabled } = useWorkspacePreferences();
+  const { formatInstantDateTime } = useSupplierTimeFormatters();
   const code = formatOrderDisplayCode(order.orderId, order.displayCode);
 
   return (
@@ -48,9 +49,10 @@ export function DraftOrderPreviewCard({
             </div>
             <p className="truncate text-sm">{pocName}</p>
             <p className="text-muted-foreground text-xs tabular-nums">
-              {formatOrderCreatedDateTime(order.createdAt)}
+              {formatInstantDateTime(order.createdAt)}
             </p>
             <MatchCoverageIndicator
+              autoCommitEnabled={autoCommitEnabled}
               lineCount={order.lines?.length ?? 0}
               matchCoverage={parseMatchCoverage(order.matchCoverage)}
               isTouchless={Boolean(order.isTouchless)}

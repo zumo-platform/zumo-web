@@ -1,4 +1,11 @@
 import type { Conversation, Message, Order } from "@/lib/dashboard-types";
+import {
+  calendarDayKeyInTimezone,
+  DEFAULT_SUPPLIER_TIMEZONE,
+  formatInstantDateTimeInTimezone,
+  formatInstantTimeInTimezone,
+  parseInstantIso,
+} from "@/lib/supplier-timezone";
 
 export async function backendGet<T>(path: string): Promise<T> {
   const res = await fetch(`/api/backend/${path}`, { cache: "no-store", credentials: "include" });
@@ -53,47 +60,45 @@ export function isRenderableThreadMessage(message: Message): boolean {
   return true;
 }
 
-/** Message bubble footer time — HH:mm */
-export function formatMessageTime(iso?: string | null): string {
+/** Message bubble footer time — HH:mm in supplier timezone */
+export function formatMessageTime(
+  iso?: string | null,
+  timeZone: string = DEFAULT_SUPPLIER_TIMEZONE,
+): string {
   if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false });
-  } catch {
-    return "";
-  }
+  return formatInstantTimeInTimezone(iso, timeZone);
 }
 
-function localDayKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  return `${String(y)}-${String(m)}-${String(day)}`;
-}
-
-export function conversationListTimeLabel(lastMessageAt: string | null | undefined): string {
+export function conversationListTimeLabel(
+  lastMessageAt: string | null | undefined,
+  timeZone: string = DEFAULT_SUPPLIER_TIMEZONE,
+): string {
   const raw = lastMessageAt?.trim();
   const fallback = "";
 
   try {
-    const d = raw ? new Date(raw) : null;
+    const d = raw ? parseInstantIso(raw) : null;
     if (!d || !Number.isFinite(d.getTime())) return fallback;
 
     const now = new Date();
-    const todayKey = localDayKey(now);
-    const y = new Date(now);
-    y.setDate(y.getDate() - 1);
-    const yesterdayKey = localDayKey(y);
-    const msgKey = localDayKey(d);
+    const todayKey = calendarDayKeyInTimezone(now, timeZone);
+    const yesterday = new Date(now);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayKey = calendarDayKeyInTimezone(yesterday, timeZone);
+    const msgKey = calendarDayKeyInTimezone(d, timeZone);
 
     if (msgKey === todayKey) {
-      return d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return formatInstantTimeInTimezone(raw, timeZone);
     }
     if (msgKey === yesterdayKey) return "Ayer";
 
-    const sameYear = d.getFullYear() === now.getFullYear();
+    const sameYear =
+      calendarDayKeyInTimezone(d, timeZone).slice(0, 4) ===
+      calendarDayKeyInTimezone(now, timeZone).slice(0, 4);
     const fmt = new Intl.DateTimeFormat("es", {
       day: "numeric",
       month: "short",
+      timeZone,
       ...(sameYear ? {} : { year: "numeric" }),
     });
     return fmt.format(d).replace(/\./g, "");
@@ -103,23 +108,31 @@ export function conversationListTimeLabel(lastMessageAt: string | null | undefin
 }
 
 /** Divider label above first message of a calendar day — Hoy / Ayer / weekday + date */
-export function messageDividerLabelForTimestamp(iso: string | undefined): string {
+export function messageDividerLabelForTimestamp(
+  iso: string | undefined,
+  timeZone: string = DEFAULT_SUPPLIER_TIMEZONE,
+): string {
   if (!iso) return "";
   try {
-    const d = new Date(iso);
-    if (!Number.isFinite(d.getTime())) return "";
+    const d = parseInstantIso(iso);
+    if (!d) return "";
 
     const now = new Date();
-    const todayKey = localDayKey(now);
-    const y = new Date(now);
-    y.setDate(y.getDate() - 1);
-    const yesterdayKey = localDayKey(y);
-    const msgKey = localDayKey(d);
+    const todayKey = calendarDayKeyInTimezone(now, timeZone);
+    const yesterday = new Date(now);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayKey = calendarDayKeyInTimezone(yesterday, timeZone);
+    const msgKey = calendarDayKeyInTimezone(d, timeZone);
 
     if (msgKey === todayKey) return "Hoy";
     if (msgKey === yesterdayKey) return "Ayer";
 
-    return new Intl.DateTimeFormat("es", { weekday: "long", day: "numeric", month: "short" }).format(d);
+    return new Intl.DateTimeFormat("es", {
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      timeZone,
+    }).format(d);
   } catch {
     return "";
   }
@@ -129,7 +142,10 @@ export type ThreadItem =
   | { kind: "divider"; key: string; label: string }
   | { kind: "message"; message: Message };
 
-export function buildMessageThreadItems(messages: readonly Message[]): ThreadItem[] {
+export function buildMessageThreadItems(
+  messages: readonly Message[],
+  timeZone: string = DEFAULT_SUPPLIER_TIMEZONE,
+): ThreadItem[] {
   const sorted = [...messages]
     .filter((msg) => isRenderableThreadMessage(msg))
     .sort((a, b) => {
@@ -143,12 +159,13 @@ export function buildMessageThreadItems(messages: readonly Message[]): ThreadIte
 
   for (const msg of sorted) {
     const created = msg.createdAt;
-    const d = created ? new Date(created) : null;
-    const dayKey = d && Number.isFinite(d.getTime()) ? localDayKey(d) : "";
+    const d = created ? parseInstantIso(created) : null;
+    const dayKey =
+      d && Number.isFinite(d.getTime()) ? calendarDayKeyInTimezone(d, timeZone) : "";
 
     if (dayKey && dayKey !== lastDayKey) {
       lastDayKey = dayKey;
-      const label = messageDividerLabelForTimestamp(created);
+      const label = messageDividerLabelForTimestamp(created, timeZone);
       if (label) out.push({ kind: "divider", key: `d-${dayKey}`, label });
     }
 
@@ -190,22 +207,11 @@ export function ordersForConversationDraftStates(
     });
 }
 
-export function formatOrderCreatedDateTime(iso?: string | null): string {
-  if (!iso?.trim()) return "—";
-  try {
-    const d = new Date(iso);
-    if (!Number.isFinite(d.getTime())) return "—";
-    return d.toLocaleString("es", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return "—";
-  }
+export function formatOrderCreatedDateTime(
+  iso?: string | null,
+  timeZone: string = DEFAULT_SUPPLIER_TIMEZONE,
+): string {
+  return formatInstantDateTimeInTimezone(iso, timeZone);
 }
 
 export function conversationPocName(conversation: Conversation): string {

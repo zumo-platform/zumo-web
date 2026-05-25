@@ -1,9 +1,12 @@
+"use client";
+
 import { useEffect, useRef } from "react";
 
 import type { LucideIcon } from "lucide-react";
 import { Loader2, MessageSquare } from "lucide-react";
 
 import type { Message } from "@/lib/dashboard-types";
+import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
 import { MessageBubble } from "./message-bubble";
 import { buildMessageThreadItems } from "./whatsapp-helpers";
@@ -49,6 +52,7 @@ export function MessageThread({
   messages: Message[];
   loading: boolean;
 }>) {
+  const { timeZone } = useWorkspacePreferences();
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollPaneRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -73,7 +77,7 @@ export function MessageThread({
     lastConversationIdRef.current = conversationId;
   }, [messages, conversationId]);
 
-  const items = buildMessageThreadItems(messages);
+  const items = buildMessageThreadItems(messages, timeZone);
   const showInitialLoader = loading && messages.length === 0;
 
   if (!conversationId) {

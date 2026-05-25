@@ -21,6 +21,8 @@ export type OrderLifecycleActionsProps = Readonly<{
   blocked?: boolean;
   blockedTitle?: string;
   disabled?: boolean;
+  deliveryDateValid?: boolean;
+  onBeforeAction?: () => Promise<boolean>;
   showEditLink?: boolean;
   onStatusChange?: (orderId: string, status: string, patch?: DashboardOrderPatch) => void;
   onRemoved?: (orderId: string) => void;
@@ -34,6 +36,8 @@ export function OrderLifecycleActions({
   blocked = false,
   blockedTitle,
   disabled = false,
+  deliveryDateValid = true,
+  onBeforeAction,
   showEditLink = true,
   onStatusChange,
   onRemoved,
@@ -43,10 +47,23 @@ export function OrderLifecycleActions({
   const [busy, setBusy] = useState<"convert" | "confirm" | "reject" | "delete" | null>(null);
 
   const isBusy = busy !== null;
-  const actionsDisabled = blocked || disabled || isBusy;
+  const actionsDisabled = blocked || disabled || isBusy || !deliveryDateValid;
+
+  const runWithPersist = useCallback(async (): Promise<boolean> => {
+    if (!deliveryDateValid) {
+      toast.error("Seleccioná una fecha de entrega válida (hoy o posterior).");
+      return false;
+    }
+    if (onBeforeAction) {
+      const ok = await onBeforeAction();
+      if (!ok) return false;
+    }
+    return true;
+  }, [deliveryDateValid, onBeforeAction]);
 
   const handleConvert = useCallback(async () => {
-    if (actionsDisabled || status !== "draft") return;
+    if (blocked || disabled || isBusy || status !== "draft") return;
+    if (!(await runWithPersist())) return;
     setBusy("convert");
     try {
       const updated = await convertDashboardOrderViaProxy(orderId);
@@ -61,10 +78,11 @@ export function OrderLifecycleActions({
     } finally {
       setBusy(null);
     }
-  }, [actionsDisabled, orderId, onStatusChange, status]);
+  }, [blocked, disabled, isBusy, orderId, onStatusChange, runWithPersist, status]);
 
   const handleConfirm = useCallback(async () => {
-    if (actionsDisabled || status !== "pending") return;
+    if (blocked || disabled || isBusy || status !== "pending") return;
+    if (!(await runWithPersist())) return;
     setBusy("confirm");
     try {
       await confirmDashboardOrderViaProxy(orderId);
@@ -76,7 +94,7 @@ export function OrderLifecycleActions({
     } finally {
       setBusy(null);
     }
-  }, [actionsDisabled, orderId, onDone, onStatusChange, status]);
+  }, [blocked, disabled, isBusy, orderId, onDone, onStatusChange, runWithPersist, status]);
 
   const handleRejectPending = useCallback(async () => {
     if (actionsDisabled || status !== "pending") return;
@@ -113,6 +131,11 @@ export function OrderLifecycleActions({
   }
 
   const inline = layout === "inline";
+  const lifecycleTitle = blocked
+    ? blockedTitle
+    : !deliveryDateValid
+      ? "Seleccioná una fecha de entrega válida (hoy o posterior)."
+      : undefined;
 
   if (status === "draft") {
     return (
@@ -122,7 +145,7 @@ export function OrderLifecycleActions({
             className={inline ? undefined : "w-full sm:w-auto"}
             disabled={actionsDisabled}
             size="sm"
-            title={blocked ? blockedTitle : undefined}
+            title={lifecycleTitle}
             type="button"
             variant="outline"
             onClick={() => void handleDeleteDraft()}
@@ -144,7 +167,7 @@ export function OrderLifecycleActions({
           className={inline ? undefined : "w-full"}
           disabled={actionsDisabled}
           size="sm"
-          title={blocked ? blockedTitle : undefined}
+          title={lifecycleTitle}
           type="button"
           onClick={() => void handleConvert()}
         >
@@ -165,7 +188,7 @@ export function OrderLifecycleActions({
         className="gap-1.5"
         disabled={actionsDisabled}
         size="sm"
-        title={blocked ? blockedTitle : undefined}
+        title={lifecycleTitle}
         type="button"
         variant="destructive"
         onClick={() => void handleRejectPending()}
@@ -186,7 +209,7 @@ export function OrderLifecycleActions({
         className="gap-1.5"
         disabled={actionsDisabled}
         size="sm"
-        title={blocked ? blockedTitle : undefined}
+        title={lifecycleTitle}
         type="button"
         onClick={() => void handleConfirm()}
       >
