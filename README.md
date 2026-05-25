@@ -1,6 +1,6 @@
 # Zumo Web
 
-Frontend for a **WhatsApp-first** ordering product for food & beverage suppliers: marketing site, distributor auth, and (planned) inbox / onboarding.
+Frontend for a **WhatsApp-first** ordering product for food & beverage suppliers: marketing site, distributor auth (Cognito), and workspace (WhatsApp inbox, orders, clients, settings).
 
 Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind CSS 4**, **pnpm**.
 
@@ -18,29 +18,30 @@ Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind C
 | **next-themes** | Theme switching |
 | **sonner** | Toasts |
 | **@tanstack/react-query** | Server/async state (queries & mutations) |
-| **next-auth** `5.0.0-beta.x` | Session/auth bridge (e.g. Cognito — wiring TBD) |
+| **Session cookies** + **Cognito** (via Route Handlers) | Sign-up, confirm, login, JWT proxy to API |
 
-## Product flows (target)
+## Product flows
 
-Backend pieces for signup / invites are **not all exposed on the HTTP API yet**; these flows describe the intended UX. Seller roles in Postgres are **`seller_role`**: `owner` \| `admin` \| `seller` (use **`owner`** for the first user on a new supplier — there is no separate `super_admin` enum value).
+Seller roles in Postgres are **`seller_role`**: `owner` \| `admin` \| `seller`.
 
-### Flow A — First-time supplier signup
+### Flow A — First-time supplier signup (live)
 
-1. User visits **`/signup`** (planned; today use **`/login?tab=signup`** for the placeholder UI).
-2. Collects **email**, **password**, **full name**, **supplier business name**.
-3. **Cognito** user is created (Hosted UI or app-initiated sign-up — TBD).
-4. Backend creates **`suppliers`** row (e.g. status **`pending_onboarding`** — align with `supplier_status` in DB).
-5. Backend creates **`sellers`** row: **`role: owner`**, new **`supplier_id`**.
-6. After login, user lands on **`/onboarding`** (planned): connect WhatsApp, add products, etc.
+1. User visits **`/login?tab=signup`**.
+2. Collects **email**, **password**, **full name**, **business name**, **phone** (country selector sets E.164 + **`custom:country`**).
+3. Cognito sign-up → email confirmation → post-confirmation creates **supplier** + **owner seller** (country/timezone on supplier).
+4. After login, workspace routes under **`/(platform)/(workspace)/`** (WhatsApp, orders, clients, settings).
 
-### Flow B — Invited user
+### Flow B — Invited user (planned)
 
-1. **`/settings/team`** (planned): super-user opens **Invite user**, enters **email** + **role** (`admin` \| `seller`).
-2. Backend inserts **`seller_invitations`** and sends email with magic link.
-3. Invitee opens **`/accept-invite?token=…`** (planned).
-4. Sets password / completes profile.
-5. Backend creates **Cognito** user + **`sellers`** row (**`supplier_id`** + **`role`** from invite).
-6. User lands on **`/whatsapp`** (workspace).
+Invite → accept link → Cognito user + seller row → workspace. Backend invitations not fully wired in UI yet.
+
+## Recent workspace features (2026-05)
+
+- **WhatsApp** — three-column UI, draft order sheet with editable lines, lifecycle actions (convert / confirm / reject).
+- **Orders** — catalog table with status filters, detail sheet, **`/orders/creation`** manual create (**delivery date required**, no past dates).
+- **Clients** — table + **`/clients/[customerId]`** detail (sidebar edits, orders/products/users tabs, product picker).
+- **Settings** — business profile, AI autocommit, locale; timezone loaded for all date/time display.
+- **Supplier timezone** — all order/message times shown in supplier IANA timezone (from settings), not browser or US server time. Instants without `Z` suffix are parsed as UTC before formatting.
 
 ## Zustand — good fits for Zumo
 
@@ -49,53 +50,48 @@ Backend pieces for signup / invites are **not all exposed on the HTTP API yet**;
 - Draft order editing before confirm
 - Shell UI (sidebar collapsed, panels open)
 - Optimistic reads (e.g. mark read immediately)
-- Coordinating real-time or polled inbox updates with minimal prop drilling
 
-Use **TanStack Query** for server-backed data (lists, detail, mutations); use **Zustand** for ephemeral UI and cross-component client state.
+Use **TanStack Query** for server-backed data; use **Zustand** for ephemeral UI state.
 
-## Repository structure (current)
+## Repository structure
 
 ```
 zumo-web/
 ├── src/
 │   ├── app/
-│   │   ├── (marketing)/[locale]/   # EN/ES marketing, privacy, terms
+│   │   ├── (marketing)/[locale]/       # EN/ES marketing, privacy, terms
 │   │   ├── (platform)/
-│   │   │   ├── (auth)/             # /login, /register → signup tab
-│   │   │   └── (workspace)/        # /inbox, /whatsapp, /orders, /clients, /profile
-│   │   ├── privacy/page.tsx        # → redirect /es/privacy
-│   │   ├── terms/page.tsx          # → redirect /es/terms
-│   │   ├── layout.tsx              # Root layout (fonts, toaster)
-│   │   └── page.tsx                # / → /es
+│   │   │   ├── (auth)/                 # /login, /register → signup tab
+│   │   │   └── (workspace)/            # authenticated shell
+│   │   │       ├── whatsapp/
+│   │   │       ├── orders/             # list, creation, [orderId]/edit (placeholder)
+│   │   │       ├── clients/            # list + [customerId] detail
+│   │   │       ├── settings/
+│   │   │       └── layout.tsx          # loads settings → WorkspacePreferencesProvider
+│   │   ├── api/
+│   │   │   ├── auth/                   # signup, login, confirm, logout
+│   │   │   └── backend/[...path]/      # JWT proxy to API Gateway
+│   │   └── layout.tsx
 │   ├── components/
-│   │   ├── auth/                   # Sign-in / sign-up tabs (UI only until API + NextAuth)
+│   │   ├── auth/
 │   │   ├── marketing/
-│   │   ├── typography/
+│   │   ├── whatsapp/
+│   │   ├── workspace/
 │   │   └── ui/
-│   ├── content/marketing/
-│   ├── hooks/
-│   └── lib/                        # e.g. marketing locale helpers
-├── public/
+│   ├── lib/
+│   │   ├── supplier-timezone.ts        # parseInstantIso + format in supplier TZ
+│   │   ├── workspace-preferences-context.tsx
+│   │   ├── dashboard-orders.ts
+│   │   ├── dashboard-customers.ts
+│   │   └── api.ts
+│   └── content/marketing/
 └── package.json
 ```
 
-### Target layout (in progress)
-
-Not all paths exist yet; planned additions:
-
-| Area | Purpose |
-|------|---------|
-| **`src/app/(platform)/layout.tsx`** | Auth gate + shared shell (sidebar) |
-| **`src/app/(platform)/(workspace)/whatsapp/page.tsx`** | Three-column WhatsApp conversations UI |
-| **`src/app/(platform)/(workspace)/inbox/page.tsx`** | Inbox placeholder (future unified inbox) |
-| **`src/components/whatsapp/`** | e.g. `conversation-list`, `thread-view`, `draft-order-panel` |
-| **`src/lib/auth.ts`** | Auth.js / Cognito configuration |
-| **`src/lib/api.ts`** | Typed **`fetch`** helper for **`NEXT_PUBLIC_API_URL`** |
-
 ## Prerequisites
 
-- **Node.js 24** (or whatever you standardize on)
-- **pnpm v10** (`packageManager` in `package.json`)
+- **Node.js 24**
+- **pnpm v10**
 
 ## Setup & installation
 
@@ -103,20 +99,14 @@ Not all paths exist yet; planned additions:
 pnpm install
 ```
 
-If pnpm aborts when recreating `node_modules` in non-interactive environments:
-
-```bash
-CI=true pnpm install
-```
-
 ## Development
 
 ```bash
 pnpm dev          # http://localhost:3000 — webpack (recommended default)
-pnpm dev:turbo    # Turbopack (faster; can be picky with pnpm + Radix)
+pnpm dev:turbo    # Turbopack
 ```
 
-Run only **one** `next dev` per clone. If you see **Unable to acquire lock** under `.next/dev/`, stop the other process, remove `.next/dev/lock` if needed, and restart.
+Run only **one** `next dev` per clone.
 
 ## Main routes
 
@@ -124,10 +114,14 @@ Run only **one** `next dev` per clone. If you see **Unable to acquire lock** und
 |------|---------|
 | `/` | Redirect → `/es` |
 | `/en`, `/es` | Marketing |
-| `/privacy`, `/terms` | Redirect → `/es/privacy`, `/es/terms` |
 | `/login` | Sign in / sign up (`?tab=signup`) |
-| `/register` | Redirect → `/login?tab=signup` |
-| `/inbox`, `/whatsapp`, `/orders`, `/clients`, `/profile` | Workspace (inbox placeholder, WhatsApp, orders, clients, profile) |
+| `/whatsapp` | WhatsApp inbox + draft orders |
+| `/orders` | Orders catalog (filters, detail sheet, inline confirm/convert) |
+| `/orders/creation` | Manual order create (delivery date required) |
+| `/clients` | Customer list |
+| `/clients/[customerId]` | Customer detail (sidebar, tabs) |
+| `/settings` | Business + AI settings |
+| `/profile` | Seller profile |
 
 ## Build & production
 
@@ -138,14 +132,20 @@ pnpm start
 
 ## Environment variables
 
-Use **`.env.local`** at the repo root (`cp .env.example .env.local`).
+Use **`.env.local`** (`cp .env.example .env.local`).
 
-**Cognito signup/login** Route Handlers need **`AWS_REGION`**, a **Cognito app client id** (`COGNITO_USER_POOL_CLIENT_ID` or **`NEXT_PUBLIC_COGNITO_CLIENT_ID`** — same value SST sets for `packages/dashboard`), and **`AWS_PROFILE`** so the server SDK can assume the same SSO profile as your CLI (`aws sso login --profile zumo-dev`).
+| Variable | Role |
+|----------|------|
+| **`NEXT_PUBLIC_API_URL`** | HTTP API base (API Gateway) — server proxy also uses this |
+| **`COGNITO_USER_POOL_CLIENT_ID`** or **`NEXT_PUBLIC_COGNITO_CLIENT_ID`** | Cognito app client (same as SST dashboard client) |
+| **`AWS_REGION`** | Cognito SDK region (default `us-east-2`) |
+| **`AWS_PROFILE`** | SSO profile for Cognito Route Handlers (`zumo-dev`) |
 
-Examples as integrations land:
+Sign in to AWS before local auth API calls:
 
-- **`NEXT_PUBLIC_API_URL`** — HTTP API base (API Gateway)
-- Cognito / Auth.js variables (pool id, client id, secret, issuer — follow **`next-auth`** v5 + provider docs)
+```bash
+aws sso login --profile zumo-dev
+```
 
 ## Linting
 
@@ -154,8 +154,6 @@ pnpm lint
 pnpm lint:fix
 pnpm lint:ci
 ```
-
-Import order uses **`eslint-plugin-import`** (groups + alphabetization).
 
 ## Contributing
 
@@ -166,8 +164,10 @@ Early-stage repo — prefer small, reviewable changes.
 - **`main`** → production
 - **`develop`** → integration
 
-Branch naming: `feat/…`, `fix/…`, `chore/…` from **`develop`**; squash-merge PRs; promote **`develop`** → **`main`** for releases.
+Branch naming: `feat/…`, `fix/…`, `chore/…` from **`develop`**; squash-merge PRs.
 
 ### Commit messages
 
 **Conventional Commits** (enforced via hooks): `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, etc.
+
+Session history for cross-repo milestones: see **`zumo-backend/journal.md`**.
