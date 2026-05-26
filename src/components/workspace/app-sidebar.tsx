@@ -12,6 +12,7 @@ import {
   Package,
   Settings,
   ShoppingCart,
+  Sparkles,
   Store,
   Tag,
   Users,
@@ -68,8 +69,9 @@ const mainNav: NavItem[] = [
     icon: Calendar,
     label: "Calendario",
   },
-  { href: "/clients", icon: Store, label: "Clientes" },
   { href: "/products", icon: Package, label: "Inventario" },
+  { href: "/matches", icon: Sparkles, label: "Matches" },
+  { href: "/clients", icon: Store, label: "Clientes" },
   {
     disabled: true,
     tooltip: "Pronto",
