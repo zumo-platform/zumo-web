@@ -221,12 +221,20 @@ export function conversationPocName(conversation: Conversation): string {
   return phone || "Contacto";
 }
 
-/** Orders considered “confirmed” lifecycle for último pedido (not draft/pending). */
-export const POST_CONFIRM_STATUSES = new Set(["in_progress", "in_route", "delivered", "cancelled"]);
+/** Orders past draft/pending — used for último pedido and total de pedidos. */
+export const CONFIRMED_ORDER_STATUSES = new Set([
+  "confirmed",
+  "in_progress",
+  "in_route",
+  "delivered",
+]);
+
+/** @deprecated use CONFIRMED_ORDER_STATUSES */
+export const POST_CONFIRM_STATUSES = CONFIRMED_ORDER_STATUSES;
 
 export function computeCustomerOrderStats(customerId: number, orders: readonly Order[]) {
   const forCustomer = orders.filter((o) => o.customerId === customerId);
-  const confirmed = forCustomer.filter((o) => POST_CONFIRM_STATUSES.has(o.status));
+  const confirmed = forCustomer.filter((o) => CONFIRMED_ORDER_STATUSES.has(o.status));
   confirmed.sort((a, b) => {
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -234,10 +242,17 @@ export function computeCustomerOrderStats(customerId: number, orders: readonly O
   });
   const latest = confirmed[0];
   return {
-    total: forCustomer.length,
+    total: confirmed.length,
     latestConfirmedCreatedAt: latest?.createdAt ?? null,
     hasHistoricalConfirmed: confirmed.length > 0,
   };
+}
+
+/** Draft/pending extracted orders still awaiting seller review. */
+export function countUnreviewedExtractedOrders(orders: readonly Order[]): number {
+  return orders.filter(
+    (o) => o.status === "pending" || (o.status === "draft" && !o.seenAt),
+  ).length;
 }
 
 export function lastOrderSpanishRelativeDays(iso: string | null): string | null {

@@ -1,8 +1,13 @@
 export type LegalBlock =
   | { kind: "p"; text: string }
-  | { kind: "ul"; items: string[] };
+  | { kind: "ul"; items: string[] }
+  | { kind: "ol"; items: string[] }
+  | { kind: "h3"; text: string }
+  | { kind: "callout"; variant: "info" | "warning"; title?: string; text: string }
+  | { kind: "table"; headers: string[]; rows: string[][] };
 
 export type LegalSection = {
+  id: string;
   heading: string;
   blocks: LegalBlock[];
 };
@@ -11,7 +16,10 @@ export type LegalDocument = {
   metaTitle: string;
   metaDescription: string;
   title: string;
-  updatedLabel: string;
+  label: string;
+  effectiveDate: string;
+  lastUpdated: string;
+  tocTitle: string;
   sections: LegalSection[];
 };
 

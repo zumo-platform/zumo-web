@@ -103,8 +103,8 @@ export function SettingsBusinessView({
           <h3 className="mb-4 font-medium text-sm">Idioma</h3>
           <div className="space-y-3">
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Idioma predeterminado del panel para tu equipo. Las traducciones completas del
-              panel se irán aplicando progresivamente.
+              Idioma predeterminado para tu equipo, el panel y las respuestas del asistente
+              de pedidos por WhatsApp (clasificación, extracción y mensajes al cliente).
             </p>
             <Tooltip>
               <TooltipTrigger asChild>

@@ -14,6 +14,7 @@ import { DraftOrderSheet } from "./draft-order-sheet";
 import { UnknownCustomerBanner } from "./unknown-customer-banner";
 import {
   conversationPocName,
+  countUnreviewedExtractedOrders,
   isUnknownConversationCustomer,
   ordersForConversationDraftStates,
 } from "./whatsapp-helpers";
@@ -63,6 +64,7 @@ export function InformationPanel({
   }
 
   const draftOrPending = ordersForConversationDraftStates(orders, conversation.conversationId);
+  const unreviewedExtracted = countUnreviewedExtractedOrders(draftOrPending);
   const unknown = isUnknownConversationCustomer(conversation);
   const pocName = conversationPocName(conversation);
 
@@ -90,7 +92,8 @@ export function InformationPanel({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
           <div className="shrink-0 px-4 pt-3 pb-2">
             <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-              Pedidos extraídos
+              Pedidos extraídos{" "}
+              <span className="tabular-nums">({unreviewedExtracted})</span>
             </p>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">

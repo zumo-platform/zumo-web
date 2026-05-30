@@ -72,7 +72,7 @@ export default async function MarketingHomePage({ params }: PageProps) {
           {messages.home.heroAfterZumo}
         </h1>
 
-        <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground md:text-xl">
+        <p className="mx-auto mt-6 max-w-3xl whitespace-pre-line text-lg text-muted-foreground md:text-xl">
           {messages.home.subhead}
         </p>
 

@@ -26,7 +26,7 @@ export const marketingMessagesEn = {
     heroAfterWhatsAppBeforeZumo: ". ",
     heroAfterZumo: "handles the rest.",
     subhead:
-      "Zumo turns WhatsApp conversations into structured, confirmed orders automatically. Built for food & beverage distributors in Latin America.",
+      "Zumo turns WhatsApp conversations into structured, confirmed orders automatically.\nBuilt for food & beverage distributors in Latin America.",
     ctaPrimary: "Request access",
     ctaSecondary: "See how it works",
     howEyebrow: "How it works",

@@ -2,7 +2,6 @@
 
 import { Clock, MessageCircle, Pencil, Trash2 } from "lucide-react";
 
-import { ZumoIsotype } from "@/components/branding/zumo-logos";
 import { Button } from "@/components/ui/button";
 import type { DashboardMatchItem } from "@/lib/dashboard-matches";
 import { cn } from "@/lib/utils";
@@ -25,7 +24,6 @@ export function MatchRow({
   return (
     <article className="group rounded-lg border bg-card shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-center gap-3 border-b px-4 py-3">
-        <ZumoIsotype className="size-6 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             {item.product.sku ? (

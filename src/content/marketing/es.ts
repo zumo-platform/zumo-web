@@ -27,7 +27,7 @@ export const marketingMessagesEs = {
     heroAfterWhatsAppBeforeZumo: ". ",
     heroAfterZumo: "hace el resto.",
     subhead:
-      "Zumo convierte las conversaciones de WhatsApp en pedidos confirmados y estructurados automáticamente. Pensado para distribuidores de alimentos y bebidas en Latinoamérica.",
+      "Zumo convierte las conversaciones de WhatsApp en pedidos confirmados y estructurados automáticamente.\nPensado para distribuidores de alimentos y bebidas en Latinoamérica.",
     ctaPrimary: "Solicitar acceso",
     ctaSecondary: "Ver cómo funciona",
     howEyebrow: "Cómo funciona",
@@ -62,7 +62,7 @@ export const marketingMessagesEs = {
         "Pedidos estructurados con SKUs reales, listos para sincronizar con tu ERP o contabilidad.",
       ],
     ],
-    ctaTitle: "¿Listos para ordenar los pedidos por WhatsApp?",
+    ctaTitle: "¿Listo para ordenar los pedidos por WhatsApp?",
     ctaSub:
       "Actualmente incorporamos de forma selecta a distribuidores en Costa Rica y Latinoamérica.",
     ctaButton: "Solicitar acceso anticipado",

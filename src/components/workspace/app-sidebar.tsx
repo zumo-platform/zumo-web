@@ -8,6 +8,7 @@ import {
   Inbox,
   Loader2,
   LogOut,
+  Megaphone,
   MessageSquare,
   Package,
   Settings,
@@ -84,6 +85,7 @@ const mainNav: NavItem[] = [
     icon: Users,
     label: "Vendedores",
   },
+  { href: "/marketing", icon: Megaphone, label: "Marketing" },
 ];
 
 export function AppSidebar({
