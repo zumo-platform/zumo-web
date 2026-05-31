@@ -1,88 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ProductUploadSheets } from "@/components/workspace/product-upload-sheets";
 import { ProductsCatalogTable } from "@/components/workspace/products-catalog-table";
 import { ProductsHeaderActions } from "@/components/workspace/products-header-actions";
 import { ProductsPageHeader } from "@/components/workspace/products-page-header";
+import { activeProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import {
-  activeProducts,
-  parseDashboardProductsEnvelope,
-  type DashboardProductRow,
-} from "@/lib/dashboard-products";
+  invalidateProductsCatalogCache,
+  loadProductsCatalog,
+  readCachedProducts,
+} from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
 import {
   workspaceContentInnerClassName,
   workspaceContentOuterClassName,
 } from "@/lib/workspace-layout";
 
-async function fetchProductsFromProxy(): Promise<{ ok: true; rows: DashboardProductRow[] } | { ok: false }> {
-  const path = "/api/backend/dashboard/products";
-  const url = `${window.location.origin}${path}`;
+export function ProductsExperience() {
+  const cachedOnMount = readCachedProducts();
+  const [rows, setRows] = useState<DashboardProductRow[] | null>(() => cachedOnMount);
+  const [ready, setReady] = useState(() => cachedOnMount !== null);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetch(url, {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok) {
-        return { ok: true, rows: parseDashboardProductsEnvelope(body) };
-      }
-    } catch {
-      /* retry */
-    }
-    if (attempt === 0) {
-      await new Promise((r) => setTimeout(r, 350));
-    }
-  }
-  return { ok: false };
-}
-
-export function ProductsExperience({
-  initialProducts,
-}: Readonly<{
-  /** SSR result: `null` = server could not reach API; client retries via `/api/backend`. */
-  initialProducts: DashboardProductRow[] | null;
-}>) {
-  const router = useRouter();
-  const hydratedFromSSR = initialProducts !== null;
-
-  const [clientRows, setClientRows] = useState<DashboardProductRow[] | undefined>(() =>
-    hydratedFromSSR ? (initialProducts ?? []) : undefined,
-  );
+  const refreshCatalog = useCallback(async (force = false) => {
+    const data = await loadProductsCatalog(force ? { force: true } : undefined);
+    setRows(data);
+    setReady(true);
+    return data;
+  }, []);
 
   useEffect(() => {
-    if (initialProducts !== null) return;
-
     let cancelled = false;
     void (async () => {
-      const result = await fetchProductsFromProxy();
-      if (cancelled) return;
-      if (result.ok) {
-        setClientRows(result.rows);
-      } else {
-        setClientRows([]);
+      const data = await loadProductsCatalog();
+      if (!cancelled) {
+        setRows(data);
+        setReady(true);
       }
     })();
-
     return () => {
       cancelled = true;
     };
-  }, [initialProducts]);
+  }, []);
 
-  const pendingClient = !hydratedFromSSR && clientRows === undefined;
+  const handleCatalogChanged = useCallback(() => {
+    invalidateProductsCatalogCache();
+    void refreshCatalog(true);
+  }, [refreshCatalog]);
 
-  if (pendingClient) {
+  if (!ready || rows === null) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
-        <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground text-sm">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground text-sm">
           <Loader2 aria-hidden className="size-5 animate-spin" />
           Cargando inventario…
         </div>
@@ -90,11 +63,7 @@ export function ProductsExperience({
     );
   }
 
-  const catalog: DashboardProductRow[] = hydratedFromSSR
-    ? (initialProducts ?? [])
-    : (clientRows ?? []);
-
-  const visible = activeProducts(catalog);
+  const visible = activeProducts(rows);
 
   if (visible.length === 0) {
     return (
@@ -111,9 +80,7 @@ export function ProductsExperience({
             Cualquier precio incluido solo será visible para los clientes que usted defina.
           </p>
           <ProductUploadSheets
-            onProductsChanged={() => {
-              router.refresh();
-            }}
+            onProductsChanged={handleCatalogChanged}
             renderTrigger={({ open }) => (
               <Button className="mt-10 px-8" size="lg" type="button" onClick={open}>
                 Ingresar productos
@@ -125,20 +92,6 @@ export function ProductsExperience({
     );
   }
 
-  const catalogBody = (
-    <div className={cn(workspaceContentInnerClassName, "gap-4")}>
-      <header className="shrink-0 pb-4">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">Inventario</h2>
-        <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
-          Listado sincronizado con el servidor: foto, inventario, precio y categorías según tus datos.
-        </p>
-      </header>
-      <div className="min-h-0 flex-1 overflow-auto pb-6">
-        <ProductsCatalogTable data={visible} onCatalogChanged={() => router.refresh()} />
-      </div>
-    </div>
-  );
-
   const listDescription =
     visible.length > 1
       ? `Tenés ${visible.length} ítems en inventario. Listado sincronizado con el servidor; la edición de filas desde el panel llegará próximamente.`
@@ -147,12 +100,22 @@ export function ProductsExperience({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <ProductsPageHeader
-        actions={<ProductsHeaderActions onProductsChanged={() => router.refresh()} />}
+        actions={<ProductsHeaderActions onProductsChanged={handleCatalogChanged} />}
         description={listDescription}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <div className={cn("flex min-h-0 flex-1 overflow-auto", workspaceContentOuterClassName)}>
-          {catalogBody}
+          <div className={cn(workspaceContentInnerClassName, "gap-4")}>
+            <header className="shrink-0 pb-4">
+              <h2 className="font-semibold text-base tracking-tight text-foreground">Inventario</h2>
+              <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
+                Listado sincronizado con el servidor: foto, inventario, precio y categorías según tus datos.
+              </p>
+            </header>
+            <div className="min-h-0 flex-1 overflow-auto pb-6">
+              <ProductsCatalogTable data={visible} onCatalogChanged={handleCatalogChanged} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

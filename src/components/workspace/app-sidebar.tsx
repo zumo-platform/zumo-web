@@ -38,6 +38,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import type { SellerMe } from "@/lib/dashboard-types";
+import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
 
 function initials(name: string): string {
@@ -160,7 +161,14 @@ export function AppSidebar({
                           "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
                       )}
                     >
-                      <Link href={item.href}>
+                      <Link
+                        href={item.href}
+                        prefetch
+                        onMouseEnter={() => {
+                          router.prefetch(item.href);
+                          if (item.href === "/products") prefetchInventoryWorkspaceData();
+                        }}
+                      >
                         <Icon />
                         <span>{item.label}</span>
                       </Link>

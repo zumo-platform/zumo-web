@@ -33,6 +33,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatProductStockLabel, type DashboardProductRow } from "@/lib/dashboard-products";
+import {
+  loadProductCategoryMap,
+  readCachedProductCategories,
+} from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
 
 function formatPriceLabel(price: string | null): string {
@@ -43,26 +47,6 @@ function formatPriceLabel(price: string | null): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(num);
-}
-
-async function fetchCategoryNameMap(): Promise<Map<number, string>> {
-  const res = await fetch("/api/backend/dashboard/product-categories", {
-    cache: "no-store",
-    credentials: "include",
-  });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  const map = new Map<number, string>();
-  if (!res.ok) return map;
-  const raw = data.categories;
-  if (!Array.isArray(raw)) return map;
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    const id = typeof o.categoryId === "number" ? o.categoryId : Number(o.categoryId);
-    const name = typeof o.name === "string" ? o.name.trim() : "";
-    if (Number.isFinite(id) && id >= 1 && name.length) map.set(id, name);
-  }
-  return map;
 }
 
 async function patchProductAvailability(productId: number, available: boolean): Promise<boolean> {
@@ -124,7 +108,10 @@ export function ProductsCatalogTable({
   onCatalogChanged: () => void;
 }>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [categoryById, setCategoryById] = useState<Map<number, string>>(() => new Map());
+  const [categoryById, setCategoryById] = useState<Map<number, string>>(() => {
+    const cached = readCachedProductCategories();
+    return cached ? new Map(cached) : new Map();
+  });
   const [pendingDelete, setPendingDelete] = useState<DashboardProductRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -132,10 +119,11 @@ export function ProductsCatalogTable({
 
   useEffect(() => {
     if (!productIdsKey) return;
+    if (readCachedProductCategories()) return;
     let cancelled = false;
     void (async () => {
-      const map = await fetchCategoryNameMap();
-      if (!cancelled) setCategoryById(map);
+      const map = await loadProductCategoryMap();
+      if (!cancelled) setCategoryById(new Map(map));
     })();
     return () => {
       cancelled = true;

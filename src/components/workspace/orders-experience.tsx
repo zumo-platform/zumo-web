@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 
 import { Loader2, Package, Plus } from "lucide-react";
 import Link from "next/link";
@@ -15,76 +15,34 @@ import { OrdersPageHeader } from "@/components/workspace/orders-page-header";
 import { OrdersToolbar } from "@/components/workspace/orders-toolbar";
 import { parseDashboardCustomersEnvelope, type DashboardCustomerRow } from "@/lib/dashboard-customers";
 import {
-  DASHBOARD_ORDER_STATUSES,
   DEFAULT_ORDER_STATUS_FILTER,
   ORDERS_VIEW_STORAGE_KEY,
-  mergeAndSortOrders,
   normalizeOrderSearchText,
   orderStatusFilterToParam,
-  parseDashboardOrdersEnvelope,
   parseOrderStatusFilter,
   parseOrdersViewMode,
   type DashboardOrderListRow,
   type DashboardOrderPatch,
-  type DashboardOrdersFetchResult,
   type OrdersViewMode,
 } from "@/lib/dashboard-orders";
 import {
   buildDefaultFlowItems,
   fetchSupplierFlow,
-  flowToFilterOptions,
+  flowToBoardColumns,
   type EffectiveStatusItem,
 } from "@/lib/order-status-flow";
+import {
+  loadCustomersList,
+  loadOrdersCatalog,
+  readCachedCustomers,
+  readCachedOrders,
+} from "@/lib/orders-catalog-cache";
+import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
 import {
   workspaceContentInnerClassName,
   workspaceContentOuterClassName,
 } from "@/lib/workspace-layout";
-
-async function fetchOrdersFromProxy(
-  statuses: readonly string[],
-): Promise<DashboardOrdersFetchResult> {
-  const origin = window.location.origin;
-  const statusList = statuses.length > 0 ? statuses : [...DASHBOARD_ORDER_STATUSES];
-
-  const chunks = await Promise.all(
-    statusList.map(async (status) => {
-      const url = `${origin}/api/backend/dashboard/orders?status=${encodeURIComponent(status)}`;
-      try {
-        const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) return null;
-        return parseDashboardOrdersEnvelope(body);
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  const flat: DashboardOrderListRow[] = [];
-  let anySuccess = false;
-  for (const chunk of chunks) {
-    if (chunk) {
-      anySuccess = true;
-      flat.push(...chunk);
-    }
-  }
-
-  if (!anySuccess) return { ok: false };
-  return { ok: true, orders: mergeAndSortOrders(flat) };
-}
-
-async function fetchCustomersFromProxy(): Promise<{ ok: true; rows: DashboardCustomerRow[] } | { ok: false }> {
-  const url = `${window.location.origin}/api/backend/dashboard/customers`;
-  try {
-    const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false };
-    return { ok: true, rows: parseDashboardCustomersEnvelope(body) };
-  } catch {
-    return { ok: false };
-  }
-}
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -99,21 +57,20 @@ function readInitialViewMode(searchParams: URLSearchParams): OrdersViewMode {
   return parseOrdersViewMode(searchParams.get("view"));
 }
 
-export function OrdersExperience({
-  initialOrdersResult,
-  initialCustomers,
-  initialStatusFilter,
-}: Readonly<{
-  initialOrdersResult: DashboardOrdersFetchResult;
-  initialCustomers: DashboardCustomerRow[] | null;
-  initialStatusFilter: string[];
-}>) {
+export function OrdersExperience() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const hydratedCustomers = initialCustomers !== null;
   const [, startTransition] = useTransition();
 
-  const [supplierFlow, setSupplierFlow] = useState<EffectiveStatusItem[]>([]);
+  const defaultBoardKeys = useMemo(
+    () => flowToBoardColumns(buildDefaultFlowItems()).map((column) => column.key),
+    [],
+  );
+  const cachedOrdersOnMount = readCachedOrders(defaultBoardKeys);
+  const cachedCustomersOnMount = readCachedCustomers();
+
+  const [supplierFlow, setSupplierFlow] = useState<EffectiveStatusItem[]>(() => buildDefaultFlowItems());
+  const [flowReady, setFlowReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") ?? "");
   const [deliveryDateFilter, setDeliveryDateFilter] = useState("");
   const [viewMode, setViewMode] = useState<OrdersViewMode>(() => readInitialViewMode(searchParams));
@@ -128,42 +85,74 @@ export function OrdersExperience({
   const statusFilter = useMemo((): string[] => {
     const raw = searchParams.get("status");
     if (raw !== null) return parseOrderStatusFilter(raw);
-    return initialStatusFilter.length > 0
-      ? [...initialStatusFilter]
-      : [...DEFAULT_ORDER_STATUS_FILTER];
-  }, [searchParams, initialStatusFilter]);
+    return [...DEFAULT_ORDER_STATUS_FILTER];
+  }, [searchParams]);
 
-  const fetchStatusKeys = useMemo((): string[] => {
-    if (supplierFlow.length > 0) {
-      return flowToFilterOptions(supplierFlow).map((o) => o.value);
-    }
-    return [...DASHBOARD_ORDER_STATUSES];
-  }, [supplierFlow]);
-
-  const [orders, setOrders] = useState<DashboardOrderListRow[]>(() =>
-    initialOrdersResult.ok ? initialOrdersResult.orders : [],
+  const boardStatusKeys = useMemo(
+    () => flowToBoardColumns(supplierFlow).map((column) => column.key),
+    [supplierFlow],
   );
-  const [ordersFetchFailed, setOrdersFetchFailed] = useState(() => !initialOrdersResult.ok);
-  const [ordersReady, setOrdersReady] = useState(() => initialOrdersResult.ok);
-  const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | undefined>(() =>
-    hydratedCustomers ? (initialCustomers ?? []) : undefined,
+
+  const [orders, setOrders] = useState<DashboardOrderListRow[]>(() => cachedOrdersOnMount ?? []);
+  const [ordersFetchFailed, setOrdersFetchFailed] = useState(false);
+  const [ordersReady, setOrdersReady] = useState(() => cachedOrdersOnMount !== null);
+  const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | null>(
+    () => cachedCustomersOnMount,
   );
   const [customersFetchFailed, setCustomersFetchFailed] = useState(false);
-  const [refetching, setRefetching] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void fetchSupplierFlow()
       .then(({ flow }) => {
-        if (!cancelled) setSupplierFlow(flow.length > 0 ? flow : buildDefaultFlowItems());
+        if (!cancelled) {
+          setSupplierFlow(flow.length > 0 ? flow : buildDefaultFlowItems());
+        }
       })
       .catch(() => {
         if (!cancelled) setSupplierFlow(buildDefaultFlowItems());
+      })
+      .finally(() => {
+        if (!cancelled) setFlowReady(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!flowReady) return;
+    let cancelled = false;
+
+    void (async () => {
+      const [ordersResult, customers] = await Promise.all([
+        loadOrdersCatalog(boardStatusKeys),
+        loadCustomersList(),
+      ]);
+      if (cancelled) return;
+
+      if (ordersResult.ok) {
+        setOrdersFetchFailed(false);
+        setOrders(ordersResult.orders);
+      } else {
+        setOrdersFetchFailed(true);
+        setOrders([]);
+      }
+      setOrdersReady(true);
+
+      if (customers) {
+        setCustomersFetchFailed(false);
+        setCustomerRows(customers);
+      } else {
+        setCustomersFetchFailed(true);
+        setCustomerRows([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [flowReady, boardStatusKeys.join(",")]);
 
   const replaceSearchParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -181,12 +170,18 @@ export function OrdersExperience({
   }, [urlView]);
 
   useEffect(() => {
+    prefetchInventoryWorkspaceData();
+  }, []);
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    const current = searchParams.get("q") ?? "";
+    if (q === current) return;
     replaceSearchParams((params) => {
-      const q = debouncedQuery.trim();
       if (q) params.set("q", q);
       else params.delete("q");
     });
-  }, [debouncedQuery, replaceSearchParams]);
+  }, [debouncedQuery, replaceSearchParams, searchParams]);
 
   const handleViewChange = useCallback(
     (next: OrdersViewMode) => {
@@ -214,84 +209,7 @@ export function OrdersExperience({
     [replaceSearchParams],
   );
 
-  const loadedFetchKeysRef = useRef<string>("");
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const tasks: Promise<void>[] = [];
-
-      if (!initialOrdersResult.ok) {
-        tasks.push(
-          (async () => {
-            const result = await fetchOrdersFromProxy(fetchStatusKeys);
-            if (cancelled) return;
-            if (result.ok) {
-              setOrdersFetchFailed(false);
-              setOrders(result.orders);
-              loadedFetchKeysRef.current = fetchStatusKeys.join(",");
-            } else {
-              setOrdersFetchFailed(true);
-              setOrders([]);
-            }
-            setOrdersReady(true);
-          })(),
-        );
-      }
-
-      if (!hydratedCustomers) {
-        tasks.push(
-          (async () => {
-            const customersResult = await fetchCustomersFromProxy();
-            if (cancelled) return;
-            if (customersResult.ok) {
-              setCustomersFetchFailed(false);
-              setCustomerRows(customersResult.rows);
-            } else {
-              setCustomersFetchFailed(true);
-              setCustomerRows([]);
-            }
-          })(),
-        );
-      }
-
-      if (tasks.length === 0) return;
-      await Promise.all(tasks);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchStatusKeys, hydratedCustomers, initialOrdersResult.ok]);
-
-  useEffect(() => {
-    const keySignature = fetchStatusKeys.join(",");
-    if (loadedFetchKeysRef.current === keySignature) return;
-
-    let cancelled = false;
-    setRefetching(true);
-    void fetchOrdersFromProxy(fetchStatusKeys).then((result) => {
-      if (cancelled) return;
-      setRefetching(false);
-      if (result.ok) {
-        setOrdersFetchFailed(false);
-        setOrders(result.orders);
-        loadedFetchKeysRef.current = keySignature;
-        setOrdersReady(true);
-      } else {
-        setOrdersFetchFailed(true);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchStatusKeys]);
-
-  const customerList = useMemo((): DashboardCustomerRow[] | undefined => {
-    if (!hydratedCustomers && customerRows === undefined) return undefined;
-    return hydratedCustomers ? (initialCustomers ?? []) : (customerRows ?? []);
-  }, [hydratedCustomers, initialCustomers, customerRows]);
+  const customerList = customerRows;
 
   const customerNameById = useMemo(() => {
     if (!customerList) return new Map<number, string>();
@@ -373,7 +291,7 @@ export function OrdersExperience({
     );
   }, []);
 
-  const pendingClient = !ordersReady || customerList === undefined;
+  const pendingClient = !ordersReady || customerList === null;
 
   if (pendingClient) {
     return (
@@ -457,12 +375,6 @@ export function OrdersExperience({
             {hasAnyOrders && !ordersFetchFailed ? (
               <div className="flex min-h-0 flex-1 flex-col gap-4">
                 <header className="shrink-0 space-y-3">
-                  {refetching ? (
-                    <div className="flex justify-end">
-                      <Loader2 aria-hidden className="size-4 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : null}
-
                   <OrdersToolbar
                     deliveryDateFilter={deliveryDateFilter}
                     resultCount={searchFilteredOrders.length}
