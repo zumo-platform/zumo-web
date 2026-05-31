@@ -18,6 +18,8 @@ Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind C
 | **next-themes** | Theme switching |
 | **sonner** | Toasts |
 | **@tanstack/react-query** | Server/async state (queries & mutations) |
+| **@dnd-kit/core** | Kanban drag-and-drop on `/orders` board view |
+| **@tanstack/react-virtual** | Row virtualization for large order/client tables |
 | **Session cookies** + **Cognito** (via Route Handlers) | Sign-up, confirm, login, JWT proxy to API |
 
 ## Product flows
@@ -38,9 +40,13 @@ Invite → accept link → Cognito user + seller row → workspace. Backend invi
 ## Recent workspace features (2026-05)
 
 - **WhatsApp** — three-column UI, draft order sheet with editable lines, lifecycle actions (convert / confirm / reject).
-- **Orders** — catalog table with status filters, detail sheet, **`/orders/creation`** manual create (**delivery date required**, no past dates).
+- **Orders** — **Lista / Kanban** toggle on `/orders` (`?view=list|board`, `?q=` search); drag-to-move between flow columns; unified search + delivery date filter; detail sheet; **`/orders/creation`** manual create (**delivery date required**).
+- **Order flow settings** — **`/settings/order-flow`**: rename system statuses, reorder columns, add custom statuses (owner/admin).
 - **Clients** — table + **`/clients/[customerId]`** detail (sidebar edits, orders/products/users tabs, product picker).
+- **Inventory** — full-width catalog table synced with dashboard products API.
+- **Matches** — alias CRUD at `/matches`.
 - **Settings** — business profile, AI autocommit, locale; timezone loaded for all date/time display.
+- **Layout** — full-width list/table pages via **`src/lib/workspace-layout.ts`** (orders, clients, inventory, matches, marketing).
 - **Supplier timezone** — all order/message times shown in supplier IANA timezone (from settings), not browser or US server time. Instants without `Z` suffix are parsed as UTC before formatting.
 
 ## Zustand — good fits for Zumo
@@ -64,9 +70,10 @@ zumo-web/
 │   │   │   ├── (auth)/                 # /login, /register → signup tab
 │   │   │   └── (workspace)/            # authenticated shell
 │   │   │       ├── whatsapp/
-│   │   │       ├── orders/             # list, creation, [orderId]/edit (placeholder)
+│   │   │       ├── orders/             # list + Kanban board, creation, [orderId]/edit
 │   │   │       ├── clients/            # list + [customerId] detail
-│   │   │       ├── settings/
+│   │   │       ├── matches/            # alias governance
+│   │   │       ├── settings/           # business, AI, order-flow
 │   │   │       └── layout.tsx          # loads settings → WorkspacePreferencesProvider
 │   │   ├── api/
 │   │   │   ├── auth/                   # signup, login, confirm, logout
@@ -82,6 +89,8 @@ zumo-web/
 │   │   ├── supplier-timezone.ts        # parseInstantIso + format in supplier TZ
 │   │   ├── workspace-preferences-context.tsx
 │   │   ├── dashboard-orders.ts
+│   │   ├── order-status-flow.ts      # supplier flow + status labels for board/filters
+│   │   ├── workspace-layout.ts       # full-width padding tokens for workspace pages
 │   │   ├── dashboard-customers.ts
 │   │   └── api.ts
 │   └── content/marketing/
@@ -116,11 +125,13 @@ Run only **one** `next dev` per clone.
 | `/en`, `/es` | Marketing |
 | `/login` | Sign in / sign up (`?tab=signup`) |
 | `/whatsapp` | WhatsApp inbox + draft orders |
-| `/orders` | Orders catalog (filters, detail sheet, inline confirm/convert) |
+| `/orders` | Orders catalog — **Lista** table or **Kanban** board (`?view=`, `?q=`), detail sheet |
 | `/orders/creation` | Manual order create (delivery date required) |
+| `/matches` | Product alias governance (Matches tab) |
 | `/clients` | Customer list |
 | `/clients/[customerId]` | Customer detail (sidebar, tabs) |
 | `/settings` | Business + AI settings |
+| `/settings/order-flow` | Order status flow (rename, reorder, custom statuses) |
 | `/profile` | Seller profile |
 
 ## Build & production

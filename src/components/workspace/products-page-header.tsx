@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
+import { workspacePageHeaderClassName } from "@/lib/workspace-layout";
+
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -22,7 +25,7 @@ export function ProductsPageHeader({
   actions: ReactNode;
 }>) {
   return (
-    <header className="shrink-0 border-b bg-background px-6 py-5">
+    <header className={cn("shrink-0 border-b bg-background", workspacePageHeaderClassName)}>
       <Breadcrumb className="mb-3">
         <BreadcrumbList>
           <BreadcrumbItem>

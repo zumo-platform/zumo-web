@@ -28,6 +28,11 @@ import {
   type MatchBucket,
   type MatchesSummary,
 } from "@/lib/dashboard-matches";
+import { cn } from "@/lib/utils";
+import {
+  workspaceContentInnerClassName,
+  workspaceContentOuterClassName,
+} from "@/lib/workspace-layout";
 
 const EMPTY_COUNTS: Record<MatchBucket, number> = {
   needs_review: 0,
@@ -124,7 +129,8 @@ export function MatchesExperience() {
         }
       />
 
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-6 py-6">
+      <div className={cn("flex flex-1 flex-col", workspaceContentOuterClassName)}>
+        <div className={cn(workspaceContentInnerClassName, "gap-4")}>
         <div className="relative max-w-md">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -158,6 +164,7 @@ export function MatchesExperience() {
             onEdit={setEditItem}
           />
         )}
+        </div>
       </div>
 
       <MatchCreateDialog

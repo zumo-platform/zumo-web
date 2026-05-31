@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   type ColumnDef,
@@ -9,6 +9,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { CheckCircle2, Eye, Loader2, MessageCircle, MoreHorizontal, Monitor } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -41,6 +42,12 @@ import {
   type DashboardOrderListRow,
 } from "@/lib/dashboard-orders";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
+import {
+  findFlowItem,
+  statusBadgeVariant,
+  statusLabel as orderStatusLabel,
+  type EffectiveStatusItem,
+} from "@/lib/order-status-flow";
 import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import { cn } from "@/lib/utils";
 import {
@@ -53,45 +60,6 @@ function orderHasValidDeliveryDate(
   timeZone: string,
 ): boolean {
   return isValidDeliveryDateInput(deliveryDate, timeZone);
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case "draft":
-      return "Borrador";
-    case "pending":
-      return "Pendiente";
-    case "confirmed":
-      return "Confirmado";
-    case "in_progress":
-      return "En preparación";
-    case "in_route":
-      return "En camino";
-    case "delivered":
-      return "Entregado";
-    case "cancelled":
-      return "Cancelado";
-    default:
-      return status.replaceAll("_", " ");
-  }
-}
-
-function statusBadgeVariant(
-  status: string,
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "delivered":
-      return "secondary";
-    case "cancelled":
-      return "destructive";
-    case "pending":
-    case "draft":
-      return "outline";
-    case "confirmed":
-      return "default";
-    default:
-      return "default";
-  }
 }
 
 function markDraftSeenIfNeeded(
@@ -108,6 +76,7 @@ function markDraftSeenIfNeeded(
 export function OrdersCatalogTable({
   data,
   customerNameById,
+  flow = [],
   showInlineEmpty = true,
   onOrderStatusChange,
   onOrderSeen,
@@ -115,6 +84,7 @@ export function OrdersCatalogTable({
 }: Readonly<{
   data: DashboardOrderListRow[];
   customerNameById: ReadonlyMap<number, string>;
+  flow?: EffectiveStatusItem[];
   /** When false, parent renders the empty state (no duplicate row in table). */
   showInlineEmpty?: boolean;
   onOrderStatusChange?: (orderId: string, status: string, patch?: DashboardOrderPatch) => void;
@@ -197,6 +167,7 @@ export function OrdersCatalogTable({
             aria-label={`Seleccionar pedido ${row.original.orderId}`}
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
+            onClick={(event) => event.stopPropagation()}
           />
         ),
         enableSorting: false,
@@ -297,17 +268,27 @@ export function OrdersCatalogTable({
         header: "Estado",
         cell: ({ row }) => {
           const o = row.original;
-          const isPending = o.status === "pending";
-          const isDraft = o.status === "draft";
+          const effectiveKey = o.effectiveStatusKey ?? o.status;
+          const flowItem = findFlowItem(flow, effectiveKey);
+          const isPending = effectiveKey === "pending";
+          const isDraft = effectiveKey === "draft";
           const isActing = actionOrderId === o.orderId;
           const hasDeliveryDate = orderHasValidDeliveryDate(o.deliveryDate, timeZone);
           const lifecycleTitle = hasDeliveryDate
             ? undefined
             : "Seleccioná una fecha de entrega válida antes de continuar.";
+          const label = orderStatusLabel(flowItem, effectiveKey);
+          const retired = flowItem?.retired === true;
 
           return (
             <div className="flex min-w-[9.5rem] flex-col items-start gap-1.5">
-              <Badge variant={statusBadgeVariant(o.status)}>{statusLabel(o.status)}</Badge>
+              <Badge
+                className={cn(retired && "opacity-60")}
+                variant={statusBadgeVariant(effectiveKey)}
+              >
+                {label}
+                {retired ? " (retirado)" : ""}
+              </Badge>
               {isDraft ? (
                 <Button
                   className="h-7 gap-1 px-2 text-xs"
@@ -316,7 +297,10 @@ export function OrdersCatalogTable({
                   title={lifecycleTitle}
                   type="button"
                   variant="outline"
-                  onClick={() => void handleConvertFromTable(o.orderId)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleConvertFromTable(o.orderId);
+                  }}
                 >
                   {isActing ? (
                     <Loader2 aria-hidden className="size-3.5 animate-spin" />
@@ -334,7 +318,10 @@ export function OrdersCatalogTable({
                   title={lifecycleTitle}
                   type="button"
                   variant="outline"
-                  onClick={() => void handleConfirmFromTable(o.orderId)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleConfirmFromTable(o.orderId);
+                  }}
                 >
                   {isActing ? (
                     <Loader2 aria-hidden className="size-3.5 animate-spin" />
@@ -382,6 +369,7 @@ export function OrdersCatalogTable({
                 <Button
                   aria-label={`Más acciones para ${o.orderId}`}
                   className="size-8"
+                  onClick={(event) => event.stopPropagation()}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
@@ -422,6 +410,7 @@ export function OrdersCatalogTable({
       handleConvertFromTable,
       openDetail,
       timeZone,
+      flow,
     ],
   );
 
@@ -436,6 +425,25 @@ export function OrdersCatalogTable({
   });
 
   const selectedCount = table.getFilteredSelectedRowModel().rows.length;
+  const rows = table.getRowModel().rows;
+  const useVirtual = rows.length >= 50;
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const ROW_HEIGHT = 52;
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+    enabled: useVirtual,
+  });
+
+  const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : null;
+  const paddingTop = virtualRows && virtualRows.length > 0 ? virtualRows[0]!.start : 0;
+  const paddingBottom =
+    virtualRows && virtualRows.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1]!.end
+      : 0;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -454,9 +462,12 @@ export function OrdersCatalogTable({
         </div>
       ) : null}
 
-      <div className="rounded-lg border bg-card shadow-sm">
+      <div
+        ref={tableContainerRef}
+        className={cn("rounded-lg border bg-card shadow-sm", useVirtual && "max-h-[min(70vh,720px)] overflow-auto")}
+      >
         <Table>
-          <TableHeader>
+          <TableHeader className={useVirtual ? "sticky top-0 z-10 bg-card" : undefined}>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
@@ -480,14 +491,53 @@ export function OrdersCatalogTable({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow data-state={row.getIsSelected() ? "selected" : undefined} key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                  ))}
-                </TableRow>
-              ))
+            {rows.length ? (
+              useVirtual && virtualRows ? (
+                <>
+                  {paddingTop > 0 ? (
+                    <TableRow aria-hidden>
+                      <TableCell colSpan={columns.length} style={{ height: paddingTop, padding: 0 }} />
+                    </TableRow>
+                  ) : null}
+                  {virtualRows.map((virtualRow) => {
+                    const row = rows[virtualRow.index];
+                    if (!row) return null;
+                    return (
+                      <TableRow
+                        key={row.id}
+                        className="cursor-pointer"
+                        data-state={row.getIsSelected() ? "selected" : undefined}
+                        style={{ height: ROW_HEIGHT }}
+                        onClick={() => openDetail(row.original.orderId)}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
+                  {paddingBottom > 0 ? (
+                    <TableRow aria-hidden>
+                      <TableCell colSpan={columns.length} style={{ height: paddingBottom, padding: 0 }} />
+                    </TableRow>
+                  ) : null}
+                </>
+              ) : (
+                rows.map((row) => (
+                  <TableRow
+                    className="cursor-pointer"
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                    key={row.id}
+                    onClick={() => openDetail(row.original.orderId)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )
             ) : showInlineEmpty ? (
               <TableRow>
                 <TableCell className="h-28 text-center text-muted-foreground text-sm" colSpan={columns.length}>

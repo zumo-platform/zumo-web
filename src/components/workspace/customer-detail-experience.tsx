@@ -23,6 +23,8 @@ import { CustomerOrdersTab } from "@/components/workspace/customer-orders-tab";
 import { CustomerProductPickerSheet } from "@/components/workspace/customer-product-picker-sheet";
 import { CustomerProductsTab } from "@/components/workspace/customer-products-tab";
 import { CustomerUsersTab } from "@/components/workspace/customer-users-tab";
+import { workspaceContentOuterClassName, workspacePageHeaderClassName } from "@/lib/workspace-layout";
+import { cn } from "@/lib/utils";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import {
   customerDetailToDraft,
@@ -174,7 +176,7 @@ export function CustomerDetailExperience({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <header className="shrink-0 border-b bg-background px-6 py-4">
+      <header className={cn("shrink-0 border-b bg-background", workspacePageHeaderClassName)}>
         <div className="mb-3 flex items-center justify-between gap-3">
           <Breadcrumb>
             <BreadcrumbList>
@@ -245,7 +247,7 @@ export function CustomerDetailExperience({
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <Tabs className="flex min-h-0 flex-1 flex-col gap-0" defaultValue="orders">
-            <div className="shrink-0 px-6 pt-4">
+            <div className={cn("shrink-0 pt-4", workspaceContentOuterClassName, "pb-0")}>
               <TabsList className="w-full" variant="line">
                 <TabsTrigger value="orders">Pedidos</TabsTrigger>
                 <TabsTrigger value="products">Productos</TabsTrigger>
@@ -256,7 +258,7 @@ export function CustomerDetailExperience({
               </TabsList>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className={cn("min-h-0 flex-1 overflow-y-auto", workspaceContentOuterClassName)}>
               <TabsContent className="mt-0" value="orders">
                 <CustomerOrdersTab
                   orders={detail.orders}

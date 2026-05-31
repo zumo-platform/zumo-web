@@ -16,11 +16,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { workspaceContentOuterClassName, workspacePageHeaderClassName } from "@/lib/workspace-layout";
+import { cn } from "@/lib/utils";
 
 export function MarketingExperience() {
   return (
     <>
-      <header className="shrink-0 border-b bg-background px-6 py-5">
+      <header className={cn("shrink-0 border-b bg-background", workspacePageHeaderClassName)}>
         <Breadcrumb className="mb-3">
           <BreadcrumbList>
             <BreadcrumbItem>
@@ -43,7 +45,7 @@ export function MarketingExperience() {
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col gap-4 p-6">
+      <div className={cn("flex flex-1 flex-col gap-4", workspaceContentOuterClassName)}>
         <Card>
           <CardHeader>
             <CardTitle>Próximamente</CardTitle>

@@ -10,6 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
+import {
+  workspaceContentInnerClassName,
+  workspaceContentOuterClassName,
+  workspacePageHeaderClassName,
+} from "@/lib/workspace-layout";
+import { cn } from "@/lib/utils";
 
 const BLOCK_TOOLTIP = "Creá primero el cliente para gestionar el pedido";
 
@@ -133,8 +139,8 @@ export function OrderDetailPageClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
-      <div className="border-b px-4 py-4 md:px-6">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className={cn("border-b", workspacePageHeaderClassName)}>
+        <div className={cn("flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", workspaceContentInnerClassName)}>
           <div className="min-w-0 space-y-2">
             <Button asChild className="mb-1 -ml-2 gap-1.5" size="sm" type="button" variant="ghost">
               <Link href="/orders">
@@ -173,8 +179,8 @@ export function OrderDetailPageClient({
         </div>
       </div>
 
-      <div className="flex-1 px-4 py-6 md:px-6">
-        <div className="mx-auto w-full max-w-[1400px]">
+      <div className={workspaceContentOuterClassName}>
+        <div className={workspaceContentInnerClassName}>
           {!loading && !error && order ? (
             <ul className="space-y-2">
               {order.lines.length === 0 ? (

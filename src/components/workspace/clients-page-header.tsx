@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
+import { workspacePageHeaderClassName } from "@/lib/workspace-layout";
+
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -20,15 +23,17 @@ export function ClientsPageHeader({
   description,
   actions,
   mode = "list",
+  className,
 }: Readonly<{
   description: string;
   actions: ReactNode;
   mode?: ClientsPageHeaderMode;
+  className?: string;
 }>) {
   const isCreation = mode === "creation";
 
   return (
-    <header className="shrink-0 border-b bg-background px-6 py-5">
+    <header className={cn("shrink-0 border-b bg-background", workspacePageHeaderClassName, className)}>
       <Breadcrumb className="mb-3">
         <BreadcrumbList>
           <BreadcrumbItem>

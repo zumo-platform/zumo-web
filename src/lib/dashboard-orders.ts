@@ -35,16 +35,36 @@ export const ORDER_STATUS_FILTER_OPTIONS: ReadonlyArray<{
 ];
 
 /** Parse `?status=draft,pending` from URL; defaults to active-work statuses. */
-export function parseOrderStatusFilter(raw: string | undefined): DashboardOrderStatus[] {
+export function parseOrderStatusFilter(raw: string | undefined): string[] {
   if (!raw?.trim()) return [...DEFAULT_ORDER_STATUS_FILTER];
   const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
-  const allowed = new Set<string>(DASHBOARD_ORDER_STATUSES);
-  const valid = parts.filter((p): p is DashboardOrderStatus => allowed.has(p));
-  return valid.length > 0 ? valid : [...DEFAULT_ORDER_STATUS_FILTER];
+  return parts.length > 0 ? parts : [...DEFAULT_ORDER_STATUS_FILTER];
 }
 
-export function orderStatusFilterToParam(statuses: readonly DashboardOrderStatus[]): string {
+export function orderStatusFilterToParam(statuses: readonly string[]): string {
   return statuses.join(",");
+}
+
+/** Accent- and case-insensitive search normalization. */
+export function normalizeOrderSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+export type OrdersViewMode = "list" | "board";
+
+export const ORDERS_VIEW_STORAGE_KEY = "zumo.orders.view";
+
+export function parseOrdersViewMode(raw: string | null | undefined): OrdersViewMode {
+  if (raw === "board" || raw === "list") return raw;
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
+    if (stored === "board" || stored === "list") return stored;
+  }
+  return "list";
 }
 
 export type DashboardOrderListRow = Readonly<{
@@ -52,6 +72,7 @@ export type DashboardOrderListRow = Readonly<{
   displayCode: string | null;
   customerId: number;
   status: string;
+  effectiveStatusKey: string;
   createdAt: string | null;
   deliveryDate: string | null;
   confirmedAt: string | null;
@@ -62,6 +83,8 @@ export type DashboardOrderListRow = Readonly<{
   conversationId: string | null;
   matchCoverage: number | null;
   isTouchless: boolean;
+  productNames: string[];
+  productSkus: string[];
 }>;
 
 export type DashboardOrderPatch = Partial<
@@ -92,6 +115,12 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
   if (!Number.isFinite(cid) || cid <= 0) return null;
 
   const status = typeof o.status === "string" ? o.status.trim() : "draft";
+  const effectiveStatusKey =
+    typeof o.effectiveStatusKey === "string" && o.effectiveStatusKey.trim()
+      ? o.effectiveStatusKey.trim()
+      : typeof o.effective_status_key === "string" && o.effective_status_key.trim()
+        ? o.effective_status_key.trim()
+        : status;
   const createdAt =
     typeof o.createdAt === "string" && o.createdAt.length > 0 ? o.createdAt : null;
   const deliveryDate =
@@ -150,11 +179,15 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
       Number.isFinite(Date.parse(expiresAt)) &&
       Date.parse(expiresAt) < Date.now());
 
+  const productNames = parseStringArrayField(o, "productNames");
+  const productSkus = parseStringArrayField(o, "productSkus");
+
   return {
     orderId,
     displayCode,
     customerId: cid,
     status: status || "draft",
+    effectiveStatusKey: effectiveStatusKey || status || "draft",
     createdAt,
     deliveryDate,
     confirmedAt,
@@ -165,7 +198,21 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     conversationId,
     matchCoverage,
     isTouchless,
+    productNames,
+    productSkus,
   };
+}
+
+function parseStringArrayField(o: Record<string, unknown>, key: string): string[] {
+  const raw = o[key];
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (trimmed) out.push(trimmed);
+  }
+  return out;
 }
 
 function parseOrdersEnvelope(data: unknown): DashboardOrderListRow[] {
@@ -213,7 +260,7 @@ export function mergeAndSortOrders(rows: readonly DashboardOrderListRow[]): Dash
 async function fetchOrdersByStatus(
   upstreamUrl: string,
   bearer: string,
-  status: DashboardOrderStatus,
+  status: string,
 ): Promise<DashboardOrderListRow[] | null> {
   const url = `${upstreamUrl}?status=${encodeURIComponent(status)}`;
   try {
@@ -241,7 +288,7 @@ export async function fetchAllOrdersDashboard(
   apiUrl: string,
   idToken?: string | null,
   accessToken?: string | null,
-  statuses: readonly DashboardOrderStatus[] = DEFAULT_ORDER_STATUS_FILTER,
+  statuses: readonly string[] = DEFAULT_ORDER_STATUS_FILTER,
 ): Promise<DashboardOrdersFetchResult> {
   const base = apiUrl.replace(/\/+$/, "");
   if (!base) return { ok: false };
@@ -433,6 +480,37 @@ export async function confirmDashboardOrderViaProxy(orderId: string): Promise<vo
       res.status,
     );
   }
+}
+
+/** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/status`. */
+export async function updateDashboardOrderStatusViaProxy(
+  orderId: string,
+  status: string,
+): Promise<DashboardOrderListRow | null> {
+  const res = await fetch(
+    `/api/backend/dashboard/orders/${encodeURIComponent(orderId)}/status`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+      cache: "no-store",
+    },
+  );
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const msg =
+      typeof body.error === "string" && body.error.trim().length > 0
+        ? body.error.trim()
+        : "No se pudo cambiar el estado del pedido.";
+    throw new DashboardOrderActionError(msg, res.status);
+  }
+
+  const orderRaw =
+    body.order && typeof body.order === "object" ? body.order : body;
+  return parseDashboardOrderRow(orderRaw);
 }
 
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/seen`. */

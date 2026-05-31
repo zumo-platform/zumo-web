@@ -64,6 +64,7 @@ import { patchDashboardCustomerViaProxy } from "@/lib/dashboard-customers";
 import { parseMatchCoverage } from "@/lib/match-coverage";
 import { defaultDeliveryDateForOrder, minDeliveryDateInput } from "@/lib/order-delivery-date";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
+import { statusBadgeVariant, statusLabel } from "@/lib/order-status-flow";
 import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import {
   useSupplierTimeFormatters,
@@ -157,43 +158,6 @@ function parsePositiveCustomerId(value: unknown): number | null {
   return null;
 }
 
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case "draft":
-      return "Borrador";
-    case "pending":
-      return "Pendiente";
-    case "confirmed":
-      return "Confirmado";
-    case "in_progress":
-      return "En preparación";
-    case "in_route":
-      return "En camino";
-    case "delivered":
-      return "Entregado";
-    case "cancelled":
-      return "Cancelado";
-    default:
-      return status.replaceAll("_", " ");
-  }
-}
-
-function statusBadgeVariant(
-  status: string,
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "delivered":
-      return "secondary";
-    case "cancelled":
-      return "destructive";
-    case "pending":
-    case "draft":
-      return "outline";
-    default:
-      return "default";
-  }
-}
 
 function csvField(v: string | number | null): string {
   const s = v === null || v === undefined ? "" : String(v);
@@ -563,7 +527,7 @@ export function OrderDetailSheet({
   }, [open]);
 
   const displayStatus = order?.status ?? "draft";
-  const statusText = statusLabel(displayStatus);
+  const statusText = statusLabel(undefined, displayStatus);
 
   const customerDisplayName =
     customer?.name ??

@@ -2,6 +2,11 @@ import type { ReactNode } from "react";
 
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
+import {
+  workspacePageHeaderClassName,
+} from "@/lib/workspace-layout";
+
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -17,12 +22,14 @@ import {
 export function OrdersPageHeader({
   description,
   actions,
+  className,
 }: Readonly<{
   description: string;
   actions: ReactNode;
+  className?: string;
 }>) {
   return (
-    <header className="shrink-0 border-b bg-background px-6 py-5">
+    <header className={cn("shrink-0 border-b bg-background", workspacePageHeaderClassName, className)}>
       <Breadcrumb className="mb-3">
         <BreadcrumbList>
           <BreadcrumbItem>

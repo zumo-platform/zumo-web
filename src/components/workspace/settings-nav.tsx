@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Building, Sparkles, Users } from "lucide-react";
+import { Building, Sparkles, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -15,6 +15,7 @@ const SETTINGS_NAV: ReadonlyArray<{
   { href: "/settings/business", label: "Negocio", icon: Building },
   { href: "/settings/ai", label: "Comportamiento del AI", icon: Sparkles },
   { href: "/settings/sellers", label: "Vendedores", icon: Users },
+  { href: "/settings/order-flow", label: "Flujo de pedidos", icon: Workflow },
 ];
 
 export function SettingsNav() {

@@ -21,6 +21,8 @@ import {
   fetchCustomersViaProxy,
   type DashboardCustomerRow,
 } from "@/lib/dashboard-customers";
+import { cn } from "@/lib/utils";
+import { workspaceContentOuterClassName } from "@/lib/workspace-layout";
 
 export type ClientsExperienceVariant = "list" | "creation";
 
@@ -198,7 +200,7 @@ export function ClientsExperience({
     );
   } else if (hasCustomers && customerRows) {
     main = (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-6 md:py-6">
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", workspaceContentOuterClassName)}>
         <ClientsCustomersTable data={customerRows} />
       </div>
     );
