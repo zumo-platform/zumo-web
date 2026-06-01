@@ -77,6 +77,11 @@ export function ClientsExperience({
     router.push("/clients");
   }, [router]);
 
+  const refreshCustomers = useCallback(async () => {
+    const rows = await fetchCustomersViaProxy();
+    setCustomerRows(rows);
+  }, []);
+
   const openCreationPage = useCallback(() => {
     router.push("/clients/creation");
   }, [router]);
@@ -206,7 +211,7 @@ export function ClientsExperience({
     main = (
       <div className={cn(workspaceTableScrollClassName, workspaceContentOuterClassName)}>
         <div className={workspaceContentInnerClassName}>
-          <ClientsCustomersTable data={customerRows} />
+          <ClientsCustomersTable data={customerRows} onMutated={() => void refreshCustomers()} />
         </div>
       </div>
     );

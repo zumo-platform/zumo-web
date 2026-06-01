@@ -87,6 +87,7 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
     },
     ai: {
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,
+      chatbotEnabled: aiRaw.chatbotEnabled !== false,
       draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
     },
   };
@@ -193,6 +194,7 @@ export async function fetchSellersDashboard(
 
 export type PatchSupplierSettingsInput = Readonly<{
   aiAutoCommitEnabled?: boolean;
+  aiChatbotEnabled?: boolean;
   draftExpirationHours?: DraftExpirationHours;
   defaultLocale?: "es" | "en";
 }>;
@@ -242,6 +244,7 @@ export async function patchDashboardSettingsViaProxy(
   if (aiRaw) {
     result.ai = {
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,
+      chatbotEnabled: aiRaw.chatbotEnabled !== false,
       draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
     };
   }

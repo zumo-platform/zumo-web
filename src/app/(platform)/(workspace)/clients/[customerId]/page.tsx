@@ -26,11 +26,13 @@ export default async function CustomerDetailPage({
   const apiUrl = getServerApiBaseUrl();
   const customers = await fetchCustomersDashboard(apiUrl, idToken, accessToken);
   const navigationCustomerIds = customers?.map((c) => c.customerId) ?? [];
+  const hubRow = customers?.find((c) => c.customerId === customerId);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <CustomerDetailExperience
         customerId={customerId}
+        initialLabels={hubRow?.labels ?? []}
         navigationCustomerIds={navigationCustomerIds}
       />
     </div>

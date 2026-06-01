@@ -22,7 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { ZumoIsotype, ZumoWordmark } from "@/components/branding/zumo-logos";
+import { ZumoWordmark } from "@/components/branding/zumo-logos";
 import {
   Sidebar,
   SidebarContent,
@@ -104,23 +104,15 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-sidebar-border border-b px-3 py-3">
-        <div className="flex items-center justify-between gap-2">
+      <SidebarHeader className="border-sidebar-border border-b px-3 py-3 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-2">
+        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
           <Link
-            className={cn(
-              "flex min-w-0 items-center gap-1 text-sidebar-foreground",
-              "group-data-[collapsible=icon]:justify-center",
-            )}
+            className="flex min-w-0 items-center gap-1 text-sidebar-foreground group-data-[collapsible=icon]:hidden"
             href="/whatsapp"
           >
-            <span className="group-data-[collapsible=icon]:hidden">
-              <ZumoWordmark className="max-h-7 max-w-[min(100%,6.5rem)] md:max-h-8" />
-            </span>
-            <span className="hidden group-data-[collapsible=icon]:flex">
-              <ZumoIsotype />
-            </span>
+            <ZumoWordmark className="max-h-7 max-w-[min(100%,6.5rem)] md:max-h-8" />
           </Link>
-          <SidebarTrigger className="shrink-0 text-sidebar-foreground" />
+          <SidebarTrigger className="text-sidebar-foreground" />
         </div>
       </SidebarHeader>
 
@@ -181,8 +173,8 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-sidebar-border border-t p-2">
-        <div className="flex items-center gap-2 rounded-md px-2 py-2 group-data-[collapsible=icon]:justify-center">
+      <SidebarFooter className="border-sidebar-border border-t">
+        <div className="flex items-center gap-2 rounded-md px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent font-bold text-sidebar-accent-foreground text-xs shadow-sm">
             {businessName.slice(0, 2).toUpperCase()}
           </div>
@@ -191,7 +183,7 @@ export function AppSidebar({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
+        <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold">
             {initials(seller.name || seller.email || "?")}
           </div>
@@ -201,7 +193,7 @@ export function AppSidebar({
           </div>
         </div>
 
-        <SidebarSeparator className="my-1" />
+        <SidebarSeparator className="my-1 group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:w-8" />
 
         <SidebarMenu>
           <SidebarMenuItem>

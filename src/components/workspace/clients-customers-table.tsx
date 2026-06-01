@@ -10,12 +10,27 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  MoreHorizontal,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +39,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -32,6 +49,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  FREQUENCY_LABEL,
+  STATUS_FILTER_OPTIONS,
+  STATUS_LABEL,
+  TREND_LABEL,
+  formatExpectedOrder,
+  pastelColorForLabel,
+  statusBadgeClassName,
+  trendGlyph,
+  type CustomerStatus,
+} from "@/lib/customer-hub";
+import {
+  addCustomerLabelViaProxy,
+  createCustomerTaskViaProxy,
+  removeCustomerLabelViaProxy,
+} from "@/lib/customer-hub-api";
 import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
 import { cn } from "@/lib/utils";
 import { workspaceTableCardClassName } from "@/lib/workspace-layout";
@@ -62,9 +95,41 @@ function CellText({
   );
 }
 
-export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustomerRow[] }>) {
+export function ClientsCustomersTable({
+  data,
+  onMutated,
+}: Readonly<{
+  data: DashboardCustomerRow[];
+  onMutated?: () => void;
+}>) {
   const { formatInstantDateTime } = useSupplierTimeFormatters();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [statusFilter, setStatusFilter] = useState<CustomerStatus | "all">("all");
+  const [hubDialog, setHubDialog] = useState<
+    | { kind: "label" | "task"; customerId: number; customerName: string }
+    | null
+  >(null);
+  const [hubDraft, setHubDraft] = useState("");
+  const [hubSaving, setHubSaving] = useState(false);
+  const [deletingLabelId, setDeletingLabelId] = useState<string | null>(null);
+
+  const filteredData = useMemo(() => {
+    if (statusFilter === "all") return data;
+    return data.filter((row) => row.status === statusFilter);
+  }, [data, statusFilter]);
+
+  const allKnownLabels = useMemo(() => {
+    const byLabel = new Map<string, { label: string; color: string }>();
+    for (const row of data) {
+      for (const l of row.labels) {
+        const key = l.label.trim().toLowerCase();
+        if (!key) continue;
+        const color = l.color?.trim() || pastelColorForLabel(l.label);
+        if (!byLabel.has(key)) byLabel.set(key, { label: l.label.trim(), color });
+      }
+    }
+    return [...byLabel.values()].sort((a, b) => a.label.localeCompare(b.label, "es"));
+  }, [data]);
 
   const columns = useMemo<ColumnDef<DashboardCustomerRow>[]>(
     () => [
@@ -132,6 +197,149 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
         ),
       },
       {
+        accessorKey: "status",
+        header: "Estado",
+        cell: ({ row }) => (
+          <Badge variant={statusBadgeClassName(row.original.status)}>
+            {STATUS_LABEL[row.original.status]}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "expectedOrderDate",
+        header: "Pr\u00f3ximo pedido",
+        cell: ({ row }) => {
+          const label = formatExpectedOrder(
+            row.original.expectedOrderDate,
+            row.original.daysOverdue,
+          );
+          return (
+            <CellText className="whitespace-nowrap tabular-nums" title={label}>
+              {label}
+            </CellText>
+          );
+        },
+      },
+      {
+        accessorKey: "basketTrend",
+        header: "Tendencia",
+        cell: ({ row }) => {
+          const { glyph, className } = trendGlyph(row.original.basketTrend);
+          const label = TREND_LABEL[row.original.basketTrend];
+          return (
+            <span className="inline-flex max-w-[min(220px,32vw)] items-center gap-1">
+              <span aria-hidden className={className}>
+                {glyph}
+              </span>
+              <span className="truncate text-xs text-muted-foreground" title={label}>
+                {label}
+              </span>
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "frequency",
+        header: "Frecuencia",
+        cell: ({ row }) => (
+          <CellText>{FREQUENCY_LABEL[row.original.frequency]}</CellText>
+        ),
+      },
+      {
+        accessorKey: "labels",
+        header: "Etiquetas",
+        cell: ({ row }) => {
+          const labels = row.original.labels;
+          const openAddLabel = () => {
+            setHubDraft("");
+            setHubDialog({
+              kind: "label",
+              customerId: row.original.customerId,
+              customerName: row.original.name,
+            });
+          };
+
+          if (labels.length === 0) {
+            return (
+              <button
+                className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+                type="button"
+                onClick={openAddLabel}
+              >
+                + Agregar
+              </button>
+            );
+          }
+
+          return (
+            <button
+              className="flex max-w-[min(220px,32vw)] flex-wrap gap-2 text-left"
+              type="button"
+              onClick={openAddLabel}
+            >
+              {labels.map((label) => (
+                <Badge
+                  key={label.labelId}
+                  className="gap-1 rounded-full border border-transparent px-3 py-1 text-foreground"
+                  style={{ backgroundColor: label.color?.trim() || pastelColorForLabel(label.label) }}
+                  variant="secondary"
+                >
+                  <span className="truncate">{label.label}</span>
+                  <button
+                    aria-label={`Eliminar etiqueta ${label.label}`}
+                    className="ml-1 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground disabled:opacity-50"
+                    disabled={deletingLabelId === label.labelId}
+                    type="button"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDeletingLabelId(label.labelId);
+                      try {
+                        const ok = await removeCustomerLabelViaProxy(
+                          row.original.customerId,
+                          label.labelId,
+                        );
+                        if (!ok) throw new Error("No se pudo eliminar la etiqueta.");
+                        toast.success("Etiqueta eliminada.");
+                        onMutated?.();
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "No se pudo eliminar la etiqueta.",
+                        );
+                      } finally {
+                        setDeletingLabelId(null);
+                      }
+                    }}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              ))}
+            </button>
+          );
+        },
+      },
+      {
+        accessorKey: "openTaskCount",
+        header: "Tareas",
+        cell: ({ row }) => {
+          const task = row.original.openTasks[0];
+          if (!task) return <CellText>{"\u2014"}</CellText>;
+          return (
+            <div className="max-w-[min(220px,32vw)] text-xs">
+              <div className="truncate font-medium" title={task.title}>
+                {task.title}
+              </div>
+              {row.original.openTaskCount > 1 ? (
+                <div className="text-muted-foreground">
+                  +{row.original.openTaskCount - 1} m\u00e1s
+                </div>
+              ) : null}
+            </div>
+          );
+        },
+      },
+      {
         id: "latestOrder",
         header: "Último pedido",
         cell: ({ row }) => {
@@ -197,6 +405,31 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                onSelect={() => {
+                  setHubDraft("");
+                  setHubDialog({
+                    kind: "label",
+                    customerId: row.original.customerId,
+                    customerName: row.original.name,
+                  });
+                }}
+              >
+                Agregar etiqueta
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setHubDraft("");
+                  setHubDialog({
+                    kind: "task",
+                    customerId: row.original.customerId,
+                    customerName: row.original.name,
+                  });
+                }}
+              >
+                Agregar tarea
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onSelect={() =>
                   toast.message("Eliminar cliente", {
@@ -211,18 +444,19 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
         ),
       },
     ],
-    [formatInstantDateTime],
+    [deletingLabelId, formatInstantDateTime, onMutated],
   );
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
+   
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: { rowSelection },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    autoResetPageIndex: true,
     getRowId: (row) => String(row.customerId),
     initialState: { pagination: { pageSize: 10, pageIndex: 0 } },
   });
@@ -231,10 +465,54 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
   const pageSize = table.getState().pagination.pageSize;
-  const total = data.length;
+  const total = filteredData.length;
+
+  async function submitHubDialog() {
+    if (!hubDialog) return;
+    const trimmed = hubDraft.trim();
+    if (!trimmed) return;
+    setHubSaving(true);
+    try {
+      if (hubDialog.kind === "label") {
+        const row = data.find((r) => r.customerId === hubDialog.customerId);
+        const exists = row?.labels.some((l) => l.label.trim().toLowerCase() === trimmed.toLowerCase());
+        if (exists) {
+          toast.message("Etiqueta ya asignada.");
+          return;
+        }
+        const color = pastelColorForLabel(trimmed);
+        await addCustomerLabelViaProxy(hubDialog.customerId, trimmed, color);
+      } else {
+        const taskId = await createCustomerTaskViaProxy(hubDialog.customerId, { title: trimmed });
+        if (!taskId) throw new Error("No se pudo guardar la tarea.");
+      }
+      toast.success(hubDialog.kind === "label" ? "Etiqueta agregada." : "Tarea creada.");
+      setHubDialog(null);
+      setHubDraft("");
+      onMutated?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
+    } finally {
+      setHubSaving(false);
+    }
+  }
 
   return (
     <div className="w-full">
+      <div className="mb-4 flex flex-wrap gap-2">
+        {STATUS_FILTER_OPTIONS.map((option) => (
+          <Button
+            key={option.value}
+            size="sm"
+            type="button"
+            variant={statusFilter === option.value ? "default" : "outline"}
+            onClick={() => setStatusFilter(option.value)}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </div>
+
       {selectedCount > 0 ? (
         <div
           className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm"
@@ -374,6 +652,86 @@ export function ClientsCustomersTable({ data }: Readonly<{ data: DashboardCustom
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={hubDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHubDialog(null);
+            setHubDraft("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {hubDialog?.kind === "label" ? "Agregar etiqueta" : "Agregar tarea"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="hub-dialog-input">
+              {hubDialog?.kind === "label" ? "Etiqueta" : "Título de la tarea"}
+            </Label>
+            <Input
+              id="hub-dialog-input"
+              placeholder={
+                hubDialog?.kind === "label"
+                  ? "Ej. Ruta norte"
+                  : "Ej. Llamar para confirmar pedido"
+              }
+              value={hubDraft}
+              onChange={(e) => setHubDraft(e.target.value)}
+            />
+            {hubDialog?.kind === "label" ? (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {(() => {
+                  const customerRow = data.find((r) => r.customerId === hubDialog.customerId);
+                  const assigned = new Set(
+                    (customerRow?.labels ?? []).map((l) => l.label.trim().toLowerCase()),
+                  );
+                  return allKnownLabels.slice(0, 12).map((tag) => {
+                    const disabled = assigned.has(tag.label.trim().toLowerCase());
+                    return (
+                      <button
+                        key={tag.label}
+                        className="rounded-full border border-transparent px-3 py-1 text-sm text-foreground disabled:opacity-40"
+                        disabled={disabled}
+                        style={{ backgroundColor: tag.color }}
+                        type="button"
+                        onClick={() => {
+                          setHubDraft(tag.label);
+                        }}
+                      >
+                        {tag.label}
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            ) : null}
+            {hubDialog ? (
+              <p className="text-muted-foreground text-xs">Cliente: {hubDialog.customerName}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={hubSaving}
+              type="button"
+              variant="outline"
+              onClick={() => setHubDialog(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={hubSaving || !hubDraft.trim()}
+              type="button"
+              onClick={() => void submitHubDialog()}
+            >
+              {hubSaving ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

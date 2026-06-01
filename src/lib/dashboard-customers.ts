@@ -1,5 +1,19 @@
 /** Types + server fetch for GET /dashboard/customers (tabla de clientes). */
 
+import {
+  parseBasketTrend,
+  parseCustomerLabels,
+  parseCustomerStatus,
+  parseCustomerTasks,
+  parseFrequencyBucket,
+  parseNumberArray,
+  type BasketTrend,
+  type CustomerLabelRow,
+  type CustomerStatus,
+  type CustomerTaskRow,
+  type FrequencyBucket,
+} from "@/lib/customer-hub";
+
 /** Prefer id_token; fall back to access_token on 401/403. */
 function uniqBearerCandidates(idToken?: string | null, accessToken?: string | null): string[] {
   return [
@@ -18,6 +32,16 @@ export type DashboardCustomerRow = Readonly<{
   latestOrderAt: string | null;
   latestOrderDisplayCode: string | null;
   orderCount: number;
+  status: CustomerStatus;
+  frequency: FrequencyBucket;
+  expectedOrderDate: string | null;
+  daysOverdue: number;
+  basketTrend: BasketTrend;
+  basketChangePct: number | null;
+  missingProductIds: readonly number[];
+  labels: readonly CustomerLabelRow[];
+  openTasks: readonly CustomerTaskRow[];
+  openTaskCount: number;
 }>;
 
 function parseCustomerRow(raw: unknown): DashboardCustomerRow | null {
@@ -47,17 +71,51 @@ function parseCustomerRow(raw: unknown): DashboardCustomerRow | null {
         ? o.latestOrderAt.trim()
         : null;
 
+  let daysOverdue = 0;
+  if (typeof o.daysOverdue === "number" && Number.isFinite(o.daysOverdue)) {
+    daysOverdue = Math.max(0, Math.trunc(o.daysOverdue));
+  }
+
+  let basketChangePct: number | null = null;
+  if (o.basketChangePct === null || o.basketChangePct === undefined) {
+    basketChangePct = null;
+  } else if (typeof o.basketChangePct === "number" && Number.isFinite(o.basketChangePct)) {
+    basketChangePct = o.basketChangePct;
+  }
+
+  let openTaskCount = 0;
+  if (typeof o.openTaskCount === "number" && Number.isFinite(o.openTaskCount)) {
+    openTaskCount = Math.max(0, Math.trunc(o.openTaskCount));
+  }
+
+  const expectedOrderDate =
+    o.expectedOrderDate === null || o.expectedOrderDate === undefined
+      ? null
+      : typeof o.expectedOrderDate === "string" && o.expectedOrderDate.trim().length > 0
+        ? o.expectedOrderDate.trim()
+        : null;
+
   return {
     customerId: id,
-    name: name || "—",
+    name: name || "\u2014",
     clientCode: maybeNull("clientCode"),
-    location: str("location") || "—",
+    location: str("location") || "\u2014",
     sellerAssigned: maybeNull("sellerAssigned"),
-    contactPhone: str("contactPhone") || "—",
+    contactPhone: str("contactPhone") || "\u2014",
     email: maybeNull("email"),
     latestOrderAt,
     latestOrderDisplayCode: maybeNull("latestOrderDisplayCode"),
     orderCount,
+    status: parseCustomerStatus(o.status),
+    frequency: parseFrequencyBucket(o.frequency),
+    expectedOrderDate,
+    daysOverdue,
+    basketTrend: parseBasketTrend(o.basketTrend),
+    basketChangePct,
+    missingProductIds: parseNumberArray(o.missingProductIds),
+    labels: parseCustomerLabels(o.labels),
+    openTasks: parseCustomerTasks(o.openTasks),
+    openTaskCount,
   };
 }
 

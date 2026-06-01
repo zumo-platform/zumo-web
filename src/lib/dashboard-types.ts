@@ -73,6 +73,7 @@ export type SupplierSettings = {
   };
   ai: {
     autoCommitEnabled: boolean;
+    chatbotEnabled: boolean;
     draftExpirationHours: 24 | 48 | 72 | 168;
   };
 };

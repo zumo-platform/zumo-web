@@ -19,13 +19,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerComingSoonTab } from "@/components/workspace/customer-coming-soon-tab";
 import { CustomerDetailSidebar } from "@/components/workspace/customer-detail-sidebar";
+import { CustomerLabelsSection } from "@/components/workspace/customer-labels-section";
 import { CustomerOrdersTab } from "@/components/workspace/customer-orders-tab";
 import { CustomerProductPickerSheet } from "@/components/workspace/customer-product-picker-sheet";
 import { CustomerProductsTab } from "@/components/workspace/customer-products-tab";
+import { CustomerTasksTab } from "@/components/workspace/customer-tasks-tab";
 import { CustomerUsersTab } from "@/components/workspace/customer-users-tab";
-import { workspaceContentOuterClassName, workspacePageHeaderClassName } from "@/lib/workspace-layout";
-import { cn } from "@/lib/utils";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
+import type { CustomerLabelRow } from "@/lib/customer-hub";
 import {
   customerDetailToDraft,
   draftToSavePayload,
@@ -36,13 +37,19 @@ import {
   type DashboardCustomerFullDetail,
 } from "@/lib/dashboard-customers";
 import { fetchProductsViaProxy, type DashboardProductRow } from "@/lib/dashboard-products";
+import { cn } from "@/lib/utils";
+import { workspaceContentOuterClassName, workspacePageHeaderClassName } from "@/lib/workspace-layout";
 
 export function CustomerDetailExperience({
   customerId,
   navigationCustomerIds: initialNavIds,
+  initialLabels = [],
+  onHubMutated,
 }: Readonly<{
   customerId: number;
   navigationCustomerIds?: readonly number[];
+  initialLabels?: readonly CustomerLabelRow[];
+  onHubMutated?: () => void;
 }>) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -242,6 +249,13 @@ export function CustomerDetailExperience({
           createdAt={detail.createdAt}
           customerId={customerId}
           draft={draft}
+          labelsSlot={
+            <CustomerLabelsSection
+              customerId={customerId}
+              initialLabels={initialLabels}
+              onLabelsChanged={onHubMutated}
+            />
+          }
           onDraftChange={updateDraft}
         />
 
@@ -282,7 +296,7 @@ export function CustomerDetailExperience({
                 />
               </TabsContent>
               <TabsContent className="mt-0" value="tasks">
-                <CustomerComingSoonTab title="Tareas" />
+                <CustomerTasksTab customerId={customerId} onTasksChanged={onHubMutated} />
               </TabsContent>
               <TabsContent className="mt-0" value="users">
                 <CustomerUsersTab

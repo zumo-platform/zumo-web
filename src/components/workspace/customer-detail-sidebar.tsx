@@ -1,10 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
+
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   CustomerDraftField,
   CustomerDraftReadonly,
 } from "@/components/workspace/customer-draft-field";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { CustomerDraftState } from "@/lib/dashboard-customers";
 
 function formatCreatedAt(iso: string | null): string {
@@ -25,11 +27,13 @@ export function CustomerDetailSidebar({
   customerId,
   createdAt,
   draft,
+  labelsSlot,
   onDraftChange,
 }: Readonly<{
   customerId: number;
   createdAt: string | null;
   draft: CustomerDraftState;
+  labelsSlot?: ReactNode;
   onDraftChange: (patch: Partial<CustomerDraftState>) => void;
 }>) {
   return (
@@ -110,6 +114,7 @@ export function CustomerDetailSidebar({
           value={draft.clientCode}
           onChange={(clientCode) => onDraftChange({ clientCode })}
         />
+        {labelsSlot}
         </div>
       </ScrollArea>
     </aside>

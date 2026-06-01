@@ -6,12 +6,12 @@ import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 export const viewport: Viewport = {
@@ -35,6 +35,7 @@ export default function RootLayout({
   return (
     <html suppressHydrationWarning lang="es">
       <head>
+        <meta charSet="utf-8" />
         {/* Satoshi is distributed by Fontshare (not hosted on fonts.google.com). */}
         <link
           href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap"

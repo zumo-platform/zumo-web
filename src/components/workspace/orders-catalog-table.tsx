@@ -50,7 +50,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
+import { MatchCoverageIndicator, TouchlessBolt } from "@/components/workspace/match-coverage-indicator";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import {
   confirmDashboardOrderViaProxy,
@@ -360,7 +360,9 @@ export function OrdersCatalogTable({
         id: "channel",
         header: "Canal",
         cell: ({ row }) => {
-          const hasWa = Boolean(row.original.conversationId);
+          const o = row.original;
+          const hasWa = Boolean(o.conversationId);
+          const showTouchlessBolt = autoCommitEnabled && o.isTouchless;
           return (
             <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
               {hasWa ? (
@@ -374,6 +376,11 @@ export function OrdersCatalogTable({
                   <span>Panel</span>
                 </>
               )}
+              {showTouchlessBolt ? (
+                <span className="ml-0.5 inline-flex" title="Confirmado automáticamente (touchless)">
+                  <TouchlessBolt />
+                </span>
+              ) : null}
             </div>
           );
         },

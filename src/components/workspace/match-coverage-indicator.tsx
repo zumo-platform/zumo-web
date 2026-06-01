@@ -1,6 +1,6 @@
 "use client";
 
-import { Zap } from "lucide-react";
+import { Check, Zap } from "lucide-react";
 
 import {
   Tooltip,
@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  isFullMatchCoverage,
   matchCoveragePercent,
   matchCoverageRingTone,
   matchCoverageTooltip,
@@ -28,13 +29,32 @@ const RING_STROKE: Record<MatchCoverageRingTone, string> = {
   low: "stroke-red-500",
 };
 
-function CoverageRing({
+const FILLED_ICON_PX = { sm: 22, md: 26 } as const;
+const RING_ICON_PX = { sm: 30, md: 36 } as const;
+
+function CoverageIcon({
   coverage,
-  size = 28,
-}: Readonly<{ coverage: number; size?: number }>) {
+  size = "sm",
+}: Readonly<{ coverage: number; size?: "sm" | "md" }>) {
   const tone = matchCoverageRingTone(coverage);
   const pct = matchCoveragePercent(coverage) ?? 0;
-  const r = (size - 4) / 2;
+  const filledPx = FILLED_ICON_PX[size];
+  const ringPx = RING_ICON_PX[size];
+
+  if (isFullMatchCoverage(coverage)) {
+    return (
+      <span
+        aria-hidden
+        className="inline-flex shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm ring-1 ring-emerald-600/20"
+        style={{ width: filledPx, height: filledPx }}
+        title={`${String(pct)}% coincidencia`}
+      >
+        <Check className={size === "md" ? "size-3.5" : "size-3"} strokeWidth={3} />
+      </span>
+    );
+  }
+
+  const r = (ringPx - 5) / 2;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - coverage);
 
@@ -42,31 +62,48 @@ function CoverageRing({
     <svg
       aria-hidden
       className={cn("shrink-0 -rotate-90", RING_COLORS[tone])}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      width={size}
+      height={ringPx}
+      viewBox={`0 0 ${ringPx} ${ringPx}`}
+      width={ringPx}
     >
       <circle
-        className="stroke-muted/40"
-        cx={size / 2}
-        cy={size / 2}
+        className="stroke-muted/50"
+        cx={ringPx / 2}
+        cy={ringPx / 2}
         fill="none"
         r={r}
-        strokeWidth={2.5}
+        strokeWidth={4}
       />
       <circle
         className={RING_STROKE[tone]}
-        cx={size / 2}
-        cy={size / 2}
+        cx={ringPx / 2}
+        cy={ringPx / 2}
         fill="none"
         r={r}
         strokeDasharray={circumference}
         strokeDashoffset={offset}
         strokeLinecap="round"
-        strokeWidth={2.5}
+        strokeWidth={4}
       />
       <title>{`${String(pct)}% coincidencia`}</title>
     </svg>
+  );
+}
+
+/** Blue ⚡ shown on touchless auto-confirmed orders (Rekki-style integration signal). */
+export function TouchlessBolt({
+  className,
+  size = "sm",
+}: Readonly<{ className?: string; size?: "sm" | "md" }>) {
+  return (
+    <Zap
+      aria-hidden
+      className={cn(
+        "shrink-0 fill-blue-500 text-blue-500",
+        size === "md" ? "size-4" : "size-3.5",
+        className,
+      )}
+    />
   );
 }
 
@@ -86,7 +123,6 @@ export function MatchCoverageIndicator({
   size?: "sm" | "md";
 }>) {
   const pct = matchCoveragePercent(matchCoverage);
-  const ringSize = size === "md" ? 32 : 28;
   const tooltip = matchCoverageTooltip(matchCoverage, isTouchless);
   const showTouchlessBolt = autoCommitEnabled && isTouchless;
 
@@ -111,18 +147,17 @@ export function MatchCoverageIndicator({
         <TooltipTrigger asChild>
           <span
             className={cn(
-              "inline-flex cursor-help items-center gap-1.5 tabular-nums",
+              "inline-flex cursor-help items-center gap-2 tabular-nums",
               size === "md" ? "text-sm" : "text-xs",
               className,
             )}
           >
-            <CoverageRing coverage={matchCoverage} size={ringSize} />
-            <span className="font-medium text-foreground">{lineCount}</span>
-            <span className="text-muted-foreground">✓</span>
-            <span className="font-medium">{pct}%</span>
+            <CoverageIcon coverage={matchCoverage} size={size} />
+            <span className="font-semibold text-foreground">{lineCount}</span>
+            <span className="font-semibold text-foreground">{pct}%</span>
             {showTouchlessBolt ? (
-              <span className="inline-flex text-amber-500">
-                <Zap aria-hidden className="size-3.5 fill-current" />
+              <span className="inline-flex items-center">
+                <TouchlessBolt size={size} />
                 <span className="sr-only">Touchless</span>
               </span>
             ) : null}
