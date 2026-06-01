@@ -19,7 +19,7 @@ Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind C
 | **sonner** | Toasts |
 | **@tanstack/react-query** | Server/async state (queries & mutations) |
 | **@dnd-kit/core** | Kanban drag-and-drop on `/orders` board view |
-| **@tanstack/react-virtual** | Row virtualization for large order/client tables |
+| **@tanstack/react-table** | Paginated catalog tables (Inventario, Pedidos, Clientes) |
 | **Session cookies** + **Cognito** (via Route Handlers) | Sign-up, confirm, login, JWT proxy to API |
 
 ## Product flows
@@ -40,13 +40,13 @@ Invite → accept link → Cognito user + seller row → workspace. Backend invi
 ## Recent workspace features (2026-05)
 
 - **WhatsApp** — three-column UI, draft order sheet with editable lines, lifecycle actions (convert / confirm / reject).
-- **Orders** — **Lista / Kanban** toggle on `/orders` (`?view=list|board`, `?q=` search); drag-to-move between flow columns; unified search + delivery date filter; detail sheet; **`/orders/creation`** manual create (**delivery date required**).
+- **Orders** — **Lista / Kanban** toggle on `/orders` (`?view=list|board`, `?q=` search); drag-to-move between flow columns; unified search + delivery date filter; detail sheet; **`/orders/creation`** manual create (**delivery date required**); list view pagination footer (20/50/100 rows).
 - **Order flow settings** — **`/settings/order-flow`**: rename system statuses, reorder columns, add custom statuses (owner/admin).
-- **Clients** — table + **`/clients/[customerId]`** detail (sidebar edits, orders/products/users tabs, product picker).
-- **Inventory** — full-width catalog table synced with dashboard products API.
+- **Clients** — table + **`/clients/[customerId]`** detail (sidebar edits, orders/products/users tabs, product picker); pagination footer (10/30/50/100 rows).
+- **Inventory** — full-width catalog table synced with dashboard products API; pagination footer (20/50/100 rows).
 - **Matches** — alias CRUD at `/matches`.
 - **Settings** — business profile, AI autocommit, locale; timezone loaded for all date/time display.
-- **Layout** — full-width list/table pages via **`src/lib/workspace-layout.ts`** (orders, clients, inventory, matches, marketing).
+- **Layout** — full-width list/table pages via **`src/lib/workspace-layout.ts`**: shared padding, **`workspaceTableScrollClassName`** (vertical scroll below page header), **`workspaceTableCardClassName`** (horizontal scroll on wide tables), extra bottom padding so content is not flush with the viewport.
 - **Supplier timezone** — all order/message times shown in supplier IANA timezone (from settings), not browser or US server time. Instants without `Z` suffix are parsed as UTC before formatting.
 
 ## Zustand — good fits for Zumo
@@ -90,7 +90,7 @@ zumo-web/
 │   │   ├── workspace-preferences-context.tsx
 │   │   ├── dashboard-orders.ts
 │   │   ├── order-status-flow.ts      # supplier flow + status labels for board/filters
-│   │   ├── workspace-layout.ts       # full-width padding tokens for workspace pages
+│   │   ├── workspace-layout.ts       # full-width padding + table scroll tokens
 │   │   ├── dashboard-customers.ts
 │   │   └── api.ts
 │   └── content/marketing/

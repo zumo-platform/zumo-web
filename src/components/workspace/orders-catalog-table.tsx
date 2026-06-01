@@ -1,16 +1,27 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   type ColumnDef,
   type RowSelectionState,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { CheckCircle2, Eye, Loader2, MessageCircle, MoreHorizontal, Monitor } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Eye,
+  Loader2,
+  MessageCircle,
+  MoreHorizontal,
+  Monitor,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -25,6 +36,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Tooltip,
@@ -50,10 +68,13 @@ import {
 } from "@/lib/order-status-flow";
 import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import { cn } from "@/lib/utils";
+import { workspaceTableCardClassName } from "@/lib/workspace-layout";
 import {
   useSupplierTimeFormatters,
   useWorkspacePreferences,
 } from "@/lib/workspace-preferences-context";
+
+const PAGE_SIZES = [20, 50, 100] as const;
 
 function orderHasValidDeliveryDate(
   deliveryDate: string | null,
@@ -414,6 +435,7 @@ export function OrdersCatalogTable({
     ],
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
   const table = useReactTable({
     data,
     columns,
@@ -421,110 +443,50 @@ export function OrdersCatalogTable({
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getRowId: (row) => row.orderId,
+    initialState: { pagination: { pageSize: 20, pageIndex: 0 } },
   });
 
   const selectedCount = table.getFilteredSelectedRowModel().rows.length;
+  const totalRows = data.length;
+  const pageCount = table.getPageCount();
+  const pageIndex = table.getState().pagination.pageIndex;
+  const pageSize = table.getState().pagination.pageSize;
   const rows = table.getRowModel().rows;
-  const useVirtual = rows.length >= 50;
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-  const ROW_HEIGHT = 52;
-
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
-    enabled: useVirtual,
-  });
-
-  const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : null;
-  const paddingTop = virtualRows && virtualRows.length > 0 ? virtualRows[0]!.start : 0;
-  const paddingBottom =
-    virtualRows && virtualRows.length > 0
-      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1]!.end
-      : 0;
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
-      {selectedCount > 0 ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm"
-          role="status"
-        >
-          <span className="text-foreground">
-            {selectedCount === 1 ? "1 pedido seleccionado" : `${selectedCount} pedidos seleccionados`}
-          </span>
-          <Button disabled size="sm" type="button" variant="secondary">
-            Edición masiva (próximamente)
-          </Button>
-        </div>
-      ) : null}
-
-      <div
-        ref={tableContainerRef}
-        className={cn("rounded-lg border bg-card shadow-sm", useVirtual && "max-h-[min(70vh,720px)] overflow-auto")}
-      >
-        <Table>
-          <TableHeader className={useVirtual ? "sticky top-0 z-10 bg-card" : undefined}>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={cn(
-                      header.column.id === "select" && "w-10 px-2",
-                      header.column.id === "status" && "min-w-[9.5rem]",
-                      header.column.id === "channel" && "w-[7.5rem]",
-                      header.column.id === "actions" && "w-10 px-2",
-                      (header.column.id === "lineCount" || header.column.id === "orderCreation") &&
-                        "min-w-[5rem]",
-                    )}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {rows.length ? (
-              useVirtual && virtualRows ? (
-                <>
-                  {paddingTop > 0 ? (
-                    <TableRow aria-hidden>
-                      <TableCell colSpan={columns.length} style={{ height: paddingTop, padding: 0 }} />
-                    </TableRow>
-                  ) : null}
-                  {virtualRows.map((virtualRow) => {
-                    const row = rows[virtualRow.index];
-                    if (!row) return null;
-                    return (
-                      <TableRow
-                        key={row.id}
-                        className="cursor-pointer"
-                        data-state={row.getIsSelected() ? "selected" : undefined}
-                        style={{ height: ROW_HEIGHT }}
-                        onClick={() => openDetail(row.original.orderId)}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    );
-                  })}
-                  {paddingBottom > 0 ? (
-                    <TableRow aria-hidden>
-                      <TableCell colSpan={columns.length} style={{ height: paddingBottom, padding: 0 }} />
-                    </TableRow>
-                  ) : null}
-                </>
-              ) : (
+      <div className="w-full">
+        <div className={workspaceTableCardClassName}>
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead
+                      key={header.id}
+                      className={cn(
+                        header.column.id === "select" && "w-10 px-2",
+                        header.column.id === "status" && "min-w-[9.5rem]",
+                        header.column.id === "channel" && "w-[7.5rem]",
+                        header.column.id === "actions" && "w-10 px-2",
+                        header.column.id === "customerName" && "min-w-[8rem]",
+                        header.column.id === "orderId" && "min-w-[7rem]",
+                        (header.column.id === "lineCount" || header.column.id === "orderCreation") &&
+                          "min-w-[5rem]",
+                      )}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {rows.length ? (
                 rows.map((row) => (
                   <TableRow
                     className="cursor-pointer"
@@ -533,21 +495,104 @@ export function OrdersCatalogTable({
                     onClick={() => openDetail(row.original.orderId)}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
                     ))}
                   </TableRow>
                 ))
-              )
-            ) : showInlineEmpty ? (
-              <TableRow>
-                <TableCell className="h-28 text-center text-muted-foreground text-sm" colSpan={columns.length}>
-                  Todavía no hay pedidos en esta lista.
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </div>
+              ) : showInlineEmpty ? (
+                <TableRow>
+                  <TableCell className="h-28 text-center text-muted-foreground text-sm" colSpan={columns.length}>
+                    Todavía no hay pedidos en esta lista.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+
+          <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-muted-foreground text-sm">
+              {selectedCount} de {totalRows} fila{totalRows === 1 ? "" : "s"} seleccionada
+              {selectedCount === 1 ? "" : "s"}.
+            </p>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
+              <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap text-sm font-medium">Filas por página</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(value) => {
+                    table.setPageSize(Number(value));
+                    table.setPageIndex(0);
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[4.5rem]" size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZES.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="whitespace-nowrap text-sm font-medium">
+                Página {pageCount === 0 ? 0 : pageIndex + 1} de {pageCount}
+              </p>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  aria-label="Primera página"
+                  className="size-8"
+                  disabled={!table.getCanPreviousPage()}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => table.setPageIndex(0)}
+                >
+                  <ChevronsLeft className="size-4" />
+                </Button>
+                <Button
+                  aria-label="Página anterior"
+                  className="size-8"
+                  disabled={!table.getCanPreviousPage()}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => table.previousPage()}
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  aria-label="Página siguiente"
+                  className="size-8"
+                  disabled={!table.getCanNextPage()}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => table.nextPage()}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+                <Button
+                  aria-label="Última página"
+                  className="size-8"
+                  disabled={!table.getCanNextPage()}
+                  size="icon-sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => table.setPageIndex(Math.max(pageCount - 1, 0))}
+                >
+                  <ChevronsRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
 
       <OrderDetailSheet
         customerNameFallback={

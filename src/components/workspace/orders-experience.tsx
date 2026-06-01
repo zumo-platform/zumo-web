@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   workspaceContentInnerClassName,
   workspaceContentOuterClassName,
+  workspaceTableScrollClassName,
 } from "@/lib/workspace-layout";
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -327,11 +328,18 @@ export function OrdersExperience() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-hidden",
+            "flex min-h-0 flex-1 flex-col",
+            hasAnyOrders && !ordersFetchFailed ? "overflow-hidden" : workspaceTableScrollClassName,
             workspaceContentOuterClassName,
           )}
         >
-          <div className={cn(workspaceContentInnerClassName, "gap-4")}>
+          <div
+            className={cn(
+              workspaceContentInnerClassName,
+              "min-h-0 gap-4",
+              hasAnyOrders && !ordersFetchFailed ? "flex flex-1 flex-col overflow-hidden" : undefined,
+            )}
+          >
             {ordersFetchFailed ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-6 py-8 text-center">
                 <h2 className="text-balance font-semibold text-foreground text-lg md:text-xl">
@@ -373,7 +381,7 @@ export function OrdersExperience() {
             ) : null}
 
             {hasAnyOrders && !ordersFetchFailed ? (
-              <div className="flex min-h-0 flex-1 flex-col gap-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
                 <header className="shrink-0 space-y-3">
                   <OrdersToolbar
                     deliveryDateFilter={deliveryDateFilter}
@@ -396,7 +404,8 @@ export function OrdersExperience() {
                 </header>
 
                 {!hasVisibleResults ? (
-                  <div className="rounded-lg border border-dashed bg-muted/15 px-6 py-10 text-center">
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    <div className="rounded-lg border border-dashed bg-muted/15 px-6 py-10 text-center">
                     <p className="text-muted-foreground text-sm">
                       Ningún pedido coincide con la búsqueda o el filtro de entrega.
                     </p>
@@ -413,6 +422,7 @@ export function OrdersExperience() {
                       Limpiar filtros
                     </Button>
                   </div>
+                  </div>
                 ) : (
                   <div
                     className={cn(
@@ -422,7 +432,7 @@ export function OrdersExperience() {
                   >
                     <div
                       className={cn(
-                        "min-h-0 flex-1 flex-col",
+                        "min-h-0 flex-1 flex-col overflow-y-auto",
                         deferredViewMode === "list" ? "flex" : "hidden",
                       )}
                     >
@@ -439,7 +449,7 @@ export function OrdersExperience() {
                     {boardMounted ? (
                       <div
                         className={cn(
-                          "min-h-0 flex-1 flex-col",
+                          "min-h-0 flex-1 flex-col overflow-hidden",
                           deferredViewMode === "board" ? "flex h-full" : "hidden",
                         )}
                       >

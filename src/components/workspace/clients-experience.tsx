@@ -22,7 +22,11 @@ import {
   type DashboardCustomerRow,
 } from "@/lib/dashboard-customers";
 import { cn } from "@/lib/utils";
-import { workspaceContentOuterClassName } from "@/lib/workspace-layout";
+import {
+  workspaceContentInnerClassName,
+  workspaceContentOuterClassName,
+  workspaceTableScrollClassName,
+} from "@/lib/workspace-layout";
 
 export type ClientsExperienceVariant = "list" | "creation";
 
@@ -200,8 +204,10 @@ export function ClientsExperience({
     );
   } else if (hasCustomers && customerRows) {
     main = (
-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", workspaceContentOuterClassName)}>
-        <ClientsCustomersTable data={customerRows} />
+      <div className={cn(workspaceTableScrollClassName, workspaceContentOuterClassName)}>
+        <div className={workspaceContentInnerClassName}>
+          <ClientsCustomersTable data={customerRows} />
+        </div>
       </div>
     );
   } else {

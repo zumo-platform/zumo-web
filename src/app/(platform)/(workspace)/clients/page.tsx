@@ -18,7 +18,7 @@ export default async function ClientsPage() {
   const initialCustomers = await fetchCustomersDashboard(apiUrl, idToken, accessToken);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <ClientsExperience initialCustomers={initialCustomers} variant="list" />
     </div>
   );

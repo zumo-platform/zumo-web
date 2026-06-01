@@ -7,9 +7,10 @@ import {
   type RowSelectionState,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { MoreHorizontal, Package } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal, Package } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -31,6 +32,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatProductStockLabel, type DashboardProductRow } from "@/lib/dashboard-products";
 import {
@@ -38,6 +46,9 @@ import {
   readCachedProductCategories,
 } from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
+import { workspaceTableCardClassName } from "@/lib/workspace-layout";
+
+const PAGE_SIZES = [20, 50, 100] as const;
 
 function formatPriceLabel(price: string | null): string {
   if (price === null || price === "") return "—";
@@ -301,6 +312,7 @@ export function ProductsCatalogTable({
     [categoryLabel, onCatalogChanged],
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
   const table = useReactTable({
     data,
     columns,
@@ -308,10 +320,16 @@ export function ProductsCatalogTable({
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getRowId: (row) => String(row.productId),
+    initialState: { pagination: { pageSize: 20, pageIndex: 0 } },
   });
 
   const selectedCount = table.getFilteredSelectedRowModel().rows.length;
+  const totalRows = data.length;
+  const pageCount = table.getPageCount();
+  const pageIndex = table.getState().pagination.pageIndex;
+  const pageSize = table.getState().pagination.pageSize;
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
@@ -330,22 +348,8 @@ export function ProductsCatalogTable({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      {selectedCount > 0 ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm"
-          role="status"
-        >
-          <span className="text-foreground">
-            {selectedCount === 1 ? "1 producto seleccionado" : `${selectedCount} productos seleccionados`}
-          </span>
-          <Button disabled size="sm" type="button" variant="secondary">
-            Acciones masivas (próximamente)
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="rounded-lg border bg-card shadow-sm">
+    <div className="w-full">
+      <div className={workspaceTableCardClassName}>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -357,6 +361,9 @@ export function ProductsCatalogTable({
                       header.column.id === "select" && "w-10 px-2",
                       header.column.id === "photo" && "w-14",
                       header.column.id === "actions" && "w-10 px-2",
+                      header.column.id === "name" && "min-w-[10rem]",
+                      header.column.id === "sku" && "min-w-[7rem]",
+                      header.column.id === "category" && "min-w-[6rem]",
                     )}
                   >
                     {header.isPlaceholder
@@ -385,6 +392,88 @@ export function ProductsCatalogTable({
             )}
           </TableBody>
         </Table>
+
+        <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-muted-foreground text-sm">
+            {selectedCount} de {totalRows} fila{totalRows === 1 ? "" : "s"} seleccionada
+            {selectedCount === 1 ? "" : "s"}.
+          </p>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
+            <div className="flex items-center gap-2">
+              <span className="whitespace-nowrap text-sm font-medium">Filas por página</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => {
+                  table.setPageSize(Number(value));
+                  table.setPageIndex(0);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[4.5rem]" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZES.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <p className="whitespace-nowrap text-sm font-medium">
+              Página {pageCount === 0 ? 0 : pageIndex + 1} de {pageCount}
+            </p>
+
+            <div className="flex items-center gap-1">
+              <Button
+                aria-label="Primera página"
+                className="size-8"
+                disabled={!table.getCanPreviousPage()}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+                onClick={() => table.setPageIndex(0)}
+              >
+                <ChevronsLeft className="size-4" />
+              </Button>
+              <Button
+                aria-label="Página anterior"
+                className="size-8"
+                disabled={!table.getCanPreviousPage()}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+                onClick={() => table.previousPage()}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button
+                aria-label="Página siguiente"
+                className="size-8"
+                disabled={!table.getCanNextPage()}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+                onClick={() => table.nextPage()}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button
+                aria-label="Última página"
+                className="size-8"
+                disabled={!table.getCanNextPage()}
+                size="icon-sm"
+                type="button"
+                variant="outline"
+                onClick={() => table.setPageIndex(Math.max(pageCount - 1, 0))}
+              >
+                <ChevronsRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <AlertDialog

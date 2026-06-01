@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import {
   workspaceContentInnerClassName,
   workspaceContentOuterClassName,
+  workspaceTableScrollClassName,
 } from "@/lib/workspace-layout";
 
 export function ProductsExperience() {
@@ -94,8 +95,8 @@ export function ProductsExperience() {
 
   const listDescription =
     visible.length > 1
-      ? `Tenés ${visible.length} ítems en inventario. Listado sincronizado con el servidor; la edición de filas desde el panel llegará próximamente.`
-      : "Tu inventario tiene 1 ítem. Listado sincronizado con el servidor; la edición desde el panel llegará próximamente.";
+      ? `Tenés ${visible.length} ítems en inventario.`
+      : "Tu inventario tiene 1 ítem.";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -103,19 +104,11 @@ export function ProductsExperience() {
         actions={<ProductsHeaderActions onProductsChanged={handleCatalogChanged} />}
         description={listDescription}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <div className={cn("flex min-h-0 flex-1 overflow-auto", workspaceContentOuterClassName)}>
-          <div className={cn(workspaceContentInnerClassName, "gap-4")}>
-            <header className="shrink-0 pb-4">
-              <h2 className="font-semibold text-base tracking-tight text-foreground">Inventario</h2>
-              <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
-                Listado sincronizado con el servidor: foto, inventario, precio y categorías según tus datos.
-              </p>
-            </header>
-            <div className="min-h-0 flex-1 overflow-auto pb-6">
-              <ProductsCatalogTable data={visible} onCatalogChanged={handleCatalogChanged} />
-            </div>
-          </div>
+      <div
+        className={cn(workspaceTableScrollClassName, workspaceContentOuterClassName, "bg-background")}
+      >
+        <div className={workspaceContentInnerClassName}>
+          <ProductsCatalogTable data={visible} onCatalogChanged={handleCatalogChanged} />
         </div>
       </div>
     </div>
