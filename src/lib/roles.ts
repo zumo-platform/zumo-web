@@ -143,6 +143,12 @@ export function canWithRole(
   return can(permissions, key);
 }
 
+/** Owner/operator may mutate warehouses and stock (until inventory.* permission keys ship). */
+export function canMutateInventory(role: string): boolean {
+  const r = normalizeRole(role);
+  return r === "owner" || r === "operator";
+}
+
 /** §2.4 — actor may change target role only when allowed. */
 export function canEditTargetRole(actorRole: string, targetRole: string): boolean {
   const actor = normalizeRole(actorRole);

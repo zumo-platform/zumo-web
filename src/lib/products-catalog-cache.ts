@@ -5,6 +5,7 @@ import {
 import {
   dedupeSessionLoad,
   invalidateSessionCache,
+  invalidateSessionCachePrefix,
   readSessionCache,
   scheduleIdleTask,
   writeSessionCache,
@@ -12,33 +13,53 @@ import {
   WORKSPACE_CACHE_TTL_MS,
 } from "@/lib/workspace-session-cache";
 
-export function readCachedProducts(): DashboardProductRow[] | null {
-  return readSessionCache<DashboardProductRow[]>(WORKSPACE_CACHE_KEYS.products);
+function productsCacheKey(warehouseId: number | null): string {
+  return warehouseId != null
+    ? `${WORKSPACE_CACHE_KEYS.products}:wh-${warehouseId}`
+    : `${WORKSPACE_CACHE_KEYS.products}:all`;
+}
+
+function catalogRowHasInventoryFields(row: DashboardProductRow): boolean {
+  return "trackStock" in row && "available" in row;
+}
+
+export function readCachedProducts(warehouseId: number | null = null): DashboardProductRow[] | null {
+  const cached = readSessionCache<DashboardProductRow[]>(productsCacheKey(warehouseId));
+  if (!cached) return null;
+  if (cached.length > 0 && !catalogRowHasInventoryFields(cached[0]!)) {
+    invalidateSessionCache(productsCacheKey(warehouseId));
+    return null;
+  }
+  return cached;
 }
 
 export async function loadProductsCatalog(options?: {
   force?: boolean;
+  warehouseId?: number | null;
 }): Promise<DashboardProductRow[]> {
+  const warehouseId = options?.warehouseId ?? null;
+  const cacheKey = productsCacheKey(warehouseId);
+
   if (options?.force) {
-    invalidateSessionCache(WORKSPACE_CACHE_KEYS.products);
+    invalidateSessionCache(cacheKey);
   } else {
-    const cached = readCachedProducts();
+    const cached = readCachedProducts(warehouseId);
     if (cached) return cached;
   }
 
-  return dedupeSessionLoad(WORKSPACE_CACHE_KEYS.products, async () => {
-    const rows = await fetchProductsViaProxy();
-    writeSessionCache(WORKSPACE_CACHE_KEYS.products, rows, WORKSPACE_CACHE_TTL_MS.products);
+  return dedupeSessionLoad(cacheKey, async () => {
+    const rows = await fetchProductsViaProxy({ warehouseId });
+    writeSessionCache(cacheKey, rows, WORKSPACE_CACHE_TTL_MS.products);
     return rows;
   });
 }
 
 export function invalidateProductsCatalogCache(): void {
-  invalidateSessionCache(WORKSPACE_CACHE_KEYS.products);
+  invalidateSessionCachePrefix(`${WORKSPACE_CACHE_KEYS.products}:`);
 }
 
 export async function prefetchProductsCatalog(): Promise<void> {
-  if (readCachedProducts()) return;
+  if (readCachedProducts(null)) return;
   await loadProductsCatalog();
 }
 

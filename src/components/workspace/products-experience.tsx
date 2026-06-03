@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Loader2 } from "lucide-react";
 
@@ -10,10 +10,10 @@ import { ProductsCatalogTable } from "@/components/workspace/products-catalog-ta
 import { ProductsHeaderActions } from "@/components/workspace/products-header-actions";
 import { ProductsPageHeader } from "@/components/workspace/products-page-header";
 import { activeProducts, type DashboardProductRow } from "@/lib/dashboard-products";
+import { fetchWarehousesViaProxy, type DashboardWarehouseRow } from "@/lib/inventory";
 import {
   invalidateProductsCatalogCache,
   loadProductsCatalog,
-  readCachedProducts,
 } from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
 import {
@@ -23,24 +23,25 @@ import {
 } from "@/lib/workspace-layout";
 
 export function ProductsExperience() {
-  const cachedOnMount = readCachedProducts();
-  const [rows, setRows] = useState<DashboardProductRow[] | null>(() => cachedOnMount);
-  const [ready, setReady] = useState(() => cachedOnMount !== null);
-
-  const refreshCatalog = useCallback(async (force = false) => {
-    const data = await loadProductsCatalog(force ? { force: true } : undefined);
-    setRows(data);
-    setReady(true);
-    return data;
-  }, []);
+  const [rows, setRows] = useState<DashboardProductRow[] | null>(null);
+  const [ready, setReady] = useState(false);
+  const [warehouses, setWarehouses] = useState<DashboardWarehouseRow[]>([]);
+  const [warehouseId, setWarehouseId] = useState<number | null>(null);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const data = await loadProductsCatalog();
+      invalidateProductsCatalogCache();
+      const [data, wh] = await Promise.all([
+        loadProductsCatalog({ force: true, warehouseId: null }),
+        fetchWarehousesViaProxy(),
+      ]);
       if (!cancelled) {
         setRows(data);
+        setWarehouses(wh);
         setReady(true);
+        initialLoadDone.current = true;
       }
     })();
     return () => {
@@ -48,10 +49,38 @@ export function ProductsExperience() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    let cancelled = false;
+    void (async () => {
+      const data = await loadProductsCatalog({ force: true, warehouseId });
+      if (!cancelled) setRows(data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [warehouseId]);
+
+  const refreshCatalog = useCallback(
+    async (force = false, nextWarehouseId: number | null = warehouseId) => {
+      const data = await loadProductsCatalog(
+        force ? { force: true, warehouseId: nextWarehouseId } : { warehouseId: nextWarehouseId },
+      );
+      setRows(data);
+      setReady(true);
+      return data;
+    },
+    [warehouseId],
+  );
+
   const handleCatalogChanged = useCallback(() => {
     invalidateProductsCatalogCache();
     void refreshCatalog(true);
   }, [refreshCatalog]);
+
+  const handleWarehouseChange = useCallback((nextId: number | null) => {
+    setWarehouseId(nextId);
+  }, []);
 
   if (!ready || rows === null) {
     return (
@@ -101,7 +130,14 @@ export function ProductsExperience() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <ProductsPageHeader
-        actions={<ProductsHeaderActions onProductsChanged={handleCatalogChanged} />}
+        actions={
+          <ProductsHeaderActions
+            onProductsChanged={handleCatalogChanged}
+            onWarehouseIdChange={handleWarehouseChange}
+            warehouseId={warehouseId}
+            warehouses={warehouses}
+          />
+        }
         description={listDescription}
       />
       <div

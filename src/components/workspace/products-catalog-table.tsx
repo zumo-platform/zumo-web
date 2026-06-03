@@ -40,13 +40,35 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
+import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
+import { ProductStockPopover } from "@/components/workspace/product-stock-popover";
 import { formatProductStockLabel, type DashboardProductRow } from "@/lib/dashboard-products";
+import {
+  catalogAvailableQty,
+  catalogOnHandQty,
+  catalogReservedQty,
+  catalogStockStatus,
+  formatQty,
+  STOCK_STATUS_BADGE_CLASS,
+  STOCK_STATUS_LABEL,
+  STOCK_STATUS_TONE,
+} from "@/lib/inventory-format";
 import {
   loadProductCategoryMap,
   readCachedProductCategories,
 } from "@/lib/products-catalog-cache";
+import { canMutateInventory } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { workspaceTableCardClassName } from "@/lib/workspace-layout";
+import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 const PAGE_SIZES = [20, 50, 100] as const;
 
@@ -125,6 +147,10 @@ export function ProductsCatalogTable({
   });
   const [pendingDelete, setPendingDelete] = useState<DashboardProductRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [adjustProduct, setAdjustProduct] = useState<DashboardProductRow | null>(null);
+  const [transferProduct, setTransferProduct] = useState<DashboardProductRow | null>(null);
+  const { role } = useWorkspacePermissions();
+  const canEditInventory = canMutateInventory(role);
 
   const productIdsKey = useMemo(() => data.map((p) => p.productId).join(","), [data]);
 
@@ -234,10 +260,39 @@ export function ProductsCatalogTable({
       },
       {
         id: "inventory",
-        header: "Inventario",
-        cell: ({ row }) => (
-          <span className="tabular-nums text-sm">{formatProductStockLabel(row.original.stockQuantity)}</span>
-        ),
+        header: "Disponible",
+        cell: ({ row }) => {
+          const r = row.original;
+          const status = catalogStockStatus(r);
+          if (status === "untracked") {
+            return (
+              <span className="tabular-nums text-sm" title="Sin control de existencias">
+                {formatProductStockLabel(r.stockQuantity)}
+              </span>
+            );
+          }
+          const available = catalogAvailableQty(r);
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-default items-center gap-2">
+                  <span className="font-medium text-sm tabular-nums">{formatQty(available)}</span>
+                  <Badge
+                    className={STOCK_STATUS_BADGE_CLASS[status]}
+                    data-tone={STOCK_STATUS_TONE[status]}
+                    variant="outline"
+                  >
+                    {STOCK_STATUS_LABEL[status]}
+                  </Badge>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                Físico {formatQty(catalogOnHandQty(r))} · Reservado{" "}
+                {formatQty(catalogReservedQty(r))}
+              </TooltipContent>
+            </Tooltip>
+          );
+        },
       },
       {
         id: "price",
@@ -252,7 +307,9 @@ export function ProductsCatalogTable({
         cell: ({ row }) => {
           const p = row.original;
           return (
-            <DropdownMenu>
+            <div className="flex items-center gap-1">
+              <ProductStockPopover product={p} />
+              <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={`Más acciones para ${p.name}`}
@@ -267,6 +324,27 @@ export function ProductsCatalogTable({
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {canEditInventory ? (
+                  <>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        setAdjustProduct(p);
+                      }}
+                    >
+                      Agregar / ajustar stock
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        setTransferProduct(p);
+                      }}
+                    >
+                      Transferir stock
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
                 <DropdownMenuItem
                   disabled={p.status === "active"}
                   onSelect={async (e) => {
@@ -305,11 +383,12 @@ export function ProductsCatalogTable({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           );
         },
       },
     ],
-    [categoryLabel, onCatalogChanged],
+    [canEditInventory, categoryLabel, onCatalogChanged],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
@@ -348,8 +427,9 @@ export function ProductsCatalogTable({
   };
 
   return (
-    <div className="w-full">
-      <div className={workspaceTableCardClassName}>
+    <TooltipProvider delayDuration={200}>
+      <div className="w-full">
+        <div className={workspaceTableCardClassName}>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -502,6 +582,25 @@ export function ProductsCatalogTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+
+      <InventoryAdjustDialog
+        open={adjustProduct != null}
+        product={adjustProduct}
+        onOpenChange={(open) => {
+          if (!open) setAdjustProduct(null);
+        }}
+        onSuccess={onCatalogChanged}
+      />
+
+      <InventoryTransferDialog
+        open={transferProduct != null}
+        product={transferProduct}
+        onOpenChange={(open) => {
+          if (!open) setTransferProduct(null);
+        }}
+        onSuccess={onCatalogChanged}
+      />
+      </div>
+    </TooltipProvider>
   );
 }

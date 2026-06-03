@@ -58,7 +58,8 @@ export function dedupeSessionLoad<T>(key: string, loader: () => Promise<T>): Pro
 
 export const WORKSPACE_CACHE_KEYS = {
   bootstrap: "workspace:bootstrap",
-  products: "workspace:products",
+  /** v3: inventory availability from ledger join */
+  products: "workspace:products:v3",
   productCategories: "workspace:product-categories",
   orders: "workspace:orders",
   customers: "workspace:customers",

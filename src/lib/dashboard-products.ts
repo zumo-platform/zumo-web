@@ -31,7 +31,23 @@ export type DashboardProductRow = Readonly<{
   price: string | null;
   imageUrl: string | null;
   categoryId: number | null;
+
+  trackStock: boolean;
+  available: number | null;
+  onHand: number | null;
+  reserved: number | null;
+  minimumStock: number | null;
 }>;
+
+function parseOptionalQty(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 function parseProduct(raw: unknown): DashboardProductRow | null {
   if (!raw || typeof raw !== "object") return null;
@@ -89,6 +105,13 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
         : "";
   const presentation = presentationRaw.length ? presentationRaw : null;
 
+  const trackStock =
+    o.trackStock === true ||
+    o.trackStock === 1 ||
+    o.trackStock === "true" ||
+    o.trackStock === "1" ||
+    (o.available !== undefined && o.available !== null && o.onHand !== undefined);
+
   return {
     productId: id,
     name: name || "—",
@@ -101,6 +124,11 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
     price,
     imageUrl,
     categoryId,
+    trackStock,
+    available: trackStock ? (parseOptionalQty(o.available) ?? 0) : null,
+    onHand: trackStock ? (parseOptionalQty(o.onHand) ?? 0) : null,
+    reserved: trackStock ? (parseOptionalQty(o.reserved) ?? 0) : null,
+    minimumStock: parseOptionalQty(o.minimumStock),
   };
 }
 
@@ -115,8 +143,16 @@ export function selectableProducts(rows: readonly DashboardProductRow[]): Dashbo
 }
 
 /** Client-side catalog load via Route Handler. */
-export async function fetchProductsViaProxy(): Promise<DashboardProductRow[]> {
-  const res = await fetch("/api/backend/dashboard/products", {
+export async function fetchProductsViaProxy(options?: {
+  warehouseId?: number | null;
+}): Promise<DashboardProductRow[]> {
+  const params = new URLSearchParams();
+  if (options?.warehouseId != null && options.warehouseId > 0) {
+    params.set("warehouseId", String(options.warehouseId));
+  }
+  const qs = params.toString();
+  const url = qs.length > 0 ? `/api/backend/dashboard/products?${qs}` : "/api/backend/dashboard/products";
+  const res = await fetch(url, {
     cache: "no-store",
     credentials: "include",
   });
