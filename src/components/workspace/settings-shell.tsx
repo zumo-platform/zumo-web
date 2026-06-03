@@ -7,7 +7,7 @@ export function SettingsShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <WorkspacePageHeader
-        description="Configurá tu negocio, el comportamiento del AI y los vendedores."
+        description="Configurá tu negocio, el comportamiento del AI y los permisos del equipo."
         title="Opciones"
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">

@@ -1,6 +1,8 @@
-import type { SellerMe, WhatsappStatusResult } from "@/lib/dashboard-types";
 import { parseSupplierSettings } from "@/lib/dashboard-settings";
+import type { SellerMe, WhatsappStatusResult } from "@/lib/dashboard-types";
+import { permissionsFromRole } from "@/lib/roles";
 import { DEFAULT_SUPPLIER_TIMEZONE } from "@/lib/supplier-timezone";
+import { parseSellerPermissions } from "@/lib/team";
 import type { WorkspacePreferences } from "@/lib/workspace-preferences-context";
 import {
   dedupeSessionLoad,
@@ -30,6 +32,9 @@ export const fallbackSeller: SellerMe["seller"] = {
 export const defaultPreferences: WorkspacePreferences = {
   timeZone: DEFAULT_SUPPLIER_TIMEZONE,
   autoCommitEnabled: false,
+  role: "owner",
+  sellerId: 0,
+  permissions: [...permissionsFromRole("owner")],
 };
 
 export const defaultBootstrap: WorkspaceBootstrap = {
@@ -48,17 +53,34 @@ async function fetchJson(path: string): Promise<unknown> {
 function buildPreferences(
   settings: ReturnType<typeof parseSupplierSettings>,
   supplier: SellerMe["supplier"] | null,
+  seller: SellerMe["seller"],
+  sellerMePayload: unknown,
 ): WorkspacePreferences {
-  if (settings) {
-    return {
-      timeZone: settings.business.timezone,
-      autoCommitEnabled: settings.ai.autoCommitEnabled,
-    };
-  }
-  const tz = supplier?.timezone?.trim();
+  const role = seller.role ?? "seller";
+  const parsedPermissions = parseSellerPermissions(sellerMePayload);
+  const permissions =
+    parsedPermissions.length > 0
+      ? parsedPermissions
+      : [...permissionsFromRole(role)];
+
+  const base = settings
+    ? {
+        timeZone: settings.business.timezone,
+        autoCommitEnabled: settings.ai.autoCommitEnabled,
+      }
+    : {
+        timeZone:
+          supplier?.timezone?.trim() && supplier.timezone.trim().length > 0
+            ? supplier.timezone.trim()
+            : DEFAULT_SUPPLIER_TIMEZONE,
+        autoCommitEnabled: false,
+      };
+
   return {
-    timeZone: tz && tz.length > 0 ? tz : DEFAULT_SUPPLIER_TIMEZONE,
-    autoCommitEnabled: false,
+    ...base,
+    role,
+    sellerId: seller.sellerId,
+    permissions,
   };
 }
 
@@ -79,7 +101,7 @@ async function fetchBootstrapPayload(): Promise<WorkspaceBootstrap> {
     seller,
     supplier,
     whatsappStatus,
-    preferences: buildPreferences(settings, supplier),
+    preferences: buildPreferences(settings, supplier, seller, sellerPayload),
   };
 
   writeSessionCache(WORKSPACE_CACHE_KEYS.bootstrap, bootstrap, WORKSPACE_CACHE_TTL_MS.bootstrap);

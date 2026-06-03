@@ -264,7 +264,7 @@ export async function patchDashboardSettingsViaProxy(
 
 export function sellerCanEditSettings(role: string): boolean {
   const r = role.trim().toLowerCase();
-  return r === "owner" || r === "admin";
+  return r === "owner" || r === "admin" || r === "operator";
 }
 
 export async function fetchSellerCanEditDashboard(

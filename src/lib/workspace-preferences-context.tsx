@@ -1,7 +1,13 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
+import {
+  canWithRole,
+  normalizeRole,
+  permissionsFromRole,
+  type PermissionKey,
+} from "@/lib/roles";
 import {
   calendarDateInTimezone,
   DEFAULT_SUPPLIER_TIMEZONE,
@@ -14,12 +20,20 @@ import {
 export type WorkspacePreferences = Readonly<{
   timeZone: string;
   autoCommitEnabled: boolean;
+  role: string;
+  sellerId: number;
+  permissions: readonly string[];
 }>;
 
-const WorkspacePreferencesContext = createContext<WorkspacePreferences>({
+const defaultPermissionsContext: WorkspacePreferences = {
   timeZone: DEFAULT_SUPPLIER_TIMEZONE,
   autoCommitEnabled: false,
-});
+  role: "owner",
+  sellerId: 0,
+  permissions: [...permissionsFromRole("owner")],
+};
+
+const WorkspacePreferencesContext = createContext<WorkspacePreferences>(defaultPermissionsContext);
 
 export function WorkspacePreferencesProvider({
   value,
@@ -37,6 +51,22 @@ export function WorkspacePreferencesProvider({
 
 export function useWorkspacePreferences(): WorkspacePreferences {
   return useContext(WorkspacePreferencesContext);
+}
+
+export function useWorkspacePermissions() {
+  const { role, sellerId, permissions } = useWorkspacePreferences();
+  const permissionSet = useMemo(() => new Set(permissions), [permissions]);
+  const can = useCallback(
+    (key: PermissionKey) => canWithRole(role, permissionSet, key),
+    [role, permissionSet],
+  );
+  return {
+    role,
+    sellerId,
+    permissions: permissionSet,
+    can,
+    isOwner: normalizeRole(role) === "owner",
+  };
 }
 
 export function useSupplierTimeFormatters() {

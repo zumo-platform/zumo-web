@@ -40,6 +40,7 @@ import {
 import type { SellerMe } from "@/lib/dashboard-types";
 import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
+import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -61,7 +62,7 @@ type NavItem =
       label: string;
     };
 
-const mainNav: NavItem[] = [
+const baseMainNav: NavItem[] = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/whatsapp", icon: MessageSquare, label: "WhatsApp" },
   { href: "/orders", icon: ShoppingCart, label: "Pedidos" },
@@ -80,12 +81,7 @@ const mainNav: NavItem[] = [
     icon: Tag,
     label: "Precios",
   },
-  {
-    disabled: true,
-    tooltip: "Pronto",
-    icon: Users,
-    label: "Vendedores",
-  },
+  { href: "/vendedores", icon: Users, label: "Vendedores" },
   { href: "/marketing", icon: Megaphone, label: "Marketing" },
 ];
 
@@ -100,7 +96,15 @@ export function AppSidebar({
 }>) {
   const pathname = usePathname();
   const router = useRouter();
+  const { can } = useWorkspacePermissions();
   const businessName = supplier?.businessName?.trim() || "Mi negocio";
+
+  const mainNav = baseMainNav.filter((item) => {
+    if ("href" in item && item.href === "/marketing") {
+      return can("marketing.access");
+    }
+    return true;
+  });
 
   return (
     <Sidebar collapsible="icon">
