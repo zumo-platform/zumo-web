@@ -4,6 +4,8 @@ Frontend for a **WhatsApp-first** ordering product for food & beverage suppliers
 
 Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind CSS 4**, **pnpm**.
 
+**Full product capability list:** [`docs/CAPABILITIES.md`](../zumo-backend/docs/CAPABILITIES.md) (inventory, warehousing, delivery, customer hub, WhatsApp AI, team permissions, and more).
+
 ## Tech stack (pinned / primary)
 
 | Piece | Role |
