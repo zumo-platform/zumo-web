@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerComingSoonTab } from "@/components/workspace/customer-coming-soon-tab";
+import { CustomerDeliveryTab } from "@/components/workspace/customer-delivery-tab";
 import { CustomerDetailSidebar } from "@/components/workspace/customer-detail-sidebar";
 import { CustomerLabelsSection } from "@/components/workspace/customer-labels-section";
 import { CustomerOrdersTab } from "@/components/workspace/customer-orders-tab";
@@ -267,6 +268,7 @@ export function CustomerDetailExperience({
                 <TabsTrigger value="products">Productos</TabsTrigger>
                 <TabsTrigger value="tasks">Tareas</TabsTrigger>
                 <TabsTrigger value="users">Usuarios</TabsTrigger>
+                <TabsTrigger value="delivery">Logística</TabsTrigger>
                 <TabsTrigger value="proposals">Propuestas</TabsTrigger>
                 <TabsTrigger value="activity">Registro</TabsTrigger>
               </TabsList>
@@ -311,6 +313,9 @@ export function CustomerDetailExperience({
                     })
                   }
                 />
+              </TabsContent>
+              <TabsContent className="mt-0" value="delivery">
+                <CustomerDeliveryTab customerId={customerId} />
               </TabsContent>
               <TabsContent className="mt-0" value="proposals">
                 <CustomerComingSoonTab title="Propuestas" />

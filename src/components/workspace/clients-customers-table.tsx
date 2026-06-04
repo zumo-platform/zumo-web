@@ -272,11 +272,7 @@ export function ClientsCustomersTable({
           }
 
           return (
-            <button
-              className="flex max-w-[min(220px,32vw)] flex-wrap gap-2 text-left"
-              type="button"
-              onClick={openAddLabel}
-            >
+            <div className="flex max-w-[min(220px,32vw)] flex-wrap items-center gap-2">
               {labels.map((label) => (
                 <Badge
                   key={label.labelId}
@@ -315,7 +311,14 @@ export function ClientsCustomersTable({
                   </button>
                 </Badge>
               ))}
-            </button>
+              <button
+                className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+                type="button"
+                onClick={openAddLabel}
+              >
+                + Agregar
+              </button>
+            </div>
           );
         },
       },

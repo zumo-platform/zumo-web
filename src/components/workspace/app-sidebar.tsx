@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 import {
-  Calendar,
   HelpCircle,
   Inbox,
   Loader2,
@@ -66,12 +65,6 @@ const baseMainNav: NavItem[] = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/whatsapp", icon: MessageSquare, label: "WhatsApp" },
   { href: "/orders", icon: ShoppingCart, label: "Pedidos" },
-  {
-    disabled: true,
-    tooltip: "Pronto",
-    icon: Calendar,
-    label: "Calendario",
-  },
   { href: "/products", icon: Package, label: "Inventario" },
   { href: "/matches", icon: Sparkles, label: "Matches" },
   { href: "/clients", icon: Store, label: "Clientes" },

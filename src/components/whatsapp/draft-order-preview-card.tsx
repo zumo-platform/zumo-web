@@ -45,7 +45,12 @@ export function DraftOrderPreviewCard({
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-medium font-mono text-sm">{code}</p>
-              <Badge variant="outline">{statusBadgeLabel(order.status)}</Badge>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {order.deliveryDateStatus === "pending_confirmation" || order.isLateOrder ? (
+                  <Badge variant="destructive">Pedido tardío</Badge>
+                ) : null}
+                <Badge variant="outline">{statusBadgeLabel(order.status)}</Badge>
+              </div>
             </div>
             <p className="truncate text-sm">{pocName}</p>
             <p className="text-muted-foreground text-xs tabular-nums">

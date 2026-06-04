@@ -50,6 +50,8 @@ export interface Order {
   lines: OrderLine[] | null;
   deliveryNotes?: string | null;
   deliveryDate?: string | null;
+  deliveryDateStatus?: string | null;
+  isLateOrder?: boolean;
   createdAt?: string;
   seenAt?: string | null;
   expiresAt?: string | null;

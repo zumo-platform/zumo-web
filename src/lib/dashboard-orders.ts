@@ -75,6 +75,8 @@ export type DashboardOrderListRow = Readonly<{
   effectiveStatusKey: string;
   createdAt: string | null;
   deliveryDate: string | null;
+  deliveryDateStatus: string | null;
+  isLateOrder: boolean;
   confirmedAt: string | null;
   seenAt: string | null;
   expiresAt: string | null;
@@ -154,6 +156,10 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
 
   const matchCoverage = parseMatchCoverage(o.matchCoverage);
   const isTouchless = o.isTouchless === true;
+  const deliveryDateStatus =
+    readStringFieldOrNull(o, "deliveryDateStatus") ??
+    readStringFieldOrNull(o, "delivery_date_status");
+  const isLateOrder = o.isLateOrder === true || o.is_late_order === true;
 
   const displayCode =
     readStringField(o, "displayCode") ?? readStringField(o, "display_code");
@@ -190,6 +196,8 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     effectiveStatusKey: effectiveStatusKey || status || "draft",
     createdAt,
     deliveryDate,
+    deliveryDateStatus,
+    isLateOrder,
     confirmedAt,
     seenAt,
     expiresAt,
