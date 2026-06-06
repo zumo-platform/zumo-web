@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Trash2 } from "lucide-react";
@@ -36,14 +36,16 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorAlert } from "@/components/workspace/error-alert";
+import {
+  DeliveryDateField,
+  useDeliveryDateSelectionState,
+} from "@/components/workspace/delivery-date-select";
 import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
 import { createDashboardOrderViaProxy, type CreateOrderInput } from "@/lib/dashboard-orders";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
+import { isAllowedDeliveryDateSelection } from "@/lib/delivery";
 import { mapOrderError, type MappedOrderError } from "@/lib/order-error-codes";
-import { minDeliveryDateInput } from "@/lib/order-delivery-date";
-import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import { cn } from "@/lib/utils";
-import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
 const FREE_PRODUCT_VALUE = "__free__";
 const MAX_LINES = 80;
@@ -66,7 +68,8 @@ const lineSchema = z
     }
   });
 
-function buildFormSchema(timeZone: string) {
+function buildFormSchema(allowedDates: readonly string[]) {
+  const allowed = new Set(allowedDates);
   return z.object({
     customerId: z.coerce.number().int().positive("Seleccioná un cliente."),
     lines: z.array(lineSchema).min(1, "Agregá al menos una línea de producto.").max(MAX_LINES),
@@ -75,8 +78,8 @@ function buildFormSchema(timeZone: string) {
       .trim()
       .min(1, "La fecha de entrega es obligatoria.")
       .regex(/^\d{4}-\d{2}-\d{2}$/u, "Formato inválido (YYYY-MM-DD).")
-      .refine((value) => isValidDeliveryDateInput(value, timeZone), {
-        message: "La fecha de entrega debe ser hoy o posterior.",
+      .refine((value) => allowed.has(value), {
+        message: "Seleccioná una fecha de entrega disponible según la logística configurada.",
       }),
     deliveryTimeWindow: z.string().max(80).optional(),
     deliveryNotes: z.string().max(500).optional(),
@@ -222,19 +225,35 @@ export function CreateOrderForm({
 }>) {
   const router = useRouter();
   const formId = useId();
-  const { timeZone } = useWorkspacePreferences();
-  const minDeliveryDate = minDeliveryDateInput(timeZone);
-  const formSchema = useMemo(() => buildFormSchema(timeZone), [timeZone]);
   const [orderError, setOrderError] = useState<MappedOrderError | null>(null);
+  const [customerIdForDates, setCustomerIdForDates] = useState<number | null>(null);
+
+  const {
+    dates: availableDates,
+    loading: datesLoading,
+    error: datesError,
+    defaultDate,
+  } = useDeliveryDateSelectionState(customerIdForDates, null);
+
+  const formSchema = useMemo(
+    () => buildFormSchema(availableDates.map((row) => row.date)),
+    [availableDates],
+  );
+  const resolver = useMemo(
+    () => zodResolver(formSchema) as Resolver<FormValues>,
+    [formSchema],
+  );
 
   const {
     control,
     register,
     handleSubmit,
     setValue,
+    getValues,
+    trigger,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as Resolver<FormValues>,
+    resolver,
     defaultValues: {
       customerId: 0,
       lines: [defaultLine()],
@@ -247,6 +266,30 @@ export function CreateOrderForm({
 
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const customerId = useWatch({ control, name: "customerId" });
+  const deliveryDateValue = useWatch({ control, name: "deliveryDate" });
+
+  useEffect(() => {
+    setCustomerIdForDates(customerId > 0 ? customerId : null);
+  }, [customerId]);
+
+  useEffect(() => {
+    if (datesLoading || !defaultDate) return;
+    const current = getValues("deliveryDate");
+    if (!current || !isAllowedDeliveryDateSelection(current, availableDates)) {
+      setValue("deliveryDate", defaultDate, { shouldValidate: true });
+    }
+  }, [
+    availableDates,
+    datesLoading,
+    defaultDate,
+    customerIdForDates,
+    getValues,
+    setValue,
+  ]);
+
+  useEffect(() => {
+    void trigger("deliveryDate");
+  }, [availableDates, trigger]);
 
   async function onSubmit(values: FormValues) {
     setOrderError(null);
@@ -405,19 +448,18 @@ export function CreateOrderForm({
           <CardDescription>Fecha de entrega obligatoria</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="deliveryDate">Fecha de entrega</Label>
-            <Input
-              id="deliveryDate"
-              min={minDeliveryDate}
-              required
-              type="date"
-              {...register("deliveryDate")}
-            />
-            {errors.deliveryDate ? (
-              <p className="text-destructive text-sm">{errors.deliveryDate.message}</p>
-            ) : null}
-          </div>
+          <DeliveryDateField
+            dates={availableDates}
+            disabled={customerId <= 0}
+            error={datesError}
+            id="deliveryDate"
+            loading={datesLoading}
+            value={deliveryDateValue ?? ""}
+            onChange={(value) => setValue("deliveryDate", value, { shouldValidate: true })}
+          />
+          {errors.deliveryDate ? (
+            <p className="text-destructive text-sm sm:col-span-2">{errors.deliveryDate.message}</p>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="deliveryTimeWindow">Ventana horaria</Label>
             <Input

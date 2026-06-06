@@ -37,6 +37,18 @@ export type CustomerDeliveryOverrides = Readonly<{
   sameDayCutoffTime: string | null;
 }>;
 
+export type AvailableDeliveryDateRow = Readonly<{
+  date: string;
+  isSameDay: boolean;
+  isLate: boolean;
+  requiresConfirmation: boolean;
+}>;
+
+export type AvailableDeliveryDatesResponse = Readonly<{
+  dates: AvailableDeliveryDateRow[];
+  timezone: string;
+}>;
+
 export const ISO_WEEKDAY_OPTIONS: ReadonlyArray<{ value: number; label: string }> = [
   { value: 1, label: "Lunes" },
   { value: 2, label: "Martes" },
@@ -202,6 +214,69 @@ export async function deleteDeliveryZoneViaProxy(
     return { ok: false, error: readApiErrorBody(body, res.status) };
   }
   return { ok: true };
+}
+
+export async function fetchAvailableDeliveryDatesViaProxy(
+  customerId?: number | null,
+): Promise<AvailableDeliveryDatesResponse> {
+  const params = new URLSearchParams();
+  if (customerId != null && customerId > 0) {
+    params.set("customerId", String(customerId));
+  }
+  const qs = params.toString();
+  const res = await fetch(
+    `/api/backend/dashboard/delivery/available-dates${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    throw new Error(await readApiError(res));
+  }
+  const body = (await res.json()) as {
+    dates?: unknown[];
+    timezone?: string;
+  };
+  const dates = (body.dates ?? [])
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const o = row as Record<string, unknown>;
+      const date = typeof o.date === "string" ? o.date.trim() : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) return null;
+      return {
+        date,
+        isSameDay: o.isSameDay === true,
+        isLate: o.isLate === true,
+        requiresConfirmation: o.requiresConfirmation === true,
+      } satisfies AvailableDeliveryDateRow;
+    })
+    .filter((row): row is AvailableDeliveryDateRow => row != null);
+  return {
+    dates,
+    timezone: typeof body.timezone === "string" ? body.timezone : "America/Costa_Rica",
+  };
+}
+
+export function isAllowedDeliveryDateSelection(
+  value: string | null | undefined,
+  availableDates: readonly AvailableDeliveryDateRow[],
+  preservedDate?: string | null,
+): boolean {
+  const trimmed = value?.trim();
+  if (!trimmed || !/^\d{4}-\d{2}-\d{2}$/u.test(trimmed)) return false;
+  if (availableDates.some((row) => row.date === trimmed)) return true;
+  const preserved = preservedDate?.trim();
+  return preserved === trimmed;
+}
+
+export function pickDefaultDeliveryDate(
+  stored: string | null | undefined,
+  availableDates: readonly AvailableDeliveryDateRow[],
+): string {
+  const trimmed = stored?.trim();
+  if (trimmed && availableDates.some((row) => row.date === trimmed)) return trimmed;
+  return availableDates[0]?.date ?? "";
 }
 
 export async function fetchCustomerDeliveryViaProxy(customerId: number): Promise<{

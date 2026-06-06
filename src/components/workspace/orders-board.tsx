@@ -18,6 +18,7 @@ import { Loader2, MessageCircle, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { BackorderPill } from "@/components/workspace/backorder-pill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -201,10 +202,11 @@ const BoardCard = memo(function BoardCard({
         {order.createdAt ? `Creado ${formatInstantDate(order.createdAt)}` : "—"}
       </p>
 
-      <div className="mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge variant={statusBadgeVariant(statusKey)}>
           {orderStatusLabel(flowItem, statusKey)}
         </Badge>
+        {order.isBackordered ? <BackorderPill /> : null}
       </div>
     </div>
   );

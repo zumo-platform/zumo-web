@@ -20,7 +20,7 @@ function statusLabel(status: string): string {
     case "draft":
       return "Borrador";
     case "pending":
-      return "Pendiente";
+      return "En Revisión";
     case "confirmed":
       return "Confirmado";
     case "in_progress":

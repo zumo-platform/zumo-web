@@ -65,6 +65,15 @@ export function formatQty(n: number | null): string {
   return String(Math.round(n * 10_000) / 10_000);
 }
 
+export const BACKORDER_PILL = {
+  label: "Pendiente",
+  labelEn: "Backorder",
+  tone: "amber",
+} as const;
+
+export const BACKORDER_BADGE_CLASS =
+  "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300";
+
 export const MOVEMENT_REASON_LABEL: Record<string, string> = {
   opening_balance: "Saldo inicial",
   sale: "Venta",

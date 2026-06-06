@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { BackorderPill } from "@/components/workspace/backorder-pill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -134,8 +135,14 @@ export function OrdersCatalogTable({
     async (orderId: string) => {
       setActionOrderId(orderId);
       try {
-        await confirmDashboardOrderViaProxy(orderId);
-        toast.success("Pedido confirmado");
+        const result = await confirmDashboardOrderViaProxy(orderId);
+        if (result.isBackordered) {
+          toast.success(
+            "Pedido confirmado. Algunos productos quedaron en Pendiente (backorder).",
+          );
+        } else {
+          toast.success("Pedido confirmado");
+        }
         onOrderStatusChange?.(orderId, "confirmed");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "No se pudo confirmar el pedido.");
@@ -292,6 +299,7 @@ export function OrdersCatalogTable({
           const effectiveKey = o.effectiveStatusKey ?? o.status;
           const flowItem = findFlowItem(flow, effectiveKey);
           const isPending = effectiveKey === "pending";
+          const isConfirmed = effectiveKey === "confirmed";
           const isDraft = effectiveKey === "draft";
           const isActing = actionOrderId === o.orderId;
           const hasDeliveryDate = orderHasValidDeliveryDate(o.deliveryDate, timeZone);
@@ -303,13 +311,25 @@ export function OrdersCatalogTable({
 
           return (
             <div className="flex min-w-[9.5rem] flex-col items-start gap-1.5">
-              <Badge
-                className={cn(retired && "opacity-60")}
-                variant={statusBadgeVariant(effectiveKey)}
-              >
-                {label}
-                {retired ? " (retirado)" : ""}
-              </Badge>
+              {!isPending ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {isConfirmed ? (
+                    <span className={cn("text-foreground text-sm", retired && "opacity-60")}>
+                      {label}
+                      {retired ? " (retirado)" : ""}
+                    </span>
+                  ) : (
+                    <Badge
+                      className={cn(retired && "opacity-60")}
+                      variant={statusBadgeVariant(effectiveKey)}
+                    >
+                      {label}
+                      {retired ? " (retirado)" : ""}
+                    </Badge>
+                  )}
+                  {o.isBackordered ? <BackorderPill /> : null}
+                </div>
+              ) : null}
               {isDraft ? (
                 <Button
                   className="h-7 gap-1 px-2 text-xs"
@@ -338,7 +358,7 @@ export function OrdersCatalogTable({
                   size="sm"
                   title={lifecycleTitle}
                   type="button"
-                  variant="outline"
+                  variant="default"
                   onClick={(event) => {
                     event.stopPropagation();
                     void handleConfirmFromTable(o.orderId);

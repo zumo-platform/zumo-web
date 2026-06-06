@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, PackagePlus, Settings } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,9 @@ export function ProductsHeaderActions({
             </Select>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:justify-end">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/products/backorders">Faltantes</Link>
+            </Button>
             <Button
               variant="outline"
               size="sm"

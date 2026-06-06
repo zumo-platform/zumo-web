@@ -317,3 +317,122 @@ export const WAREHOUSE_PURPOSE_OPTIONS: ReadonlyArray<{ value: WarehousePurpose;
   ];
 
 export type InventoryProductOption = Pick<DashboardProductRow, "productId" | "name" | "sku">;
+
+export type ShortfallPolicy = "block" | "partial_drop" | "partial_owe";
+
+export type BackorderWorklistRow = Readonly<{
+  reservationId: string;
+  productId: number;
+  productName: string;
+  customerId: number;
+  customerName: string;
+  orderId: string;
+  orderDisplayCode: string | null;
+  qtyBackordered: number;
+  qtyReserved: number;
+  daysWaiting: number;
+  availableNow: number;
+  warehouseId: number;
+}>;
+
+export const SHORTFALL_POLICY_OPTIONS: ReadonlyArray<{
+  value: ShortfallPolicy;
+  label: string;
+}> = [
+  { value: "block", label: "Bloquear confirmación si falta stock" },
+  { value: "partial_drop", label: "Enviar parcial y descartar el resto" },
+  { value: "partial_owe", label: "Enviar parcial y dejar pendiente" },
+];
+
+function parseBackorderRow(raw: unknown): BackorderWorklistRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const reservationId = typeof o.reservationId === "string" ? o.reservationId.trim() : "";
+  if (!reservationId) return null;
+  const productId = typeof o.productId === "number" ? o.productId : Number(o.productId);
+  if (!Number.isFinite(productId)) return null;
+  return {
+    reservationId,
+    productId,
+    productName: typeof o.productName === "string" ? o.productName : "—",
+    customerId: typeof o.customerId === "number" ? o.customerId : Number(o.customerId),
+    customerName: typeof o.customerName === "string" ? o.customerName : "—",
+    orderId: typeof o.orderId === "string" ? o.orderId : "",
+    orderDisplayCode:
+      typeof o.orderDisplayCode === "string" && o.orderDisplayCode.trim().length > 0
+        ? o.orderDisplayCode.trim()
+        : null,
+    qtyBackordered: Number(o.qtyBackordered ?? 0),
+    qtyReserved: Number(o.qtyReserved ?? 0),
+    daysWaiting: Number(o.daysWaiting ?? 0),
+    availableNow: Number(o.availableNow ?? 0),
+    warehouseId: Number(o.warehouseId ?? 0),
+  };
+}
+
+export async function fetchBackordersViaProxy(): Promise<BackorderWorklistRow[]> {
+  const res = await fetch("/api/backend/dashboard/inventory/backorders", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as { backorders?: unknown[]; error?: string };
+  if (!res.ok) {
+    throw new Error(typeof data.error === "string" ? data.error : `Error ${res.status}`);
+  }
+  if (!Array.isArray(data.backorders)) return [];
+  const rows: BackorderWorklistRow[] = [];
+  for (const item of data.backorders) {
+    const row = parseBackorderRow(item);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+export async function fulfilBackorderViaProxy(args: {
+  reservationId: string;
+  qty: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch("/api/backend/dashboard/inventory/backorders/fulfil", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(body, res.status) };
+  }
+  return { ok: true };
+}
+
+export async function fetchShortfallPolicyViaProxy(): Promise<ShortfallPolicy> {
+  const res = await fetch("/api/backend/dashboard/settings/shortfall-policy", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as { policy?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(typeof data.error === "string" ? data.error : `Error ${res.status}`);
+  }
+  const policy = data.policy;
+  if (policy === "block" || policy === "partial_drop" || policy === "partial_owe") {
+    return policy;
+  }
+  return "partial_owe";
+}
+
+export async function updateShortfallPolicyViaProxy(
+  policy: ShortfallPolicy,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch("/api/backend/dashboard/settings/shortfall-policy", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ policy }),
+  });
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(body, res.status) };
+  }
+  return { ok: true };
+}

@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
+import { DeliveryDateField, useDeliveryDateSelectionState } from "@/components/workspace/delivery-date-select";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
 import {
   fetchCustomerDetailViaProxy,
@@ -48,14 +49,10 @@ import {
 import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import type { Conversation, Order } from "@/lib/dashboard-types";
 import { parseMatchCoverage } from "@/lib/match-coverage";
-import {
-  defaultDeliveryDateForOrder,
-  minDeliveryDateInput,
-} from "@/lib/order-delivery-date";
+import { pickDefaultDeliveryDate } from "@/lib/delivery";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import { formatOrderMoney, parseProductPrice } from "@/lib/order-product-search";
 import { formatUnitAbbreviation } from "@/lib/product-unit";
-import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import {
   useSupplierTimeFormatters,
   useWorkspacePreferences,
@@ -154,9 +151,8 @@ function DraftOrderSheetContent({
 }>) {
   const blocked = variant === "blocked";
   const editable = !blocked && (order.status === "draft" || order.status === "pending");
-  const { timeZone, autoCommitEnabled } = useWorkspacePreferences();
+  const { autoCommitEnabled } = useWorkspacePreferences();
   const { formatInstantDateTime } = useSupplierTimeFormatters();
-  const minDeliveryDate = minDeliveryDateInput(timeZone);
 
   const [localStatus, setLocalStatus] = useState(order.status);
   const [localDisplayCode, setLocalDisplayCode] = useState(order.displayCode ?? null);
@@ -169,9 +165,8 @@ function DraftOrderSheetContent({
   const [products, setProducts] = useState<DashboardProductRow[]>([]);
   const [sellerName, setSellerName] = useState<string>("—");
   const [lines, setLines] = useState<EditableLine[]>([]);
-  const [deliveryDate, setDeliveryDate] = useState(() =>
-    defaultDeliveryDateForOrder(order.deliveryDate, timeZone),
-  );
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [storedDeliveryDate, setStoredDeliveryDate] = useState<string | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
 
   const pocName = conversation ? conversationPocName(conversation) : "Contacto";
@@ -200,7 +195,14 @@ function DraftOrderSheetContent({
   );
 
   const hasUnmatched = lines.some((l) => l.unmatched);
-  const deliveryDateValid = isValidDeliveryDateInput(deliveryDate, timeZone);
+  const customerIdForDates = detail?.customerId ?? order.customerId ?? null;
+  const {
+    dates: availableDeliveryDates,
+    loading: deliveryDatesLoading,
+    error: deliveryDatesError,
+    isValid: isDeliveryDateValid,
+  } = useDeliveryDateSelectionState(customerIdForDates, storedDeliveryDate);
+  const deliveryDateValid = isDeliveryDateValid(deliveryDate);
   const canSave =
     editable &&
     !saving &&
@@ -224,7 +226,7 @@ function DraftOrderSheetContent({
       const selectable = selectableProducts(productRows);
       const catalog = new Map(selectable.map((p) => [p.productId, p]));
       const nextLines = buildEditableLines(orderDetail, catalog);
-      const nextDelivery = defaultDeliveryDateForOrder(orderDetail.deliveryDate, timeZone);
+      const nextDelivery = orderDetail.deliveryDate?.trim() ?? "";
 
       const customerDetail = await fetchCustomerDetailViaProxy(orderDetail.customerId);
       let assignedSeller = "Sin vendedor asignado";
@@ -238,6 +240,7 @@ function DraftOrderSheetContent({
       setCustomer(customerDetail);
       setProducts(selectable);
       setLines(nextLines);
+      setStoredDeliveryDate(orderDetail.deliveryDate);
       setDeliveryDate(nextDelivery);
       setSellerName(assignedSeller);
       setLocalStatus(orderDetail.status);
@@ -252,7 +255,22 @@ function DraftOrderSheetContent({
     } finally {
       setLoading(false);
     }
-  }, [editable, order.orderId, timeZone]);
+  }, [editable, order.orderId]);
+
+  useEffect(() => {
+    if (!editable || availableDeliveryDates.length === 0) return;
+    if (!deliveryDate || !deliveryDateValid) {
+      setDeliveryDate(
+        pickDefaultDeliveryDate(storedDeliveryDate, availableDeliveryDates),
+      );
+    }
+  }, [
+    availableDeliveryDates,
+    deliveryDate,
+    deliveryDateValid,
+    editable,
+    storedDeliveryDate,
+  ]);
 
   useEffect(() => {
     void loadEditorData();
@@ -293,7 +311,7 @@ function DraftOrderSheetContent({
   async function handleSave(): Promise<boolean> {
     if (!canSave) {
       if (!deliveryDateValid) {
-        toast.error("Seleccioná una fecha de entrega válida (hoy o posterior).");
+        toast.error("Seleccioná una fecha de entrega disponible según la logística configurada.");
       }
       return false;
     }
@@ -396,21 +414,15 @@ function DraftOrderSheetContent({
                 <Label>Cliente</Label>
                 <p className="rounded-md border bg-muted/20 px-3 py-2 text-sm">{customerLabel}</p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="delivery-date">Fecha de entrega</Label>
-                <Input
-                  id="delivery-date"
-                  min={minDeliveryDate}
-                  type="date"
-                  value={deliveryDate}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
-                />
-                {!deliveryDateValid ? (
-                  <p className="text-destructive text-xs">
-                    La fecha de entrega debe ser hoy o posterior.
-                  </p>
-                ) : null}
-              </div>
+              <DeliveryDateField
+                dates={availableDeliveryDates}
+                error={deliveryDatesError}
+                id="delivery-date"
+                loading={deliveryDatesLoading}
+                preservedDate={storedDeliveryDate}
+                value={deliveryDate}
+                onChange={setDeliveryDate}
+              />
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Ubicación</Label>
                 <p className="rounded-md border bg-muted/20 px-3 py-2 text-sm">{locationLabel}</p>

@@ -26,7 +26,7 @@ export const ORDER_STATUS_FILTER_OPTIONS: ReadonlyArray<{
   label: string;
 }> = [
   { value: "draft", label: "Borradores" },
-  { value: "pending", label: "Pendientes" },
+  { value: "pending", label: "En Revisión" },
   { value: "confirmed", label: "Confirmados" },
   { value: "in_progress", label: "En preparación" },
   { value: "in_route", label: "En ruta" },
@@ -87,6 +87,8 @@ export type DashboardOrderListRow = Readonly<{
   isTouchless: boolean;
   productNames: string[];
   productSkus: string[];
+  isBackordered: boolean;
+  backorderLineCount: number;
 }>;
 
 export type DashboardOrderPatch = Partial<
@@ -187,6 +189,21 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
 
   const productNames = parseStringArrayField(o, "productNames");
   const productSkus = parseStringArrayField(o, "productSkus");
+  const isBackordered =
+    o.isBackordered === true ||
+    lines.some((line) => {
+      if (!line || typeof line !== "object") return false;
+      const qty = (line as Record<string, unknown>).qtyBackordered;
+      return typeof qty === "number" ? qty > 0 : Number(qty) > 0;
+    });
+  const backorderLineCount =
+    typeof o.backorderLineCount === "number" && Number.isFinite(o.backorderLineCount)
+      ? o.backorderLineCount
+      : lines.filter((line) => {
+          if (!line || typeof line !== "object") return false;
+          const qty = (line as Record<string, unknown>).qtyBackordered;
+          return typeof qty === "number" ? qty > 0 : Number(qty) > 0;
+        }).length;
 
   return {
     orderId,
@@ -208,6 +225,8 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     isTouchless,
     productNames,
     productSkus,
+    isBackordered,
+    backorderLineCount,
   };
 }
 
@@ -444,10 +463,34 @@ export function parseDashboardOrderRow(raw: unknown): DashboardOrderListRow | nu
 
 async function parseOrderActionError(res: Response, fallback: string): Promise<string> {
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return typeof body.error === "string" && body.error.trim().length > 0
-    ? body.error.trim()
-    : fallback;
+  return parseOrderActionErrorFromBody(body, res.status, fallback);
 }
+
+function parseOrderActionErrorFromBody(
+  body: Record<string, unknown>,
+  _status: number,
+  fallback: string,
+): string {
+  let msg =
+    typeof body.error === "string" && body.error.trim().length > 0 ? body.error.trim() : fallback;
+  if (body.code === "SHORTFALL_BLOCKED" && Array.isArray(body.shortLines)) {
+    const parts: string[] = [];
+    for (const line of body.shortLines) {
+      if (!line || typeof line !== "object") continue;
+      const row = line as Record<string, unknown>;
+      parts.push(
+        `producto ${String(row.productId)}: pedido ${String(row.requested)}, disponible ${String(row.available)}`,
+      );
+    }
+    if (parts.length > 0) msg = `${msg} (${parts.join("; ")})`;
+  }
+  return msg;
+}
+
+export type ConfirmOrderResult = Readonly<{
+  isBackordered: boolean;
+  order: DashboardOrderListRow | null;
+}>;
 
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/convert`. */
 export async function convertDashboardOrderViaProxy(
@@ -475,19 +518,27 @@ export async function convertDashboardOrderViaProxy(
 }
 
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/confirm`. */
-export async function confirmDashboardOrderViaProxy(orderId: string): Promise<void> {
+export async function confirmDashboardOrderViaProxy(orderId: string): Promise<ConfirmOrderResult> {
   const res = await fetch(`/api/backend/dashboard/orders/${encodeURIComponent(orderId)}/confirm`, {
     method: "POST",
     credentials: "same-origin",
     cache: "no-store",
   });
 
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
   if (!res.ok) {
     throw new DashboardOrderActionError(
-      await parseOrderActionError(res, "No se pudo confirmar el pedido."),
+      parseOrderActionErrorFromBody(body, res.status, "No se pudo confirmar el pedido."),
       res.status,
     );
   }
+
+  const orderRaw = body.order && typeof body.order === "object" ? body.order : body;
+  return {
+    isBackordered: body.isBackordered === true,
+    order: parseDashboardOrderRow(orderRaw),
+  };
 }
 
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders/{orderId}/status`. */
@@ -567,6 +618,8 @@ export type DashboardOrderDetailLine = Readonly<{
   productId: number | null;
   productName: string;
   quantity: number;
+  qtyReserved: number;
+  qtyBackordered: number;
   unit: string;
   unitPrice: number | null;
   lineSubtotal: number | null;
@@ -637,6 +690,10 @@ export function parseDashboardOrderDetail(
     const line = item as Record<string, unknown>;
     const quantity = asNumberOrNull(line.quantity);
     if (quantity === null || quantity <= 0) continue;
+    const qtyBackordered = Math.max(0, asNumberOrNull(line.qtyBackordered) ?? 0);
+    const qtyReservedRaw = asNumberOrNull(line.qtyReserved);
+    const qtyReserved =
+      qtyReservedRaw !== null ? Math.max(0, qtyReservedRaw) : Math.max(0, quantity - qtyBackordered);
     lines.push({
       productId: parsePositiveInt(line.productId),
       productName:
@@ -644,6 +701,8 @@ export function parseDashboardOrderDetail(
         readStringFieldOrNull(line, "productNameRaw") ??
         "—",
       quantity,
+      qtyReserved,
+      qtyBackordered,
       unit: readStringFieldOrNull(line, "unit") ?? "—",
       unitPrice: asNumberOrNull(line.unitPrice),
       lineSubtotal: asNumberOrNull(line.lineSubtotal),

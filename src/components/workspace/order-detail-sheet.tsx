@@ -40,6 +40,10 @@ import {
 } from "@/components/workspace/customer-field-editor";
 import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
 import { EditableOrderLinesTable } from "@/components/workspace/editable-order-lines-table";
+import {
+  DeliveryDateField,
+  useDeliveryDateSelectionState,
+} from "@/components/workspace/delivery-date-select";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
 import { OrderProductCatalogDialog } from "@/components/whatsapp/order-product-catalog-dialog";
 import { OrderProductSearch } from "@/components/whatsapp/order-product-search";
@@ -62,10 +66,9 @@ import {
 import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import { patchDashboardCustomerViaProxy } from "@/lib/dashboard-customers";
 import { parseMatchCoverage } from "@/lib/match-coverage";
-import { defaultDeliveryDateForOrder, minDeliveryDateInput } from "@/lib/order-delivery-date";
+import { pickDefaultDeliveryDate } from "@/lib/delivery";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import { statusBadgeVariant, statusLabel } from "@/lib/order-status-flow";
-import { isValidDeliveryDateInput } from "@/lib/supplier-timezone";
 import {
   useSupplierTimeFormatters,
   useWorkspacePreferences,
@@ -93,6 +96,8 @@ type OrderDetailLine = Readonly<{
   productId: number | null;
   productName: string;
   quantity: number;
+  qtyReserved: number;
+  qtyBackordered: number;
   unit: string;
   unitPrice: number | null;
   lineSubtotal: number | null;
@@ -197,11 +202,17 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
     const productName = asStringOrNull(line.productName) ?? asStringOrNull(line.productNameRaw) ?? "—";
     const quantity = asNumberOrNull(line.quantity);
     if (quantity === null || quantity <= 0) continue;
+    const qtyBackordered = Math.max(0, asNumberOrNull(line.qtyBackordered) ?? 0);
+    const qtyReservedRaw = asNumberOrNull(line.qtyReserved);
+    const qtyReserved =
+      qtyReservedRaw !== null ? Math.max(0, qtyReservedRaw) : Math.max(0, quantity - qtyBackordered);
     const unit = asStringOrNull(line.unit) ?? "—";
     lines.push({
       productId: parsePositiveCustomerId(line.productId),
       productName,
       quantity,
+      qtyReserved,
+      qtyBackordered,
       unit,
       unitPrice: asNumberOrNull(line.unitPrice),
       lineSubtotal: asNumberOrNull(line.lineSubtotal),
@@ -291,10 +302,9 @@ export function OrderDetailSheet({
   navigationOrderIds = [],
   onNavigateOrder,
 }: OrderDetailSheetProps) {
-  const { timeZone, autoCommitEnabled } = useWorkspacePreferences();
+  const { autoCommitEnabled } = useWorkspacePreferences();
   const { formatInstantDate, formatInstantDateTime, formatStoredDateOnly } =
     useSupplierTimeFormatters();
-  const minDeliveryDate = minDeliveryDateInput(timeZone);
   const productsCatalogRef = useRef<Map<number, ProductLookup> | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -305,6 +315,7 @@ export function OrderDetailSheet({
   const [reloadToken, setReloadToken] = useState(0);
   const [editLines, setEditLines] = useState<EditableOrderLine[]>([]);
   const [deliveryDate, setDeliveryDate] = useState("");
+  const [storedDeliveryDate, setStoredDeliveryDate] = useState<string | null>(null);
   const [productRows, setProductRows] = useState<DashboardProductRow[]>([]);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -329,7 +340,14 @@ export function OrderDetailSheet({
   );
 
   const hasUnmatched = editLines.some((l) => l.unmatched);
-  const deliveryDateValid = isValidDeliveryDateInput(deliveryDate, timeZone);
+  const {
+    dates: availableDeliveryDates,
+    loading: deliveryDatesLoading,
+    error: deliveryDatesError,
+    defaultDate: defaultDeliveryDate,
+    isValid: isDeliveryDateValid,
+  } = useDeliveryDateSelectionState(order?.customerId ?? null, storedDeliveryDate);
+  const deliveryDateValid = isDeliveryDateValid(deliveryDate);
   const editOrderTotal = useMemo(
     () => editLines.filter((l) => !l.unmatched).reduce((sum, l) => sum + editableLineSubtotal(l), 0),
     [editLines],
@@ -440,7 +458,8 @@ export function OrderDetailSheet({
             const detail = parseDashboardOrderDetail(orderBody, id);
             if (detail) {
               setEditLines(buildEditableOrderLines(detail, catalogById));
-              setDeliveryDate(defaultDeliveryDateForOrder(detail.deliveryDate, timeZone));
+              setStoredDeliveryDate(detail.deliveryDate);
+              setDeliveryDate(detail.deliveryDate?.trim() ?? "");
             }
           }
           catalog = new Map(
@@ -513,6 +532,21 @@ export function OrderDetailSheet({
   }, [open, order, syncedStatus]);
 
   useEffect(() => {
+    if (deliveryDatesLoading || availableDeliveryDates.length === 0) return;
+    if (!deliveryDate || !deliveryDateValid) {
+      setDeliveryDate(
+        pickDefaultDeliveryDate(storedDeliveryDate, availableDeliveryDates),
+      );
+    }
+  }, [
+    availableDeliveryDates,
+    deliveryDate,
+    deliveryDateValid,
+    deliveryDatesLoading,
+    storedDeliveryDate,
+  ]);
+
+  useEffect(() => {
     if (open) return;
     setLoading(false);
     setError(null);
@@ -521,6 +555,7 @@ export function OrderDetailSheet({
     setProductsByPid(new Map());
     setEditLines([]);
     setDeliveryDate("");
+    setStoredDeliveryDate(null);
     setProductRows([]);
     setCatalogOpen(false);
     setSaving(false);
@@ -656,6 +691,8 @@ export function OrderDetailSheet({
           productId: l.productId,
           productName: l.productName,
           quantity: l.quantity,
+          qtyReserved: l.qtyReserved,
+          qtyBackordered: l.qtyBackordered,
           unit: l.unit,
           unitPrice: l.unitPrice,
           lineSubtotal: l.lineSubtotal,
@@ -859,20 +896,18 @@ export function OrderDetailSheet({
                 <DetailRow label="Fecha de creación">{formatInstantDate(order.createdAt)}</DetailRow>
                 <DetailRow label="Fecha de entrega">
                   {isEditable ? (
-                    <div className="space-y-1">
-                      <Input
-                        className="max-w-xs"
-                        min={minDeliveryDate}
-                        type="date"
-                        value={deliveryDate}
-                        onChange={(e) => setDeliveryDate(e.target.value)}
-                      />
-                      {!deliveryDateValid ? (
-                        <p className="text-destructive text-xs">
-                          La fecha de entrega debe ser hoy o posterior.
-                        </p>
-                      ) : null}
-                    </div>
+                    <DeliveryDateField
+                      className="max-w-xs"
+                      dates={availableDeliveryDates}
+                      error={deliveryDatesError}
+                      id="order-detail-delivery-date"
+                      label=""
+                      loading={deliveryDatesLoading}
+                      preservedDate={storedDeliveryDate}
+                      showLabel={false}
+                      value={deliveryDate}
+                      onChange={setDeliveryDate}
+                    />
                   ) : (
                     formatStoredDateOnly(order.deliveryDate)
                   )}
@@ -978,6 +1013,13 @@ export function OrderDetailSheet({
                             <TableCell>{product?.presentation ?? "—"}</TableCell>
                             <TableCell className="text-right tabular-nums">
                               {line.quantity.toLocaleString("es")}
+                              {line.qtyBackordered > 0 ? (
+                                <p className="mt-1 text-left text-amber-800 text-xs dark:text-amber-300">
+                                  Pedido {line.quantity.toLocaleString("es")} · Reservado{" "}
+                                  {line.qtyReserved.toLocaleString("es")} · Pendiente{" "}
+                                  {line.qtyBackordered.toLocaleString("es")}
+                                </p>
+                              ) : null}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {formatMoney(line.unitPrice)}
@@ -1018,7 +1060,7 @@ export function OrderDetailSheet({
             {order?.confirmedAt
               ? `Confirmado el ${formatInstantDateTime(order.confirmedAt)}`
               : displayStatus === "pending"
-                ? "Pendiente de confirmación."
+                ? "En Revisión (pendiente de confirmación)."
                 : displayStatus === "draft"
                   ? "Borrador extraído por el AI."
                   : `Estado actual: ${statusText}.`}

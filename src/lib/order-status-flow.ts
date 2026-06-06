@@ -21,7 +21,7 @@ export type SupplierCustomStatus = {
 
 export const SYSTEM_STATUS_LABELS: Record<string, string> = {
   draft: "Borrador",
-  pending: "Pendiente",
+  pending: "En Revisión",
   confirmed: "Confirmado",
   in_progress: "En preparación",
   in_route: "En ruta",
@@ -38,7 +38,7 @@ export const DEFAULT_SYSTEM_STATUS_CATALOG: ReadonlyArray<{
   isFloating: boolean;
 }> = [
   { key: "draft", label: "Borrador", isMandatory: true, isFloating: false },
-  { key: "pending", label: "Pendiente", isMandatory: true, isFloating: false },
+  { key: "pending", label: "En Revisión", isMandatory: true, isFloating: false },
   { key: "confirmed", label: "Confirmado", isMandatory: true, isFloating: false },
   { key: "in_progress", label: "En preparación", isMandatory: false, isFloating: false },
   { key: "in_route", label: "En ruta", isMandatory: false, isFloating: false },
@@ -100,6 +100,7 @@ export function statusBadgeVariant(
       return "destructive";
     case "pending":
     case "draft":
+    case "confirmed":
       return "outline";
     default:
       return "default";

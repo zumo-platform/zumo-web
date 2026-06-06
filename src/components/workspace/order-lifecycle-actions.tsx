@@ -85,8 +85,14 @@ export function OrderLifecycleActions({
     if (!(await runWithPersist())) return;
     setBusy("confirm");
     try {
-      await confirmDashboardOrderViaProxy(orderId);
-      toast.success("Pedido confirmado");
+      const result = await confirmDashboardOrderViaProxy(orderId);
+      if (result.isBackordered) {
+        toast.success(
+          "Pedido confirmado. Algunos productos quedaron en Pendiente (backorder).",
+        );
+      } else {
+        toast.success("Pedido confirmado");
+      }
       onStatusChange?.(orderId, "confirmed");
       onDone?.();
     } catch (err) {
