@@ -40,6 +40,12 @@ import {
 } from "@/components/workspace/customer-field-editor";
 import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
 import { EditableOrderLinesTable } from "@/components/workspace/editable-order-lines-table";
+import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
+import {
+  BackorderRiskWarning,
+  BackorderWarningIcon,
+  backorderRiskLineTooltip,
+} from "@/components/workspace/backorder-risk-warning";
 import {
   DeliveryDateField,
   useDeliveryDateSelectionState,
@@ -74,6 +80,13 @@ import {
   useWorkspacePreferences,
 } from "@/lib/workspace-preferences-context";
 import { formatOrderMoney } from "@/lib/order-product-search";
+import { formatQty } from "@/lib/inventory-format";
+import {
+  lineAvailableStockFromCatalog,
+  lineHasBackorderRisk,
+  orderHasBackorderRiskFromDetailLines,
+  orderHasBackorderRiskFromEditableLines,
+} from "@/lib/order-backorder-risk";
 import { cn } from "@/lib/utils";
 
 export type OrderDetailSheetProps = Readonly<{
@@ -118,6 +131,8 @@ type OrderDetail = Readonly<{
   lines: OrderDetailLine[];
   matchCoverage: number | null;
   isTouchless: boolean;
+  isBackordered: boolean;
+  hasBackorderRisk: boolean;
 }>;
 
 type CustomerDetail = Readonly<{
@@ -219,6 +234,11 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
     });
   }
 
+  const isBackordered =
+    o.isBackordered === true || lines.some((line) => line.qtyBackordered > 0);
+  const hasBackorderRisk =
+    typeof o.hasBackorderRisk === "boolean" ? o.hasBackorderRisk : isBackordered;
+
   return {
     orderId,
     displayCode: asStringOrNull(o.displayCode) ?? asStringOrNull(o.display_code),
@@ -234,6 +254,8 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
     lines,
     matchCoverage: parseMatchCoverage(o.matchCoverage),
     isTouchless: o.isTouchless === true,
+    isBackordered,
+    hasBackorderRisk,
   };
 }
 
@@ -359,6 +381,22 @@ export function OrderDetailSheet({
     !hasUnmatched &&
     deliveryDateValid;
 
+  const productCatalogById = useMemo(
+    () => new Map(productRows.map((product) => [product.productId, product])),
+    [productRows],
+  );
+
+  const hasBackorderRisk = useMemo(() => {
+    if (isEditable) {
+      return orderHasBackorderRiskFromEditableLines(editLines);
+    }
+    if (!order) return false;
+    if (order.hasBackorderRisk) return true;
+    return orderHasBackorderRiskFromDetailLines(order.lines, productCatalogById);
+  }, [editLines, isEditable, order, productCatalogById]);
+
+  const isBackordered = order?.isBackordered ?? order?.lines.some((l) => l.qtyBackordered > 0) ?? false;
+
   const canRejectOrder =
     order?.status === "draft" ||
     order?.status === "pending" ||
@@ -452,8 +490,8 @@ export function OrderDetailSheet({
         const productRowsFetched = await fetchProductsViaProxy();
         if (!signal.aborted) {
           const selectable = selectableProducts(productRowsFetched);
+          setProductRows(selectable);
           if (editable) {
-            setProductRows(selectable);
             const catalogById = new Map(selectable.map((p) => [p.productId, p]));
             const detail = parseDashboardOrderDetail(orderBody, id);
             if (detail) {
@@ -699,6 +737,8 @@ export function OrderDetailSheet({
         })),
         matchCoverage: detail.matchCoverage,
         isTouchless: detail.isTouchless,
+        isBackordered: detail.isBackordered,
+        hasBackorderRisk: detail.hasBackorderRisk,
       });
     },
     [order?.confirmedAt, order?.conversationId, order?.currency, productRows],
@@ -809,6 +849,10 @@ export function OrderDetailSheet({
                   <Badge className="w-fit" variant={statusBadgeVariant(displayStatus)}>
                     {statusText}
                   </Badge>
+                  <OrderBackorderIndicators
+                    hasBackorderRisk={hasBackorderRisk}
+                    isBackordered={isBackordered}
+                  />
                   <MatchCoverageIndicator
                     autoCommitEnabled={autoCommitEnabled}
                     isTouchless={order.isTouchless}
@@ -947,6 +991,15 @@ export function OrderDetailSheet({
 
               {isEditable ? (
                 <div className="space-y-4">
+                  {hasBackorderRisk ? (
+                    <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 text-xs dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                      <BackorderWarningIcon className="mt-0.5" />
+                      <span>
+                        Al confirmar, las cantidades que superen el stock disponible quedarán como
+                        Pendiente (backorder).
+                      </span>
+                    </p>
+                  ) : null}
                   {hasUnmatched ? (
                     <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 text-xs dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                       Hay productos sin coincidencia en el catálogo. Eliminá esas líneas antes de
@@ -983,6 +1036,7 @@ export function OrderDetailSheet({
                       <TableHead>Producto</TableHead>
                       <TableHead>Unidad</TableHead>
                       <TableHead>Presentación</TableHead>
+                      <TableHead className="text-right">Stock</TableHead>
                       <TableHead className="text-right">Cantidad</TableHead>
                       <TableHead className="text-right">Precio unitario</TableHead>
                       <TableHead className="text-right">Precio total</TableHead>
@@ -994,7 +1048,7 @@ export function OrderDetailSheet({
                       <TableRow>
                         <TableCell
                           className="h-24 text-center text-muted-foreground text-sm"
-                          colSpan={8}
+                          colSpan={9}
                         >
                           Este pedido todavía no tiene líneas.
                         </TableCell>
@@ -1003,6 +1057,15 @@ export function OrderDetailSheet({
                       order.lines.map((line, index) => {
                         const product =
                           line.productId !== null ? productsByPid.get(line.productId) : undefined;
+                        const availableStock = lineAvailableStockFromCatalog(
+                          line.productId,
+                          productCatalogById,
+                        );
+                        const atRisk = lineHasBackorderRisk({
+                          quantity: line.quantity,
+                          availableStock,
+                          qtyBackordered: line.qtyBackordered,
+                        });
                         return (
                           <TableRow key={`${line.productName}-${index}`}>
                             <TableCell className="font-mono text-xs">
@@ -1011,8 +1074,21 @@ export function OrderDetailSheet({
                             <TableCell>{line.productName}</TableCell>
                             <TableCell>{line.unit}</TableCell>
                             <TableCell>{product?.presentation ?? "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums text-sm">
+                              {availableStock === null ? "—" : formatQty(availableStock)}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {line.quantity.toLocaleString("es")}
+                              <div className="flex items-center justify-end gap-1.5">
+                                {atRisk && availableStock !== null ? (
+                                  <BackorderRiskWarning
+                                    tooltip={backorderRiskLineTooltip({
+                                      quantity: line.quantity,
+                                      available: availableStock,
+                                    })}
+                                  />
+                                ) : null}
+                                <span>{line.quantity.toLocaleString("es")}</span>
+                              </div>
                               {line.qtyBackordered > 0 ? (
                                 <p className="mt-1 text-left text-amber-800 text-xs dark:text-amber-300">
                                   Pedido {line.quantity.toLocaleString("es")} · Reservado{" "}
@@ -1068,6 +1144,7 @@ export function OrderDetailSheet({
           {order && (order.status === "draft" || order.status === "pending") ? (
             <OrderLifecycleActions
               deliveryDateValid={deliveryDateValid}
+              hasBackorderRisk={hasBackorderRisk}
               layout="inline"
               orderId={order.orderId}
               showEditLink={false}

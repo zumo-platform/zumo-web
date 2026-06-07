@@ -12,6 +12,11 @@ export type DashboardWarehouseRow = Readonly<{
   countsForReorder: boolean;
   isDefault: boolean;
   isActive: boolean;
+  isCustomerRestricted: boolean;
+  restrictionStrict: boolean;
+  activeProductCount: number;
+  allowedCustomers?: ReadonlyArray<{ customerId: number; name: string }>;
+  allowedCustomerIds?: readonly number[];
 }>;
 
 export type WarehousePurpose =
@@ -31,12 +36,16 @@ export type CreateWarehousePayload = Readonly<{
   countsForReorder?: boolean;
   isDefault?: boolean;
   address?: string | null;
+  isCustomerRestricted?: boolean;
+  restrictionStrict?: boolean;
+  allowedCustomerIds?: readonly number[];
 }>;
 
 export type ProductStockByWarehouseRow = Readonly<{
   warehouseId: number;
   warehouseName: string;
   kind: string;
+  isSellable: boolean;
   onHand: string;
   reserved: string;
   available: string | null;
@@ -79,6 +88,19 @@ function parseWarehouse(raw: unknown): DashboardWarehouseRow | null {
     typeof o.code === "string" && o.code.trim().length > 0 ? o.code.trim() : null;
   const kind = typeof o.kind === "string" ? o.kind : "physical";
   const purpose = typeof o.purpose === "string" ? o.purpose : "none";
+  const allowedCustomers = Array.isArray(o.allowedCustomers)
+    ? o.allowedCustomers
+        .map((raw) => {
+          if (!raw || typeof raw !== "object") return null;
+          const c = raw as Record<string, unknown>;
+          const customerId =
+            typeof c.customerId === "number" ? c.customerId : Number(c.customerId);
+          const customerName = typeof c.name === "string" ? c.name.trim() : "";
+          if (!Number.isFinite(customerId) || customerId <= 0 || !customerName) return null;
+          return { customerId, name: customerName };
+        })
+        .filter((x): x is { customerId: number; name: string } => x != null)
+    : undefined;
   return {
     warehouseId: id,
     name,
@@ -89,6 +111,14 @@ function parseWarehouse(raw: unknown): DashboardWarehouseRow | null {
     countsForReorder: o.countsForReorder !== false,
     isDefault: o.isDefault === true,
     isActive: o.isActive !== false,
+    isCustomerRestricted: o.isCustomerRestricted === true,
+    restrictionStrict: o.restrictionStrict === true,
+    activeProductCount:
+      typeof o.activeProductCount === "number"
+        ? o.activeProductCount
+        : Number(o.activeProductCount ?? 0) || 0,
+    allowedCustomers,
+    allowedCustomerIds: allowedCustomers?.map((c) => c.customerId),
   };
 }
 
@@ -179,6 +209,29 @@ export async function deleteWarehouseViaProxy(
   return { ok: true };
 }
 
+export async function fetchWarehouseCustomersViaProxy(
+  warehouseId: number,
+): Promise<ReadonlyArray<{ customerId: number; name: string }>> {
+  const res = await fetch(`/api/backend/dashboard/warehouses/${warehouseId}/customers`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as { customers?: unknown[]; error?: string };
+  if (!res.ok) return [];
+  if (!Array.isArray(data.customers)) return [];
+  const rows: Array<{ customerId: number; name: string }> = [];
+  for (const raw of data.customers) {
+    if (!raw || typeof raw !== "object") continue;
+    const o = raw as Record<string, unknown>;
+    const customerId = typeof o.customerId === "number" ? o.customerId : Number(o.customerId);
+    const name = typeof o.name === "string" ? o.name.trim() : "";
+    if (Number.isFinite(customerId) && customerId > 0 && name) {
+      rows.push({ customerId, name });
+    }
+  }
+  return rows;
+}
+
 export async function adjustStockViaProxy(args: {
   productId: number;
   warehouseId: number;
@@ -231,6 +284,7 @@ function parseStockRow(raw: unknown): ProductStockByWarehouseRow | null {
     warehouseId,
     warehouseName,
     kind: typeof o.kind === "string" ? o.kind : "physical",
+    isSellable: o.isSellable !== false,
     onHand: typeof o.onHand === "string" ? o.onHand : String(o.onHand ?? "0"),
     reserved: typeof o.reserved === "string" ? o.reserved : String(o.reserved ?? "0"),
     available:

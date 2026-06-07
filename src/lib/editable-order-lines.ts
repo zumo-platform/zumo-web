@@ -1,6 +1,7 @@
 import type { DashboardOrderDetail } from "@/lib/dashboard-orders";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { parseProductPrice } from "@/lib/order-product-search";
+import { productAvailableStock } from "@/lib/order-backorder-risk";
 
 export type EditableOrderLine = Readonly<{
   key: string;
@@ -11,6 +12,7 @@ export type EditableOrderLine = Readonly<{
   unitPrice: number;
   quantity: number;
   unmatched: boolean;
+  availableStock: number | null;
 }>;
 
 export function editableLineSubtotal(line: EditableOrderLine): number {
@@ -34,6 +36,7 @@ export function buildEditableOrderLines(
         product !== undefined ? parseProductPrice(product.price) : (line.unitPrice ?? 0),
       quantity: line.quantity,
       unmatched,
+      availableStock: productAvailableStock(product),
     };
   });
 }
@@ -48,6 +51,7 @@ export function productToEditableLine(product: DashboardProductRow): EditableOrd
     unitPrice: parseProductPrice(product.price),
     quantity: 1,
     unmatched: false,
+    availableStock: productAvailableStock(product),
   };
 }
 

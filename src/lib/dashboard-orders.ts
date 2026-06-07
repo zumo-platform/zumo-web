@@ -89,6 +89,8 @@ export type DashboardOrderListRow = Readonly<{
   productSkus: string[];
   isBackordered: boolean;
   backorderLineCount: number;
+  hasBackorderRisk: boolean;
+  backorderRiskLineCount: number;
 }>;
 
 export type DashboardOrderPatch = Partial<
@@ -205,6 +207,18 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
           return typeof qty === "number" ? qty > 0 : Number(qty) > 0;
         }).length;
 
+  const hasBackorderRisk =
+    typeof o.hasBackorderRisk === "boolean"
+      ? o.hasBackorderRisk
+      : isBackordered;
+
+  const backorderRiskLineCount =
+    typeof o.backorderRiskLineCount === "number" && Number.isFinite(o.backorderRiskLineCount)
+      ? o.backorderRiskLineCount
+      : isBackordered
+        ? backorderLineCount
+        : 0;
+
   return {
     orderId,
     displayCode,
@@ -227,6 +241,8 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     productSkus,
     isBackordered,
     backorderLineCount,
+    hasBackorderRisk,
+    backorderRiskLineCount,
   };
 }
 
@@ -637,6 +653,8 @@ export type DashboardOrderDetail = Readonly<{
   lines: DashboardOrderDetailLine[];
   matchCoverage: number | null;
   isTouchless: boolean;
+  isBackordered: boolean;
+  hasBackorderRisk: boolean;
 }>;
 
 function asNumberOrNull(value: unknown): number | null {
@@ -709,6 +727,13 @@ export function parseDashboardOrderDetail(
     });
   }
 
+  const isBackordered =
+    o.isBackordered === true ||
+    lines.some((line) => line.qtyBackordered > 0);
+
+  const hasBackorderRisk =
+    typeof o.hasBackorderRisk === "boolean" ? o.hasBackorderRisk : isBackordered;
+
   return {
     orderId,
     displayCode:
@@ -722,6 +747,8 @@ export function parseDashboardOrderDetail(
     lines,
     matchCoverage: parseMatchCoverage(o.matchCoverage),
     isTouchless: o.isTouchless === true,
+    isBackordered,
+    hasBackorderRisk,
   };
 }
 

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import {
@@ -45,7 +46,14 @@ type OrderSummary = Readonly<{
   displayCode: string | null;
   status: string;
   customerId: number;
-  lines: ReadonlyArray<{ productName: string; quantity: number; unit: string }>;
+  isBackordered: boolean;
+  hasBackorderRisk: boolean;
+  lines: ReadonlyArray<{
+    productName: string;
+    quantity: number;
+    unit: string;
+    qtyBackordered?: number;
+  }>;
 }>;
 
 function parseOrderSummary(raw: unknown, fallbackOrderId: string): OrderSummary | null {
@@ -68,6 +76,19 @@ function parseOrderSummary(raw: unknown, fallbackOrderId: string): OrderSummary 
   const displayCode =
     typeof o.displayCode === "string" && o.displayCode.trim() ? o.displayCode.trim() : null;
 
+  const isBackordered =
+    o.isBackordered === true ||
+    (Array.isArray(o.lines) &&
+      o.lines.some(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          typeof (item as { qtyBackordered?: unknown }).qtyBackordered === "number" &&
+          (item as { qtyBackordered: number }).qtyBackordered > 0,
+      ));
+  const hasBackorderRisk =
+    typeof o.hasBackorderRisk === "boolean" ? o.hasBackorderRisk : isBackordered;
+
   const linesRaw = Array.isArray(o.lines) ? o.lines : [];
   const lines: OrderSummary["lines"][number][] = [];
   for (const item of linesRaw) {
@@ -79,11 +100,15 @@ function parseOrderSummary(raw: unknown, fallbackOrderId: string): OrderSummary 
         : "—";
     const quantity = typeof line.quantity === "number" && line.quantity > 0 ? line.quantity : 0;
     const unit = typeof line.unit === "string" && line.unit.trim() ? line.unit.trim() : "—";
+    const qtyBackordered =
+      typeof line.qtyBackordered === "number" && line.qtyBackordered > 0
+        ? line.qtyBackordered
+        : undefined;
     if (quantity <= 0) continue;
-    lines.push({ productName, quantity, unit });
+    lines.push({ productName, quantity, unit, qtyBackordered });
   }
 
-  return { orderId, displayCode, status, customerId, lines };
+  return { orderId, displayCode, status, customerId, isBackordered, hasBackorderRisk, lines };
 }
 
 export function OrderDetailPageClient({
@@ -161,7 +186,13 @@ export function OrderDetailPageClient({
                   Pedido{" "}
                   <span className="font-mono">{formatOrderDisplayCode(order.orderId, order.displayCode)}</span>
                 </h1>
-                <Badge variant="outline">{statusLabel(order.status)}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{statusLabel(order.status)}</Badge>
+                  <OrderBackorderIndicators
+                    hasBackorderRisk={order.hasBackorderRisk}
+                    isBackordered={order.isBackordered}
+                  />
+                </div>
               </>
             ) : null}
           </div>
@@ -169,6 +200,7 @@ export function OrderDetailPageClient({
             <OrderLifecycleActions
               blocked={customerBlocked}
               blockedTitle={BLOCK_TOOLTIP}
+              hasBackorderRisk={order.hasBackorderRisk}
               layout="inline"
               orderId={order.orderId}
               status={order.status}
@@ -191,6 +223,11 @@ export function OrderDetailPageClient({
                     <span className="font-semibold tabular-nums">{line.quantity}</span>
                     <span className="text-muted-foreground">{line.unit}</span>
                     <span>{line.productName}</span>
+                    {line.qtyBackordered ? (
+                      <span className="text-amber-800 text-xs dark:text-amber-300">
+                        · Pendiente {line.qtyBackordered.toLocaleString("es")}
+                      </span>
+                    ) : null}
                   </li>
                 ))
               )}

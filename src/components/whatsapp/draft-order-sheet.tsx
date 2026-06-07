@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Loader2, Minus, Plus, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,14 +21,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { EditableOrderLinesTable } from "@/components/workspace/editable-order-lines-table";
+import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
+import { BackorderWarningIcon } from "@/components/workspace/backorder-risk-warning";
 import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
 import { DeliveryDateField, useDeliveryDateSelectionState } from "@/components/workspace/delivery-date-select";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
@@ -47,12 +40,19 @@ import {
   type DashboardOrderDetail,
 } from "@/lib/dashboard-orders";
 import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
+import {
+  buildEditableOrderLines,
+  editableLineSubtotal,
+  patchPayloadFromLines,
+  productToEditableLine,
+  type EditableOrderLine,
+} from "@/lib/editable-order-lines";
 import type { Conversation, Order } from "@/lib/dashboard-types";
+import { orderHasBackorderRiskFromEditableLines } from "@/lib/order-backorder-risk";
 import { parseMatchCoverage } from "@/lib/match-coverage";
 import { pickDefaultDeliveryDate } from "@/lib/delivery";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
-import { formatOrderMoney, parseProductPrice } from "@/lib/order-product-search";
-import { formatUnitAbbreviation } from "@/lib/product-unit";
+import { formatOrderMoney } from "@/lib/order-product-search";
 import {
   useSupplierTimeFormatters,
   useWorkspacePreferences,
@@ -68,17 +68,6 @@ import {
 
 export type DraftOrderSheetVariant = "active" | "blocked";
 
-type EditableLine = {
-  key: string;
-  productId: number | null;
-  productName: string;
-  sku: string | null;
-  unit: string;
-  unitPrice: number;
-  quantity: number;
-  unmatched: boolean;
-};
-
 function statusBadgeLabel(status: string): string {
   switch (status) {
     case "draft":
@@ -90,46 +79,6 @@ function statusBadgeLabel(status: string): string {
     default:
       return status.replaceAll("_", " ");
   }
-}
-
-function lineSubtotal(line: EditableLine): number {
-  return line.unitPrice * line.quantity;
-}
-
-function buildEditableLines(
-  detail: DashboardOrderDetail,
-  catalog: Map<number, DashboardProductRow>,
-): EditableLine[] {
-  return detail.lines.map((line, index) => {
-    const product = line.productId !== null ? catalog.get(line.productId) : undefined;
-    const unmatched = line.productId === null;
-    return {
-      key: unmatched ? `unmatched-${String(index)}` : `product-${String(line.productId)}`,
-      productId: line.productId,
-      productName: product?.name ?? line.productName,
-      sku: product?.sku ?? null,
-      unit: product?.unit ?? line.unit,
-      unitPrice:
-        product !== undefined
-          ? parseProductPrice(product.price)
-          : (line.unitPrice ?? 0),
-      quantity: line.quantity,
-      unmatched,
-    };
-  });
-}
-
-function productToLine(product: DashboardProductRow): EditableLine {
-  return {
-    key: `product-${String(product.productId)}`,
-    productId: product.productId,
-    productName: product.name,
-    sku: product.sku,
-    unit: product.unit,
-    unitPrice: parseProductPrice(product.price),
-    quantity: 1,
-    unmatched: false,
-  };
 }
 
 function DraftOrderSheetContent({
@@ -164,7 +113,7 @@ function DraftOrderSheetContent({
   const [customer, setCustomer] = useState<DashboardCustomerDetail | null>(null);
   const [products, setProducts] = useState<DashboardProductRow[]>([]);
   const [sellerName, setSellerName] = useState<string>("—");
-  const [lines, setLines] = useState<EditableLine[]>([]);
+  const [lines, setLines] = useState<EditableOrderLine[]>([]);
   const [deliveryDate, setDeliveryDate] = useState("");
   const [storedDeliveryDate, setStoredDeliveryDate] = useState<string | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
@@ -190,9 +139,15 @@ function DraftOrderSheetContent({
   );
 
   const orderTotal = useMemo(
-    () => lines.filter((l) => !l.unmatched).reduce((sum, l) => sum + lineSubtotal(l), 0),
+    () => lines.filter((l) => !l.unmatched).reduce((sum, l) => sum + editableLineSubtotal(l), 0),
     [lines],
   );
+
+  const hasBackorderRisk = useMemo(
+    () => orderHasBackorderRiskFromEditableLines(lines),
+    [lines],
+  );
+  const isBackordered = detail?.isBackordered ?? detail?.lines.some((l) => l.qtyBackordered > 0) ?? false;
 
   const hasUnmatched = lines.some((l) => l.unmatched);
   const customerIdForDates = detail?.customerId ?? order.customerId ?? null;
@@ -225,7 +180,7 @@ function DraftOrderSheetContent({
 
       const selectable = selectableProducts(productRows);
       const catalog = new Map(selectable.map((p) => [p.productId, p]));
-      const nextLines = buildEditableLines(orderDetail, catalog);
+      const nextLines = buildEditableOrderLines(orderDetail, catalog);
       const nextDelivery = orderDetail.deliveryDate?.trim() ?? "";
 
       const customerDetail = await fetchCustomerDetailViaProxy(orderDetail.customerId);
@@ -284,7 +239,7 @@ function DraftOrderSheetContent({
           l.productId === product.productId ? { ...l, quantity: l.quantity + 1 } : l,
         );
       }
-      return [...prev, productToLine(product)];
+      return [...prev, productToEditableLine(product)];
     });
   }
 
@@ -315,9 +270,7 @@ function DraftOrderSheetContent({
       }
       return false;
     }
-    const payloadLines = lines
-      .filter((l) => l.productId !== null && !l.unmatched)
-      .map((l) => ({ productId: l.productId as number, quantity: l.quantity }));
+    const payloadLines = patchPayloadFromLines(lines);
 
     setSaving(true);
     try {
@@ -326,7 +279,7 @@ function DraftOrderSheetContent({
         lines: payloadLines,
       });
       const catalog = new Map(products.map((p) => [p.productId, p]));
-      const nextLines = buildEditableLines(updated, catalog);
+      const nextLines = buildEditableOrderLines(updated, catalog);
       setDetail(updated);
       setLines(nextLines);
       setLocalStatus(updated.status);
@@ -352,9 +305,7 @@ function DraftOrderSheetContent({
   }
 
   const persistBeforeLifecycle = useCallback(async (): Promise<boolean> => {
-    const payloadLines = lines
-      .filter((l) => l.productId !== null && !l.unmatched)
-      .map((l) => ({ productId: l.productId as number, quantity: l.quantity }));
+    const payloadLines = patchPayloadFromLines(lines);
     const currentSnapshot = JSON.stringify({ deliveryDate, lines: payloadLines });
     if (currentSnapshot === savedSnapshot) return true;
     return handleSave();
@@ -383,6 +334,10 @@ function DraftOrderSheetContent({
               </button>
             ) : null}
             <Badge variant="outline">{statusBadgeLabel(localStatus)}</Badge>
+            <OrderBackorderIndicators
+              hasBackorderRisk={hasBackorderRisk}
+              isBackordered={isBackordered}
+            />
           </div>
         </div>
         <SheetDescription className="text-left">
@@ -450,6 +405,16 @@ function DraftOrderSheetContent({
               />
             </div>
 
+            {hasBackorderRisk ? (
+              <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 text-xs dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                <BackorderWarningIcon className="mt-0.5" />
+                <span>
+                  Al confirmar, las cantidades que superen el stock disponible quedarán como Pendiente
+                  (backorder).
+                </span>
+              </p>
+            ) : null}
+
             {hasUnmatched ? (
               <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 text-xs dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                 Hay productos sin coincidencia en el catálogo. Eliminá esas líneas antes de
@@ -457,97 +422,11 @@ function DraftOrderSheetContent({
               </p>
             ) : null}
 
-            <div className="overflow-hidden rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead className="w-[140px] text-center">Cant.</TableHead>
-                    <TableHead className="w-[100px] text-right">P. unit.</TableHead>
-                    <TableHead className="w-[100px] text-right">Subtotal</TableHead>
-                    <TableHead className="w-[44px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((line) => (
-                    <TableRow
-                      className={cn(line.unmatched && "bg-muted/30")}
-                      key={line.key}
-                    >
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-sm">{line.productName}</p>
-                          {line.sku ? (
-                            <p className="text-muted-foreground text-xs">SKU {line.sku}</p>
-                          ) : null}
-                          {line.unmatched ? (
-                            <p className="text-amber-700 text-xs dark:text-amber-300">
-                              Sin coincidencia
-                            </p>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {line.unmatched ? (
-                          <span className="block text-center tabular-nums">{line.quantity}</span>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              aria-label="Disminuir cantidad"
-                              size="icon-sm"
-                              type="button"
-                              variant="outline"
-                              onClick={() => line.productId && changeQuantity(line.productId, -1)}
-                            >
-                              <Minus className="size-3.5" />
-                            </Button>
-                            <span className="min-w-[2ch] text-center tabular-nums text-sm">
-                              {line.quantity}
-                            </span>
-                            <Button
-                              aria-label="Aumentar cantidad"
-                              size="icon-sm"
-                              type="button"
-                              variant="outline"
-                              onClick={() => line.productId && changeQuantity(line.productId, 1)}
-                            >
-                              <Plus className="size-3.5" />
-                            </Button>
-                            <span className="ml-0.5 min-w-[2.5ch] text-muted-foreground text-sm">
-                              {formatUnitAbbreviation(line.unit)}
-                            </span>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">
-                        {formatOrderMoney(line.unitPrice)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">
-                        {line.unmatched ? "—" : formatOrderMoney(lineSubtotal(line))}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          aria-label="Eliminar línea"
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                          onClick={() => removeLine(line.key)}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {lines.length === 0 ? (
-                    <TableRow>
-                      <TableCell className="py-8 text-center text-muted-foreground text-sm" colSpan={5}>
-                        Agregá productos al pedido.
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </div>
+            <EditableOrderLinesTable
+              lines={lines}
+              onChangeQuantity={changeQuantity}
+              onRemoveLine={removeLine}
+            />
 
             <div className="flex justify-end">
               <p className="font-semibold text-sm">
@@ -587,6 +466,7 @@ function DraftOrderSheetContent({
             blocked={blocked}
             blockedTitle={confirmDisabledTitle}
             deliveryDateValid={deliveryDateValid}
+            hasBackorderRisk={hasBackorderRisk}
             orderId={order.orderId}
             status={localStatus}
             onBeforeAction={persistBeforeLifecycle}

@@ -25,7 +25,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { BackorderPill } from "@/components/workspace/backorder-pill";
+import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -114,8 +114,7 @@ export function OrdersCatalogTable({
   onOrderRemoved?: (orderId: string) => void;
 }>) {
   const { timeZone, autoCommitEnabled } = useWorkspacePreferences();
-  const { formatInstantDate, formatInstantTime, formatStoredDateOnly } =
-    useSupplierTimeFormatters();
+  const { formatInstantCreatedAt, formatStoredDateOnly } = useSupplierTimeFormatters();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -251,10 +250,10 @@ export function OrdersCatalogTable({
       },
       {
         id: "orderCreated",
-        header: "Fecha",
+        header: "Creado",
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-sm">
-            {formatInstantDate(row.original.createdAt)}
+            {formatInstantCreatedAt(row.original.createdAt)}
           </span>
         ),
       },
@@ -264,15 +263,6 @@ export function OrdersCatalogTable({
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-sm">
             {formatStoredDateOnly(row.original.deliveryDate)}
-          </span>
-        ),
-      },
-      {
-        id: "orderCreation",
-        header: "Hora",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm">
-            {formatInstantTime(row.original.createdAt)}
           </span>
         ),
       },
@@ -311,25 +301,30 @@ export function OrdersCatalogTable({
 
           return (
             <div className="flex min-w-[9.5rem] flex-col items-start gap-1.5">
-              {!isPending ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {isConfirmed ? (
-                    <span className={cn("text-foreground text-sm", retired && "opacity-60")}>
-                      {label}
-                      {retired ? " (retirado)" : ""}
-                    </span>
-                  ) : (
-                    <Badge
-                      className={cn(retired && "opacity-60")}
-                      variant={statusBadgeVariant(effectiveKey)}
-                    >
-                      {label}
-                      {retired ? " (retirado)" : ""}
-                    </Badge>
-                  )}
-                  {o.isBackordered ? <BackorderPill /> : null}
-                </div>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <OrderBackorderIndicators
+                  hasBackorderRisk={o.hasBackorderRisk}
+                  isBackordered={o.isBackordered}
+                />
+                {!isPending ? (
+                  <>
+                    {isConfirmed ? (
+                      <span className={cn("text-foreground text-sm", retired && "opacity-60")}>
+                        {label}
+                        {retired ? " (retirado)" : ""}
+                      </span>
+                    ) : (
+                      <Badge
+                        className={cn(retired && "opacity-60")}
+                        variant={statusBadgeVariant(effectiveKey)}
+                      >
+                        {label}
+                        {retired ? " (retirado)" : ""}
+                      </Badge>
+                    )}
+                  </>
+                ) : null}
+              </div>
               {isDraft ? (
                 <Button
                   className="h-7 gap-1 px-2 text-xs"
@@ -451,8 +446,7 @@ export function OrdersCatalogTable({
       autoCommitEnabled,
       customerNameById,
       actionOrderId,
-      formatInstantDate,
-      formatInstantTime,
+      formatInstantCreatedAt,
       formatStoredDateOnly,
       handleConfirmFromTable,
       handleConvertFromTable,

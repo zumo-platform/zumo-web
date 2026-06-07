@@ -1,0 +1,176 @@
+"use client";
+
+import { useState } from "react";
+
+import { ArrowLeftRight, PackagePlus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
+import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
+import type { DashboardProductRow } from "@/lib/dashboard-products";
+import { formatQty, MOVEMENT_REASON_LABEL } from "@/lib/inventory-format";
+import type { DashboardProductDetail } from "@/lib/product-detail";
+
+function formatWhen(iso: string): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat("es", { dateStyle: "medium", timeStyle: "short" }).format(
+      new Date(iso),
+    );
+  } catch {
+    return iso;
+  }
+}
+
+export function ProductInventoryTab({
+  detail,
+  canEditInventory,
+  onRefresh,
+}: Readonly<{
+  detail: DashboardProductDetail;
+  canEditInventory: boolean;
+  onRefresh: () => void;
+}>) {
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+
+  const productRow: DashboardProductRow = {
+    productId: detail.product.productId,
+    name: detail.product.name,
+    presentation: detail.product.presentation,
+    unit: detail.product.unit,
+    sku: detail.product.sku,
+    status: detail.product.status,
+    deletedAt: detail.product.deletedAt,
+    stockQuantity: detail.product.stockQuantity,
+    price: detail.product.price,
+    imageUrl: detail.product.imageUrl,
+    categoryId: detail.product.categoryId,
+    trackStock: detail.product.trackStock,
+    available: detail.stock.sellableAvailable,
+    onHand: detail.stock.physical,
+    reserved: detail.stock.reserved,
+    committed: detail.stock.committed,
+    minimumStock:
+      detail.product.manageMinimumStock && detail.product.minimumStockQuantity != null
+        ? Number(detail.product.minimumStockQuantity)
+        : null,
+  };
+
+  const rows = detail.stock.byWarehouse;
+  const totalOnHand = rows.reduce((s, r) => s + Number(r.onHand), 0);
+  const totalReserved = rows.reduce((s, r) => s + Number(r.reserved), 0);
+  const totalAvailable = rows.reduce((s, r) => {
+    const av = r.available != null ? Number(r.available) : Number(r.onHand) - Number(r.reserved);
+    return s + (Number.isFinite(av) ? av : 0);
+  }, 0);
+
+  if (!detail.product.trackStock) {
+    return (
+      <p className="rounded-lg border border-dashed px-4 py-10 text-center text-muted-foreground text-sm">
+        Este producto no gestiona existencias.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={!canEditInventory} type="button" variant="outline" onClick={() => setAdjustOpen(true)}>
+          <PackagePlus className="mr-2 size-4" />
+          Ajustar
+        </Button>
+        <Button disabled={!canEditInventory} type="button" variant="outline" onClick={() => setTransferOpen(true)}>
+          <ArrowLeftRight className="mr-2 size-4" />
+          Transferir
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Por bodega</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Bodega</TableHead>
+                <TableHead className="text-right">Físico</TableHead>
+                <TableHead className="text-right">Reservado</TableHead>
+                <TableHead className="text-right">Disponible</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.warehouseId}>
+                  <TableCell>{row.warehouseName}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatQty(Number(row.onHand))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatQty(Number(row.reserved))}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatQty(
+                      row.available != null
+                        ? Number(row.available)
+                        : Number(row.onHand) - Number(row.reserved),
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="font-medium">
+                <TableCell>Total</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(totalOnHand)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(totalReserved)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(totalAvailable)}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Movimientos recientes</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {detail.movements.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Sin movimientos registrados.</p>
+          ) : (
+            detail.movements.map((m) => (
+              <div key={m.movementId} className="flex flex-col gap-0.5 border-border border-b pb-3 last:border-0">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium">
+                    {MOVEMENT_REASON_LABEL[m.reason] ?? m.reason}
+                  </span>
+                  <span className="tabular-nums">{formatQty(Number(m.qty))}</span>
+                </div>
+                <span className="text-muted-foreground text-xs">{formatWhen(m.occurredAt)}</span>
+                {m.notes ? <span className="text-muted-foreground text-xs">{m.notes}</span> : null}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <InventoryAdjustDialog
+        open={adjustOpen}
+        onOpenChange={setAdjustOpen}
+        product={productRow}
+        onSuccess={onRefresh}
+      />
+      <InventoryTransferDialog
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+        product={productRow}
+        onSuccess={onRefresh}
+      />
+    </div>
+  );
+}

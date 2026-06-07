@@ -34,6 +34,12 @@ export const STOCK_STATUS_BADGE_CLASS: Record<StockStatus, string> = {
   out: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 
+export function catalogCommittedQty(row: DashboardProductRow): number | null {
+  if (!row.trackStock) return null;
+  if (row.committed !== null && Number.isFinite(row.committed)) return row.committed;
+  return 0;
+}
+
 /** Resolve sellable qty for the catalog column (ledger first, legacy stockQuantity fallback). */
 export function catalogAvailableQty(row: DashboardProductRow): number | null {
   if (!row.trackStock) return null;

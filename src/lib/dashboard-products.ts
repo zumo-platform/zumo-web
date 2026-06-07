@@ -36,6 +36,7 @@ export type DashboardProductRow = Readonly<{
   available: number | null;
   onHand: number | null;
   reserved: number | null;
+  committed: number | null;
   minimumStock: number | null;
 }>;
 
@@ -128,6 +129,7 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
     available: trackStock ? (parseOptionalQty(o.available) ?? 0) : null,
     onHand: trackStock ? (parseOptionalQty(o.onHand) ?? 0) : null,
     reserved: trackStock ? (parseOptionalQty(o.reserved) ?? 0) : null,
+    committed: trackStock ? (parseOptionalQty(o.committed) ?? 0) : null,
     minimumStock: parseOptionalQty(o.minimumStock),
   };
 }

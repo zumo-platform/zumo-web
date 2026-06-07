@@ -18,7 +18,7 @@ import { Loader2, MessageCircle, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { BackorderPill } from "@/components/workspace/backorder-pill";
+import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -206,7 +206,10 @@ const BoardCard = memo(function BoardCard({
         <Badge variant={statusBadgeVariant(statusKey)}>
           {orderStatusLabel(flowItem, statusKey)}
         </Badge>
-        {order.isBackordered ? <BackorderPill /> : null}
+        <OrderBackorderIndicators
+          hasBackorderRisk={order.hasBackorderRisk}
+          isBackordered={order.isBackordered}
+        />
       </div>
     </div>
   );

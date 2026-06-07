@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -24,8 +26,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { fetchCustomersViaProxy, type DashboardCustomerRow } from "@/lib/dashboard-customers";
 import {
   createWarehouseViaProxy,
+  fetchWarehouseCustomersViaProxy,
   updateWarehouseViaProxy,
   WAREHOUSE_PURPOSE_OPTIONS,
   type CreateWarehousePayload,
@@ -42,6 +46,9 @@ const EMPTY_FORM: CreateWarehousePayload = {
   countsForReorder: true,
   isDefault: false,
   address: null,
+  isCustomerRestricted: false,
+  restrictionStrict: false,
+  allowedCustomerIds: [],
 };
 
 export function WarehouseFormDialog({
@@ -57,28 +64,73 @@ export function WarehouseFormDialog({
 }>) {
   const [form, setForm] = useState<CreateWarehousePayload>(EMPTY_FORM);
   const [pending, setPending] = useState(false);
+  const [customers, setCustomers] = useState<DashboardCustomerRow[]>([]);
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchCustomersViaProxy().then((rows) => setCustomers(rows ?? []));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     if (initial) {
-      setForm({
-        name: initial.name,
-        code: initial.code,
-        kind: initial.kind === "virtual" ? "virtual" : "physical",
-        purpose: (initial.purpose as WarehousePurpose) ?? "none",
-        isSellable: initial.isSellable,
-        countsForReorder: initial.countsForReorder,
-        isDefault: initial.isDefault,
-        address: null,
-      });
+      void (async () => {
+        const allowedFromList = initial.allowedCustomers ?? [];
+        const allowedCustomerIds =
+          initial.allowedCustomerIds ??
+          allowedFromList.map((c) => c.customerId) ??
+          (initial.isCustomerRestricted
+            ? (await fetchWarehouseCustomersViaProxy(initial.warehouseId)).map((c) => c.customerId)
+            : []);
+        setForm({
+          name: initial.name,
+          code: initial.code,
+          kind: initial.kind === "virtual" ? "virtual" : "physical",
+          purpose: (initial.purpose as WarehousePurpose) ?? "none",
+          isSellable: initial.isSellable,
+          countsForReorder: initial.countsForReorder,
+          isDefault: initial.isDefault,
+          address: null,
+          isCustomerRestricted: initial.isCustomerRestricted,
+          restrictionStrict: initial.restrictionStrict,
+          allowedCustomerIds,
+        });
+      })();
     } else {
       setForm(EMPTY_FORM);
+      setCustomerSearch("");
     }
   }, [open, initial]);
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.clientCode?.toLowerCase().includes(q) ?? false),
+    );
+  }, [customers, customerSearch]);
+
+  const selectedIds = form.allowedCustomerIds ?? [];
+
+  function toggleCustomer(customerId: number, checked: boolean) {
+    setForm((f) => {
+      const current = new Set(f.allowedCustomerIds ?? []);
+      if (checked) current.add(customerId);
+      else current.delete(customerId);
+      return { ...f, allowedCustomerIds: [...current] };
+    });
+  }
 
   async function save() {
     if (!form.name.trim()) {
       toast.error("El nombre es obligatorio.");
+      return;
+    }
+    if (form.isCustomerRestricted && (form.allowedCustomerIds?.length ?? 0) === 0) {
+      toast.error("Seleccioná al menos un cliente para una bodega reservada.");
       return;
     }
     setPending(true);
@@ -107,7 +159,7 @@ export function WarehouseFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar bodega" : "Crear bodega"}</DialogTitle>
         </DialogHeader>
@@ -210,6 +262,100 @@ export function WarehouseFormDialog({
                 setForm((f) => ({ ...f, address: e.target.value.trim() || null }))
               }
             />
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <p className="font-medium text-sm">Inventario reservado por cliente</p>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="wh-restricted">Reservar para clientes específicos</Label>
+                <p className="text-muted-foreground text-xs">
+                  Solo estos clientes podrán comprar el stock de esta bodega.
+                </p>
+              </div>
+              <Switch
+                id="wh-restricted"
+                checked={form.isCustomerRestricted ?? false}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({
+                    ...f,
+                    isCustomerRestricted: checked,
+                    restrictionStrict: checked ? f.restrictionStrict : false,
+                    allowedCustomerIds: checked ? (f.allowedCustomerIds ?? []) : [],
+                  }))
+                }
+              />
+            </div>
+
+            {form.isCustomerRestricted ? (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="wh-customer-search">Clientes permitidos</Label>
+                  <Input
+                    id="wh-customer-search"
+                    placeholder="Buscar cliente…"
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                  />
+                  {selectedIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedIds.map((id) => {
+                        const customer = customers.find((c) => c.customerId === id);
+                        return (
+                          <Badge key={id} className="gap-1 pr-1" variant="secondary">
+                            {customer?.name ?? `#${id}`}
+                            <button
+                              aria-label={`Quitar ${customer?.name ?? id}`}
+                              className="rounded-sm hover:bg-muted"
+                              type="button"
+                              onClick={() => toggleCustomer(id, false)}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                    {filteredCustomers.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">No hay clientes.</p>
+                    ) : (
+                      filteredCustomers.map((customer) => (
+                        <label
+                          key={customer.customerId}
+                          className="flex cursor-pointer items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={selectedIds.includes(customer.customerId)}
+                            onCheckedChange={(checked) =>
+                              toggleCustomer(customer.customerId, checked === true)
+                            }
+                          />
+                          <span>{customer.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label htmlFor="wh-strict">Solo estos clientes (estricto)</Label>
+                    <p className="text-muted-foreground text-xs">
+                      Si está activo, estos clientes solo usarán esta bodega (no tomarán del
+                      inventario general).
+                    </p>
+                  </div>
+                  <Switch
+                    id="wh-strict"
+                    checked={form.restrictionStrict ?? false}
+                    onCheckedChange={(checked) =>
+                      setForm((f) => ({ ...f, restrictionStrict: checked }))
+                    }
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
         <DialogFooter>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Boxes, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -23,6 +23,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
 import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
 import { WarehouseFormDialog } from "@/components/workspace/warehouse-form-dialog";
@@ -36,6 +42,14 @@ import {
 import { canMutateInventory } from "@/lib/roles";
 import { workspaceTableCardClassName } from "@/lib/workspace-layout";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
+
+function WarehouseKindIcon({ kind }: Readonly<{ kind: string }>) {
+  return kind === "virtual" ? (
+    <Boxes aria-hidden className="size-4 text-muted-foreground" />
+  ) : (
+    <Warehouse aria-hidden className="size-4 text-muted-foreground" />
+  );
+}
 
 export function SettingsWarehousesView() {
   const { role } = useWorkspacePermissions();
@@ -151,6 +165,7 @@ export function SettingsWarehousesView() {
         </div>
       ) : (
         <div className={workspaceTableCardClassName}>
+          <TooltipProvider>
           <Table>
             <TableHeader>
               <TableRow>
@@ -159,6 +174,7 @@ export function SettingsWarehousesView() {
                 <TableHead>Propósito</TableHead>
                 <TableHead>Venta</TableHead>
                 <TableHead>Reorden</TableHead>
+                <TableHead className="text-right">Productos activos</TableHead>
                 <TableHead>Estado</TableHead>
                 {canEdit ? <TableHead className="w-12" /> : null}
               </TableRow>
@@ -167,12 +183,25 @@ export function SettingsWarehousesView() {
               {warehouses.map((wh) => (
                 <TableRow key={wh.warehouseId}>
                   <TableCell className="font-medium">
-                    {wh.name}
-                    {wh.isDefault ? (
-                      <Badge className="ml-2" variant="secondary">
-                        Predeterminada
-                      </Badge>
-                    ) : null}
+                    <span className="inline-flex items-center gap-2">
+                      <WarehouseKindIcon kind={wh.kind} />
+                      {wh.name}
+                      {wh.isDefault ? (
+                        <Badge variant="secondary">Predeterminada</Badge>
+                      ) : null}
+                      {wh.isCustomerRestricted ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline">Reservada</Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {wh.allowedCustomers && wh.allowedCustomers.length > 0
+                              ? `Clientes: ${wh.allowedCustomers.map((c) => c.name).join(", ")}`
+                              : "Inventario reservado para clientes específicos"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">
@@ -182,6 +211,9 @@ export function SettingsWarehousesView() {
                   <TableCell>{WAREHOUSE_PURPOSE_LABEL[wh.purpose] ?? wh.purpose}</TableCell>
                   <TableCell>{wh.isSellable ? "Sí" : "No"}</TableCell>
                   <TableCell>{wh.countsForReorder ? "Sí" : "No"}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {wh.activeProductCount.toLocaleString("es")}
+                  </TableCell>
                   <TableCell>{wh.isActive ? "Activa" : "Inactiva"}</TableCell>
                   {canEdit ? (
                     <TableCell>
@@ -222,6 +254,7 @@ export function SettingsWarehousesView() {
               ))}
             </TableBody>
           </Table>
+          </TooltipProvider>
         </div>
       )}
 

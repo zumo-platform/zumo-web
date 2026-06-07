@@ -11,6 +11,7 @@ import {
 import {
   calendarDateInTimezone,
   DEFAULT_SUPPLIER_TIMEZONE,
+  formatInstantCreatedAtInTimezone,
   formatInstantDateInTimezone,
   formatInstantDateTimeInTimezone,
   formatInstantTimeInTimezone,
@@ -80,6 +81,8 @@ export function useSupplierTimeFormatters() {
         formatInstantTimeInTimezone(iso, timeZone),
       formatInstantDateTime: (iso: string | null | undefined) =>
         formatInstantDateTimeInTimezone(iso, timeZone),
+      formatInstantCreatedAt: (iso: string | null | undefined) =>
+        formatInstantCreatedAtInTimezone(iso, timeZone),
       formatStoredDateOnly: (raw: string | null | undefined) => formatStoredDateOnly(raw),
       calendarToday: () => calendarDateInTimezone(timeZone),
     }),

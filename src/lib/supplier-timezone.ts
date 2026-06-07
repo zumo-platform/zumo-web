@@ -155,3 +155,15 @@ export function formatInstantDateTimeInTimezone(
     return "—";
   }
 }
+
+/** Catalog table style: `6 jun 2026 - 18:30`. */
+export function formatInstantCreatedAtInTimezone(
+  iso: string | null | undefined,
+  timeZone: string = DEFAULT_SUPPLIER_TIMEZONE,
+  locale = "es",
+): string {
+  const date = formatInstantDateInTimezone(iso, timeZone, locale);
+  const time = formatInstantTimeInTimezone(iso, timeZone, locale);
+  if (date === "—" || time === "—") return "—";
+  return `${date} - ${time}`;
+}

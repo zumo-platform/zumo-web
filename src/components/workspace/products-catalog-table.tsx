@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -53,6 +56,7 @@ import { ProductStockPopover } from "@/components/workspace/product-stock-popove
 import { formatProductStockLabel, type DashboardProductRow } from "@/lib/dashboard-products";
 import {
   catalogAvailableQty,
+  catalogCommittedQty,
   catalogOnHandQty,
   catalogReservedQty,
   catalogStockStatus,
@@ -151,6 +155,7 @@ export function ProductsCatalogTable({
   const [transferProduct, setTransferProduct] = useState<DashboardProductRow | null>(null);
   const { role } = useWorkspacePermissions();
   const canEditInventory = canMutateInventory(role);
+  const router = useRouter();
 
   const productIdsKey = useMemo(() => data.map((p) => p.productId).join(","), [data]);
 
@@ -212,16 +217,19 @@ export function ProductsCatalogTable({
         id: "product",
         header: "Producto",
         cell: ({ row }) => {
-          const { name, presentation } = row.original;
+          const { name, presentation, productId } = row.original;
           return (
-            <div className="flex min-w-0 max-w-[min(280px,45vw)] flex-col gap-0.5">
+            <Link
+              className="flex min-w-0 max-w-[min(280px,45vw)] flex-col gap-0.5 hover:underline"
+              href={`/products/${productId}`}
+            >
               <span className="truncate font-medium text-foreground text-sm leading-tight tracking-tight">
                 {name}
               </span>
               {presentation ? (
                 <span className="truncate text-muted-foreground text-xs leading-snug">{presentation}</span>
               ) : null}
-            </div>
+            </Link>
           );
         },
       },
@@ -272,23 +280,34 @@ export function ProductsCatalogTable({
             );
           }
           const available = catalogAvailableQty(r);
+          const committed = catalogCommittedQty(r);
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex cursor-default items-center gap-2">
-                  <span className="font-medium text-sm tabular-nums">{formatQty(available)}</span>
-                  <Badge
-                    className={STOCK_STATUS_BADGE_CLASS[status]}
-                    data-tone={STOCK_STATUS_TONE[status]}
-                    variant="outline"
-                  >
-                    {STOCK_STATUS_LABEL[status]}
-                  </Badge>
+                <span className="inline-flex cursor-default flex-col items-start gap-0.5">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="font-medium text-sm tabular-nums">{formatQty(available)}</span>
+                    <Badge
+                      className={STOCK_STATUS_BADGE_CLASS[status]}
+                      data-tone={STOCK_STATUS_TONE[status]}
+                      variant="outline"
+                    >
+                      {STOCK_STATUS_LABEL[status]}
+                    </Badge>
+                  </span>
+                  {committed != null && committed > 0 ? (
+                    <span className="text-muted-foreground text-xs tabular-nums">
+                      Comprometido: {formatQty(committed)}
+                    </span>
+                  ) : null}
                 </span>
               </TooltipTrigger>
               <TooltipContent>
                 Físico {formatQty(catalogOnHandQty(r))} · Reservado{" "}
                 {formatQty(catalogReservedQty(r))}
+                {committed != null && committed > 0
+                  ? ` · Comprometido ${formatQty(committed)}`
+                  : ""}
               </TooltipContent>
             </Tooltip>
           );
@@ -457,7 +476,18 @@ export function ProductsCatalogTable({
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow data-state={row.getIsSelected() ? "selected" : undefined} key={row.id}>
+                <TableRow
+                  className="cursor-pointer"
+                  data-state={row.getIsSelected() ? "selected" : undefined}
+                  key={row.id}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest("button, a, input, [role=checkbox], [data-radix-collection-item]")) {
+                      return;
+                    }
+                    router.push(`/products/${row.original.productId}`);
+                  }}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                   ))}

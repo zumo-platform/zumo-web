@@ -3,6 +3,11 @@
 import { useCallback, useState } from "react";
 
 import { CheckCircle2, Loader2, Trash2, XCircle } from "lucide-react";
+
+import {
+  BackorderRiskWarning,
+  BACKORDER_RISK_ORDER_TOOLTIP,
+} from "@/components/workspace/backorder-risk-warning";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -22,6 +27,7 @@ export type OrderLifecycleActionsProps = Readonly<{
   blockedTitle?: string;
   disabled?: boolean;
   deliveryDateValid?: boolean;
+  hasBackorderRisk?: boolean;
   onBeforeAction?: () => Promise<boolean>;
   showEditLink?: boolean;
   onStatusChange?: (orderId: string, status: string, patch?: DashboardOrderPatch) => void;
@@ -37,6 +43,7 @@ export function OrderLifecycleActions({
   blockedTitle,
   disabled = false,
   deliveryDateValid = true,
+  hasBackorderRisk = false,
   onBeforeAction,
   showEditLink = true,
   onStatusChange,
@@ -189,7 +196,32 @@ export function OrderLifecycleActions({
   }
 
   return (
-    <div className={inline ? "flex flex-wrap items-center justify-end gap-2" : "flex flex-col gap-2 sm:flex-row sm:justify-end"}>
+    <div
+      className={
+        inline
+          ? "flex flex-wrap items-center justify-end gap-2"
+          : "flex flex-col gap-2 sm:items-end sm:justify-end"
+      }
+    >
+      {hasBackorderRisk ? (
+        <p
+          className={
+            inline
+              ? "flex w-full basis-full items-center gap-1.5 text-amber-900 text-xs sm:w-auto sm:basis-auto dark:text-amber-100"
+              : "flex items-center gap-1.5 text-amber-900 text-xs dark:text-amber-100"
+          }
+        >
+          <BackorderRiskWarning tooltip={BACKORDER_RISK_ORDER_TOOLTIP} />
+          Al confirmar, las unidades faltantes quedarán como Pendiente.
+        </p>
+      ) : null}
+      <div
+        className={
+          inline
+            ? "flex flex-wrap items-center justify-end gap-2"
+            : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end"
+        }
+      >
       <Button
         className="gap-1.5"
         disabled={actionsDisabled}
@@ -226,6 +258,7 @@ export function OrderLifecycleActions({
         )}
         Confirmar pedido
       </Button>
+      </div>
     </div>
   );
 }
