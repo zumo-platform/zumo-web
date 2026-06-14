@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Loader2 } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { ProductUploadSheets } from "@/components/workspace/product-upload-sheets";
 import { ProductsCatalogTable } from "@/components/workspace/products-catalog-table";
 import { ProductsHeaderActions } from "@/components/workspace/products-header-actions";
 import { ProductsPageHeader } from "@/components/workspace/products-page-header";
+import { ProductsPageSkeleton } from "@/components/workspace/workspace-skeletons";
 import { activeProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import { fetchWarehousesViaProxy, type DashboardWarehouseRow } from "@/lib/inventory";
 import {
   invalidateProductsCatalogCache,
   loadProductsCatalog,
+  readCachedProducts,
 } from "@/lib/products-catalog-cache";
 import { cn } from "@/lib/utils";
 import {
@@ -23,8 +23,9 @@ import {
 } from "@/lib/workspace-layout";
 
 export function ProductsExperience() {
-  const [rows, setRows] = useState<DashboardProductRow[] | null>(null);
-  const [ready, setReady] = useState(false);
+  const cachedOnMount = readCachedProducts(null);
+  const [rows, setRows] = useState<DashboardProductRow[] | null>(() => cachedOnMount);
+  const [ready, setReady] = useState(() => cachedOnMount !== null);
   const [warehouses, setWarehouses] = useState<DashboardWarehouseRow[]>([]);
   const [warehouseId, setWarehouseId] = useState<number | null>(null);
   const initialLoadDone = useRef(false);
@@ -32,13 +33,18 @@ export function ProductsExperience() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      invalidateProductsCatalogCache();
-      const [data, wh] = await Promise.all([
-        loadProductsCatalog({ force: true, warehouseId: null }),
+      const cached = readCachedProducts(null);
+      if (cached && !cancelled) {
+        setRows(cached);
+        setReady(true);
+      }
+
+      const [fresh, wh] = await Promise.all([
+        loadProductsCatalog({ warehouseId: null }),
         fetchWarehousesViaProxy(),
       ]);
       if (!cancelled) {
-        setRows(data);
+        setRows(fresh);
         setWarehouses(wh);
         setReady(true);
         initialLoadDone.current = true;
@@ -53,7 +59,9 @@ export function ProductsExperience() {
     if (!initialLoadDone.current) return;
     let cancelled = false;
     void (async () => {
-      const data = await loadProductsCatalog({ force: true, warehouseId });
+      const cached = readCachedProducts(warehouseId);
+      if (cached && !cancelled) setRows(cached);
+      const data = await loadProductsCatalog({ warehouseId });
       if (!cancelled) setRows(data);
     })();
     return () => {
@@ -83,14 +91,7 @@ export function ProductsExperience() {
   }, []);
 
   if (!ready || rows === null) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground text-sm">
-          <Loader2 aria-hidden className="size-5 animate-spin" />
-          Cargando inventario…
-        </div>
-      </div>
-    );
+    return <ProductsPageSkeleton />;
   }
 
   const visible = activeProducts(rows);
@@ -152,10 +153,5 @@ export function ProductsExperience() {
 }
 
 export function ProductsExperienceFallback() {
-  return (
-    <div className="flex flex-1 items-center justify-center gap-2 bg-background text-muted-foreground text-sm">
-      <Loader2 aria-hidden className="size-4 animate-spin" />
-      Cargando productos…
-    </div>
-  );
+  return <ProductsPageSkeleton />;
 }

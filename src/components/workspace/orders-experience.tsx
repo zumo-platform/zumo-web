@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 
-import { Loader2, Package, Plus } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -13,6 +13,7 @@ import { OrdersCatalogTable } from "@/components/workspace/orders-catalog-table"
 import { OrdersHeaderActions } from "@/components/workspace/orders-header-actions";
 import { OrdersPageHeader } from "@/components/workspace/orders-page-header";
 import { OrdersToolbar } from "@/components/workspace/orders-toolbar";
+import { OrdersPageSkeleton } from "@/components/workspace/workspace-skeletons";
 import { parseDashboardCustomersEnvelope, type DashboardCustomerRow } from "@/lib/dashboard-customers";
 import {
   DEFAULT_ORDER_STATUS_FILTER,
@@ -295,14 +296,7 @@ export function OrdersExperience() {
   const pendingClient = !ordersReady || customerList === null;
 
   if (pendingClient) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-background">
-        <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground text-sm">
-          <Loader2 aria-hidden className="size-5 animate-spin" />
-          Cargando pedidos…
-        </div>
-      </div>
-    );
+    return <OrdersPageSkeleton viewMode={viewMode} />;
   }
 
   const hasAnyOrders = orders.length > 0;
@@ -476,10 +470,5 @@ export function OrdersExperience() {
 }
 
 export function OrdersExperienceFallback() {
-  return (
-    <div className="flex flex-1 items-center justify-center gap-2 bg-background text-muted-foreground text-sm">
-      <Loader2 aria-hidden className="size-4 animate-spin" />
-      Cargando pedidos…
-    </div>
-  );
+  return <OrdersPageSkeleton viewMode="list" />;
 }

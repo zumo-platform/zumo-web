@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Boxes, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Warehouse } from "lucide-react";
+import { Loader2, MoreHorizontal, Pencil, Plus, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -22,56 +22,42 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
-import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
-import { WarehouseFormDialog } from "@/components/workspace/warehouse-form-dialog";
-import { WarehousesTableSkeleton } from "@/components/workspace/workspace-skeletons";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { VendorFormDialog } from "@/components/workspace/vendor-form-dialog";
 import {
-  deleteWarehouseViaProxy,
-  fetchWarehousesViaProxy,
-  WAREHOUSE_KIND_LABEL,
-  WAREHOUSE_PURPOSE_LABEL,
-  type DashboardWarehouseRow,
+  deleteVendorViaProxy,
+  fetchVendorsViaProxy,
+  type DashboardVendorRow,
 } from "@/lib/inventory";
 import { canMutateInventory } from "@/lib/roles";
 import { workspaceTableCardClassName } from "@/lib/workspace-layout";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
-function WarehouseKindIcon({ kind }: Readonly<{ kind: string }>) {
-  return kind === "virtual" ? (
-    <Boxes aria-hidden className="size-4 text-muted-foreground" />
-  ) : (
-    <Warehouse aria-hidden className="size-4 text-muted-foreground" />
-  );
-}
-
-export function SettingsWarehousesView() {
+export function ComprasProveedoresView() {
   const { role } = useWorkspacePermissions();
   const canEdit = canMutateInventory(role);
 
-  const [rows, setRows] = useState<DashboardWarehouseRow[] | null>(null);
+  const [rows, setRows] = useState<DashboardVendorRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<DashboardWarehouseRow | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DashboardWarehouseRow | null>(null);
+  const [editTarget, setEditTarget] = useState<DashboardVendorRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DashboardVendorRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [adjustOpen, setAdjustOpen] = useState(false);
-  const [transferOpen, setTransferOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const data = await fetchWarehousesViaProxy();
+      const data = await fetchVendorsViaProxy();
       setRows(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos cargar las bodegas.");
+      setError(err instanceof Error ? err.message : "No pudimos cargar los proveedores.");
       setRows([]);
     }
   }, []);
@@ -81,19 +67,24 @@ export function SettingsWarehousesView() {
   }, [reload]);
 
   if (rows === null && !error) {
-    return <WarehousesTableSkeleton />;
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground text-sm">
+        <Loader2 aria-hidden className="size-4 animate-spin" />
+        Cargando proveedores…
+      </div>
+    );
   }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
     setDeleteBusy(true);
     try {
-      const result = await deleteWarehouseViaProxy(deleteTarget.warehouseId);
+      const result = await deleteVendorViaProxy(deleteTarget.vendorId);
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success("Bodega eliminada.");
+      toast.success("Proveedor eliminado.");
       setDeleteTarget(null);
       await reload();
     } finally {
@@ -101,26 +92,20 @@ export function SettingsWarehousesView() {
     }
   }
 
-  const warehouses = rows ?? [];
+  const vendors = rows ?? [];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-semibold text-lg tracking-tight">Bodegas</h2>
+          <h2 className="font-semibold text-lg tracking-tight">Proveedores</h2>
           <p className="mt-1 max-w-2xl text-muted-foreground text-sm leading-relaxed">
-            Ubicaciones físicas y virtuales donde se almacena el inventario. Usá el filtro de bodega
-            en Inventario para ver existencias por ubicación.
+            Las empresas a las que les compras inventario. Aquí los registras para luego crear
+            órdenes de compra y recibir mercadería.
           </p>
         </div>
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" type="button" variant="outline" onClick={() => setAdjustOpen(true)}>
-              Ajustar stock
-            </Button>
-            <Button size="sm" type="button" variant="outline" onClick={() => setTransferOpen(true)}>
-              Transferir
-            </Button>
             <Button
               className="gap-2"
               size="sm"
@@ -131,7 +116,7 @@ export function SettingsWarehousesView() {
               }}
             >
               <Plus aria-hidden className="size-4" />
-              Crear bodega
+              Agregar proveedor
             </Button>
           </div>
         ) : null}
@@ -141,9 +126,9 @@ export function SettingsWarehousesView() {
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center text-sm">
           {error}
         </div>
-      ) : warehouses.length === 0 ? (
+      ) : vendors.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground text-sm">
-          <p>Todavía no hay bodegas activas. Creá una bodega principal para empezar a registrar stock.</p>
+          <p>Aún no tienes proveedores. Agrega el primero para empezar a registrar compras.</p>
           {canEdit ? (
             <Button
               className="mt-4 gap-2"
@@ -155,68 +140,54 @@ export function SettingsWarehousesView() {
               }}
             >
               <Plus aria-hidden className="size-4" />
-              Crear bodega
+              Agregar proveedor
             </Button>
           ) : null}
         </div>
       ) : (
         <div className={workspaceTableCardClassName}>
-          <TooltipProvider>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Propósito</TableHead>
-                <TableHead>Venta</TableHead>
-                <TableHead>Reorden</TableHead>
-                <TableHead className="text-right">Productos activos</TableHead>
+                <TableHead>Contacto</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Teléfono</TableHead>
+                <TableHead className="text-right">Días de entrega</TableHead>
+                <TableHead>Moneda</TableHead>
                 <TableHead>Estado</TableHead>
                 {canEdit ? <TableHead className="w-12" /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {warehouses.map((wh) => (
-                <TableRow key={wh.warehouseId}>
+              {vendors.map((v) => (
+                <TableRow key={v.vendorId}>
                   <TableCell className="font-medium">
                     <span className="inline-flex items-center gap-2">
-                      <WarehouseKindIcon kind={wh.kind} />
-                      {wh.name}
-                      {wh.isDefault ? (
-                        <Badge variant="secondary">Predeterminada</Badge>
-                      ) : null}
-                      {wh.isCustomerRestricted ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="outline">Reservada</Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {wh.allowedCustomers && wh.allowedCustomers.length > 0
-                              ? `Clientes: ${wh.allowedCustomers.map((c) => c.name).join(", ")}`
-                              : "Inventario reservado para clientes específicos"}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : null}
+                      <Truck aria-hidden className="size-4 text-muted-foreground" />
+                      {v.name}
                     </span>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {WAREHOUSE_KIND_LABEL[wh.kind] ?? wh.kind}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{WAREHOUSE_PURPOSE_LABEL[wh.purpose] ?? wh.purpose}</TableCell>
-                  <TableCell>{wh.isSellable ? "Sí" : "No"}</TableCell>
-                  <TableCell>{wh.countsForReorder ? "Sí" : "No"}</TableCell>
+                  <TableCell>{v.contactName ?? "—"}</TableCell>
+                  <TableCell>{v.email ?? "—"}</TableCell>
+                  <TableCell>{v.phone ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {wh.activeProductCount.toLocaleString("es")}
+                    {v.leadTimeDays != null ? v.leadTimeDays.toLocaleString("es") : "—"}
                   </TableCell>
-                  <TableCell>{wh.isActive ? "Activa" : "Inactiva"}</TableCell>
+                  <TableCell>{v.defaultCurrency ?? "—"}</TableCell>
+                  <TableCell>
+                    {v.isActive ? (
+                      <Badge variant="secondary">Activo</Badge>
+                    ) : (
+                      <Badge variant="outline">Inactivo</Badge>
+                    )}
+                  </TableCell>
                   {canEdit ? (
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
-                            aria-label={`Acciones para ${wh.name}`}
+                            aria-label={`Acciones para ${v.name}`}
                             className="size-8"
                             size="icon-sm"
                             type="button"
@@ -228,7 +199,7 @@ export function SettingsWarehousesView() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onSelect={() => {
-                              setEditTarget(wh);
+                              setEditTarget(v);
                               setFormOpen(true);
                             }}
                           >
@@ -237,7 +208,7 @@ export function SettingsWarehousesView() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
-                            onSelect={() => setDeleteTarget(wh)}
+                            onSelect={() => setDeleteTarget(v)}
                           >
                             <Trash2 aria-hidden className="mr-2 size-4" />
                             Eliminar
@@ -250,11 +221,10 @@ export function SettingsWarehousesView() {
               ))}
             </TableBody>
           </Table>
-          </TooltipProvider>
         </div>
       )}
 
-      <WarehouseFormDialog
+      <VendorFormDialog
         initial={editTarget}
         open={formOpen}
         onOpenChange={(next) => {
@@ -262,20 +232,6 @@ export function SettingsWarehousesView() {
           if (!next) setEditTarget(null);
         }}
         onSaved={() => void reload()}
-      />
-
-      <InventoryAdjustDialog
-        open={adjustOpen}
-        product={null}
-        onOpenChange={setAdjustOpen}
-        onSuccess={() => void reload()}
-      />
-
-      <InventoryTransferDialog
-        open={transferOpen}
-        product={null}
-        onOpenChange={setTransferOpen}
-        onSuccess={() => void reload()}
       />
 
       <AlertDialog
@@ -286,9 +242,10 @@ export function SettingsWarehousesView() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar bodega?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar proveedor?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará &quot;{deleteTarget?.name}&quot;. Solo es posible si no tiene existencias.
+              Se eliminará &quot;{deleteTarget?.name}&quot;. Esta acción se puede revertir solo
+              desde soporte.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

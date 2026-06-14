@@ -1,6 +1,7 @@
 /** Types + server fetch for GET /dashboard/products. */
 
 import { joinApiGatewayPath } from "@/lib/api";
+import { parseProductBatch, type ProductBatch } from "@/lib/inventory";
 
 /** Matches backend `MAX_UNLIMITED_STOCK_SENTINEL` (bulk “unlimited” stock UX). */
 export const DASHBOARD_PRODUCT_UNLIMITED_STOCK = "999999999999999";
@@ -37,6 +38,8 @@ export type DashboardProductRow = Readonly<{
   onHand: number | null;
   reserved: number | null;
   committed: number | null;
+  incoming: number | null;
+  total: number | null;
   minimumStock: number | null;
 }>;
 
@@ -130,8 +133,22 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
     onHand: trackStock ? (parseOptionalQty(o.onHand) ?? 0) : null,
     reserved: trackStock ? (parseOptionalQty(o.reserved) ?? 0) : null,
     committed: trackStock ? (parseOptionalQty(o.committed) ?? 0) : null,
+    incoming: trackStock ? (parseOptionalQty(o.incoming) ?? 0) : null,
+    total: trackStock
+      ? (parseOptionalQty(o.total) ??
+          (parseOptionalQty(o.onHand) ?? 0) + (parseOptionalQty(o.incoming) ?? 0))
+      : null,
     minimumStock: parseOptionalQty(o.minimumStock),
   };
+}
+
+export function catalogIncomingQty(r: DashboardProductRow): number {
+  return r.incoming ?? 0;
+}
+
+export function catalogTotalQty(r: DashboardProductRow): number {
+  const onHand = r.onHand ?? 0;
+  return r.total ?? onHand + (r.incoming ?? 0);
 }
 
 /** Active catalog rows (omit soft-deleted). */
@@ -142,6 +159,19 @@ export function activeProducts(rows: readonly DashboardProductRow[]): DashboardP
 /** Active + selectable in order editor (status active). */
 export function selectableProducts(rows: readonly DashboardProductRow[]): DashboardProductRow[] {
   return activeProducts(rows).filter((p) => p.status === "active");
+}
+
+/** Client-side catalog load via Route Handler. */
+export async function fetchProductBatchesViaProxy(productId: number): Promise<ProductBatch[]> {
+  const res = await fetch(`/api/backend/dashboard/products/${productId}/batches`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as { batches?: unknown[] };
+  if (!res.ok || !Array.isArray(data.batches)) return [];
+  return data.batches
+    .map((item) => parseProductBatch(item))
+    .filter((b): b is ProductBatch => b !== null);
 }
 
 /** Client-side catalog load via Route Handler. */

@@ -10,10 +10,15 @@ import {
   invalidateSessionCache,
   invalidateSessionCachePrefix,
   readSessionCache,
+  scheduleIdleTask,
   writeSessionCache,
   WORKSPACE_CACHE_KEYS,
   WORKSPACE_CACHE_TTL_MS,
 } from "@/lib/workspace-session-cache";
+import {
+  buildDefaultFlowItems,
+  flowToBoardColumns,
+} from "@/lib/order-status-flow";
 
 function ordersCacheKey(statusKeys: readonly string[]): string {
   return `${WORKSPACE_CACHE_KEYS.orders}:${[...statusKeys].sort().join(",")}`;
@@ -21,8 +26,23 @@ function ordersCacheKey(statusKeys: readonly string[]): string {
 
 async function fetchOrdersFromProxy(statusKeys: readonly string[]): Promise<DashboardOrdersFetchResult> {
   const origin = window.location.origin;
+  const sortedKeys = [...statusKeys].sort();
+  const batchUrl = `${origin}/api/backend/dashboard/orders?status=${encodeURIComponent(sortedKeys.join(","))}`;
+
+  try {
+    const res = await fetch(batchUrl, { credentials: "same-origin", cache: "no-store" });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      return { ok: true, orders: mergeAndSortOrders(parseDashboardOrdersEnvelope(body)) };
+    }
+    // Older API builds reject comma-separated status; fall back to one request per column.
+    if (res.status !== 400) return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+
   const chunks = await Promise.all(
-    statusKeys.map(async (status) => {
+    sortedKeys.map(async (status) => {
       const url = `${origin}/api/backend/dashboard/orders?status=${encodeURIComponent(status)}`;
       try {
         const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
@@ -111,4 +131,28 @@ export async function loadCustomersList(options?: { force?: boolean }): Promise<
 
 export function invalidateCustomersCache(): void {
   invalidateSessionCache(WORKSPACE_CACHE_KEYS.customers);
+}
+
+function defaultBoardStatusKeys(): string[] {
+  return flowToBoardColumns(buildDefaultFlowItems()).map((column) => column.key);
+}
+
+export async function prefetchOrdersCatalog(
+  statusKeys: readonly string[] = defaultBoardStatusKeys(),
+): Promise<void> {
+  if (readCachedOrders(statusKeys)) return;
+  await loadOrdersCatalog(statusKeys);
+}
+
+export function prefetchOrdersWorkspaceData(): void {
+  scheduleIdleTask(() => {
+    void prefetchOrdersCatalog();
+    void loadCustomersList();
+  });
+}
+
+export function prefetchCustomersWorkspaceData(): void {
+  scheduleIdleTask(() => {
+    void loadCustomersList();
+  });
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DeliveryWeekdaysPicker } from "@/components/workspace/delivery-weekdays-picker";
+import { DeliverySettingsSkeleton } from "@/components/workspace/workspace-skeletons";
 import {
   createDeliveryZoneViaProxy,
   deleteDeliveryZoneViaProxy,
@@ -187,12 +188,7 @@ export function SettingsDeliveryView() {
   }
 
   if ((settings === null || zones === null) && !error) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground text-sm">
-        <Loader2 aria-hidden className="size-4 animate-spin" />
-        Cargando logística…
-      </div>
-    );
+    return <DeliverySettingsSkeleton />;
   }
 
   if (!settings) {

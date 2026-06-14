@@ -172,9 +172,22 @@ function InviteAcceptForm() {
           <ZumoWordmark className="mx-auto mb-4 max-h-10" />
           <CardTitle>Únete a {validation.supplierName ?? "tu equipo"}</CardTitle>
           <CardDescription>
-            {validation.inviterName
-              ? `${validation.inviterName} te invitó a unirte a la plataforma Zumo.`
-              : "Completá tu registro para acceder a la plataforma Zumo."}
+            {validation.supplierName && validation.role ? (
+              <>
+                Te unís a <strong>{validation.supplierName}</strong> como{" "}
+                <strong>{roleLabel(validation.role)}</strong>.
+                {validation.inviterName ? (
+                  <>
+                    {" "}
+                    {validation.inviterName} te envió esta invitación.
+                  </>
+                ) : null}
+              </>
+            ) : validation.inviterName ? (
+              `${validation.inviterName} te invitó a unirte a la plataforma Zumo.`
+            ) : (
+              "Completá tu registro para acceder a la plataforma Zumo."
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -192,6 +205,7 @@ function InviteAcceptForm() {
             <div className="space-y-2">
               <Label htmlFor="invite-accept-email">Correo</Label>
               <Input
+                className="bg-muted"
                 disabled
                 id="invite-accept-email"
                 readOnly

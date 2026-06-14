@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Loader2, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SettingsSellersTable } from "@/components/workspace/settings-sellers-table";
 import { TeamInviteSheet } from "@/components/workspace/team-invite-sheet";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
+import { TeamTableSkeleton } from "@/components/workspace/workspace-skeletons";
 import { fetchTeamViaProxy, type TeamMemberRow } from "@/lib/team";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
@@ -55,10 +56,7 @@ export function TeamExperience() {
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-4xl p-6">
           {loadState === "loading" ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
-              <Loader2 aria-hidden className="size-5 animate-spin" />
-              Cargando equipo…
-            </div>
+            <TeamTableSkeleton />
           ) : null}
 
           {loadState === "error" ? (

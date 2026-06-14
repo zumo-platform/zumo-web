@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import { CustomerProductPickerSheet } from "@/components/workspace/customer-prod
 import { CustomerProductsTab } from "@/components/workspace/customer-products-tab";
 import { CustomerTasksTab } from "@/components/workspace/customer-tasks-tab";
 import { CustomerUsersTab } from "@/components/workspace/customer-users-tab";
+import { CustomerDetailSkeleton } from "@/components/workspace/workspace-skeletons";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import type { CustomerLabelRow } from "@/lib/customer-hub";
 import {
@@ -163,12 +164,7 @@ export function CustomerDetailExperience({
   );
 
   if (loading) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20 text-muted-foreground">
-        <Loader2 aria-hidden className="size-8 animate-spin" />
-        <p className="text-sm">Cargando cliente…</p>
-      </div>
-    );
+    return <CustomerDetailSkeleton />;
   }
 
   if (error || !detail || !draft) {

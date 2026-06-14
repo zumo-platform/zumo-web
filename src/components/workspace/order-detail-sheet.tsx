@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { OrderDetailSheetSkeleton } from "@/components/workspace/workspace-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -903,12 +904,7 @@ export function OrderDetailSheet({
         </SheetHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-              <Loader2 aria-hidden className="size-8 animate-spin" />
-              <p className="text-sm">Cargando detalle del pedido…</p>
-            </div>
-          ) : null}
+          {loading ? <OrderDetailSheetSkeleton /> : null}
 
           {!loading && error ? (
             <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">

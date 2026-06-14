@@ -17,10 +17,15 @@ import { ClientsCustomersTable } from "@/components/workspace/clients-customers-
 import { ClientsEmptyState } from "@/components/workspace/clients-empty-state";
 import { ClientsHeaderActions } from "@/components/workspace/clients-header-actions";
 import { ClientsPageHeader } from "@/components/workspace/clients-page-header";
+import { CustomersTableSkeleton } from "@/components/workspace/workspace-skeletons";
 import {
   fetchCustomersViaProxy,
   type DashboardCustomerRow,
 } from "@/lib/dashboard-customers";
+import {
+  loadCustomersList,
+  readCachedCustomers,
+} from "@/lib/orders-catalog-cache";
 import { cn } from "@/lib/utils";
 import {
   workspaceContentInnerClassName,
@@ -48,8 +53,12 @@ export function ClientsExperience({
 }>) {
   const router = useRouter();
   const [section, setSection] = useState<ClientsListSection>("general");
+  const cachedOnMount = readCachedCustomers();
   const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | null>(() =>
-    variant === "list" ? (initialCustomers ?? null) : null,
+    variant === "list" ? (initialCustomers ?? cachedOnMount) : null,
+  );
+  const [customersLoading, setCustomersLoading] = useState(
+    () => variant === "list" && initialCustomers === null && cachedOnMount === null,
   );
 
   useEffect(() => {
@@ -57,9 +66,13 @@ export function ClientsExperience({
 
     let cancelled = false;
     void (async () => {
-      const rows = await fetchCustomersViaProxy();
+      const cached = readCachedCustomers();
+      if (cached && !cancelled) setCustomerRows(cached);
+
+      const rows = await loadCustomersList();
       if (cancelled) return;
       setCustomerRows(rows);
+      setCustomersLoading(false);
     })();
 
     return () => {
@@ -189,6 +202,14 @@ export function ClientsExperience({
     main = (
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
         <ClientsEmptyState onPrimaryCta={openCreationPage} />
+      </div>
+    );
+  } else if (customersLoading) {
+    main = (
+      <div className={cn(workspaceTableScrollClassName, workspaceContentOuterClassName)}>
+        <div className={workspaceContentInnerClassName}>
+          <CustomersTableSkeleton />
+        </div>
       </div>
     );
   } else if (apiError) {

@@ -1,10 +1,23 @@
 import { NextResponse } from "next/server";
 
 import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
-import { refreshAuthSession } from "@/lib/cognito-server";
-import { getAuthSessionForProxy, setAuthSession } from "@/lib/session";
+import { refreshAuthSession, type AuthTokens } from "@/lib/cognito-server";
+import {
+  applyAuthSessionToResponse,
+  getAuthSessionForProxy,
+  setAuthSession,
+} from "@/lib/session";
 
 export const runtime = "nodejs";
+
+const CACHEABLE_DASHBOARD_GET_PATHS = new Set([
+  "dashboard/orders",
+  "dashboard/customers",
+  "dashboard/products",
+  "dashboard/warehouses",
+  "dashboard/product-categories",
+  "dashboard/order-status-flow",
+]);
 
 function coercePathSegments(routePath: unknown): string[] {
   if (Array.isArray(routePath)) {
@@ -20,11 +33,17 @@ function coercePathSegments(routePath: unknown): string[] {
   return [];
 }
 
+function isCacheableDashboardGet(method: string, segments: readonly string[]): boolean {
+  if (method !== "GET") return false;
+  return CACHEABLE_DASHBOARD_GET_PATHS.has(segments.join("/"));
+}
+
 async function proxyRequest(
   request: Request,
   segments: string[],
 ): Promise<NextResponse> {
   let { idToken, accessToken, refreshToken } = await getAuthSessionForProxy(request);
+  let refreshedTokens: AuthTokens | null = null;
 
   /** Id/access cookies use Cognito `expiresIn` (~1h); refresh lasts 30d. Refresh here so POSTs keep working. */
   if (
@@ -33,10 +52,10 @@ async function proxyRequest(
     refreshToken.length > 0
   ) {
     try {
-      const tokens = await refreshAuthSession(refreshToken);
-      await setAuthSession(tokens);
-      idToken = tokens.idToken;
-      accessToken = tokens.accessToken;
+      refreshedTokens = await refreshAuthSession(refreshToken);
+      await setAuthSession(refreshedTokens);
+      idToken = refreshedTokens.idToken;
+      accessToken = refreshedTokens.accessToken;
     } catch (err) {
       console.error("[api/backend] Cognito refresh failed", err);
     }
@@ -92,6 +111,7 @@ async function proxyRequest(
 
   let upstream_res: Response;
   let text = "";
+  const upstreamStarted = Date.now();
 
   try {
     const upstreamFetch = (bearer: string) =>
@@ -128,6 +148,8 @@ async function proxyRequest(
     );
   }
 
+  const upstreamMs = Date.now() - upstreamStarted;
+
   let body: unknown;
   try {
     body = JSON.parse(text);
@@ -136,8 +158,15 @@ async function proxyRequest(
   }
 
   const res = NextResponse.json(body, { status: upstream_res.status });
+  if (refreshedTokens) {
+    applyAuthSessionToResponse(res, refreshedTokens);
+  }
+  if (isCacheableDashboardGet(request.method, segments) && upstream_res.ok) {
+    res.headers.set("Cache-Control", "private, max-age=5, stale-while-revalidate=30");
+  }
   if (process.env.NODE_ENV === "development") {
     res.headers.set("x-zumo-proxy-upstream", upstream);
+    res.headers.set("x-zumo-proxy-upstream-ms", String(upstreamMs));
   }
   return res;
 }

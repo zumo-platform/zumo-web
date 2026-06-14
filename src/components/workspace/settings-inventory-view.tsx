@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SkeletonFieldList } from "@/components/ui/skeleton-blocks";
 import {
   fetchShortfallPolicyViaProxy,
   SHORTFALL_POLICY_OPTIONS,
@@ -77,10 +77,7 @@ export function SettingsInventoryView({ canEdit }: SettingsInventoryViewProps) {
         <div className="space-y-2">
           <Label htmlFor="shortfall-policy">Política de faltantes</Label>
           {policy === null ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2 aria-hidden className="size-4 animate-spin" />
-              Cargando…
-            </div>
+            <SkeletonFieldList rows={1} />
           ) : (
             <Select
               disabled={!canEdit || saving}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal, Package } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, MoreHorizontal, Package } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -53,7 +53,15 @@ import { Badge } from "@/components/ui/badge";
 import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
 import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
 import { ProductStockPopover } from "@/components/workspace/product-stock-popover";
-import { formatProductStockLabel, type DashboardProductRow } from "@/lib/dashboard-products";
+import {
+  catalogIncomingQty,
+  catalogTotalQty,
+  fetchProductBatchesViaProxy,
+  formatProductStockLabel,
+  type DashboardProductRow,
+} from "@/lib/dashboard-products";
+import { batchExpiryState, formatDateShort, formatMoneyCRC } from "@/lib/batch-format";
+import type { ProductBatch } from "@/lib/inventory";
 import {
   catalogAvailableQty,
   catalogCommittedQty,
@@ -153,6 +161,8 @@ export function ProductsCatalogTable({
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [adjustProduct, setAdjustProduct] = useState<DashboardProductRow | null>(null);
   const [transferProduct, setTransferProduct] = useState<DashboardProductRow | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [lotCache, setLotCache] = useState<Record<number, ProductBatch[] | "loading">>({});
   const { role } = useWorkspacePermissions();
   const canEditInventory = canMutateInventory(role);
   const router = useRouter();
@@ -180,6 +190,23 @@ export function ProductsCatalogTable({
     [categoryById],
   );
 
+  const toggleExpand = useCallback((productId: number, trackStock: boolean) => {
+    if (!trackStock) return;
+    setExpandedId((cur) => {
+      const next = cur === productId ? null : productId;
+      if (next === productId) {
+        setLotCache((c) => {
+          if (c[productId] !== undefined) return c;
+          void fetchProductBatchesViaProxy(productId).then((batches) => {
+            setLotCache((prev) => ({ ...prev, [productId]: batches }));
+          });
+          return { ...c, [productId]: "loading" };
+        });
+      }
+      return next;
+    });
+  }, []);
+
   const columns = useMemo<ColumnDef<DashboardProductRow>[]>(
     () => [
       {
@@ -206,6 +233,31 @@ export function ProductsCatalogTable({
         ),
         enableSorting: false,
         enableHiding: false,
+      },
+      {
+        id: "expander",
+        header: () => null,
+        cell: ({ row }) => {
+          const r = row.original;
+          if (!r.trackStock) return null;
+          const open = expandedId === r.productId;
+          return (
+            <Button
+              aria-label={open ? "Ocultar lotes" : "Ver lotes"}
+              className="size-7"
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleExpand(r.productId, r.trackStock);
+              }}
+            >
+              <ChevronRight className={`size-4 transition-transform ${open ? "rotate-90" : ""}`} />
+            </Button>
+          );
+        },
+        enableSorting: false,
       },
       {
         id: "photo",
@@ -314,6 +366,32 @@ export function ProductsCatalogTable({
         },
       },
       {
+        id: "incoming",
+        header: () => <span className="block text-right">Por llegar</span>,
+        cell: ({ row }) => {
+          const r = row.original;
+          if (!r.trackStock) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className="block text-right tabular-nums text-sm">
+              {formatQty(catalogIncomingQty(r))}
+            </span>
+          );
+        },
+      },
+      {
+        id: "total",
+        header: () => <span className="block text-right">Total</span>,
+        cell: ({ row }) => {
+          const r = row.original;
+          if (!r.trackStock) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className="block text-right font-medium tabular-nums text-sm">
+              {formatQty(catalogTotalQty(r))}
+            </span>
+          );
+        },
+      },
+      {
         id: "price",
         header: "Precio",
         cell: ({ row }) => (
@@ -407,7 +485,7 @@ export function ProductsCatalogTable({
         },
       },
     ],
-    [canEditInventory, categoryLabel, onCatalogChanged],
+    [canEditInventory, categoryLabel, expandedId, onCatalogChanged, toggleExpand],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
@@ -458,8 +536,11 @@ export function ProductsCatalogTable({
                     key={header.id}
                     className={cn(
                       header.column.id === "select" && "w-10 px-2",
+                      header.column.id === "expander" && "w-10 px-1",
                       header.column.id === "photo" && "w-14",
                       header.column.id === "actions" && "w-10 px-2",
+                      header.column.id === "incoming" && "text-right",
+                      header.column.id === "total" && "text-right",
                       header.column.id === "name" && "min-w-[10rem]",
                       header.column.id === "sku" && "min-w-[7rem]",
                       header.column.id === "category" && "min-w-[6rem]",
@@ -476,22 +557,80 @@ export function ProductsCatalogTable({
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  className="cursor-pointer"
-                  data-state={row.getIsSelected() ? "selected" : undefined}
-                  key={row.id}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest("button, a, input, [role=checkbox], [data-radix-collection-item]")) {
-                      return;
-                    }
-                    router.push(`/products/${row.original.productId}`);
-                  }}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                  ))}
-                </TableRow>
+                <Fragment key={row.id}>
+                  <TableRow
+                    className="cursor-pointer"
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                    key={row.id}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.closest("button, a, input, [role=checkbox], [data-radix-collection-item]")) {
+                        return;
+                      }
+                      router.push(`/products/${row.original.productId}`);
+                    }}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  {expandedId === row.original.productId ? (
+                    <TableRow key={`${row.id}-lots`} className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={columns.length} className="p-0">
+                        <div className="px-6 py-3">
+                          {lotCache[row.original.productId] === "loading" ? (
+                            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                              <Loader2 aria-hidden className="size-4 animate-spin" />
+                              Cargando lotes…
+                            </div>
+                          ) : (lotCache[row.original.productId] as ProductBatch[])?.length ? (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Lote</TableHead>
+                                  <TableHead>Vence</TableHead>
+                                  <TableHead>Proveedor</TableHead>
+                                  <TableHead className="text-right">Existencia</TableHead>
+                                  <TableHead className="text-right">Costo unit.</TableHead>
+                                  <TableHead>Estado</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {(lotCache[row.original.productId] as ProductBatch[]).map((b) => {
+                                  const exp = batchExpiryState(b.expiryDate, b.status);
+                                  return (
+                                    <TableRow key={b.batchId}>
+                                      <TableCell className="font-medium">{b.batchNumber}</TableCell>
+                                      <TableCell className={exp.className}>
+                                        {b.expiryDate ? formatDateShort(b.expiryDate) : "—"}
+                                      </TableCell>
+                                      <TableCell>{b.vendorName ?? "—"}</TableCell>
+                                      <TableCell className="text-right tabular-nums">
+                                        {formatQty(b.onHand)}
+                                      </TableCell>
+                                      <TableCell className="text-right tabular-nums">
+                                        {b.unitCost != null ? formatMoneyCRC(b.unitCost) : "—"}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant={exp.variant}>{exp.label}</Badge>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          ) : (
+                            <p className="text-muted-foreground text-sm">
+                              Este producto no tiene lotes registrados.
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
               ))
             ) : (
               <TableRow>

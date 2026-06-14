@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Loader2 } from "lucide-react";
+import { SkeletonFieldList } from "@/components/ui/skeleton-blocks";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -88,12 +88,7 @@ export function CustomerDeliveryTab({ customerId }: Readonly<{ customerId: numbe
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm">
-        <Loader2 aria-hidden className="size-4 animate-spin" />
-        Cargando logística…
-      </div>
-    );
+    return <SkeletonFieldList rows={4} />;
   }
 
   if (!overrides || !resolved) {

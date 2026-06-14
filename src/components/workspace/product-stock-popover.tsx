@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { Loader2, Warehouse } from "lucide-react";
+import { Warehouse } from "lucide-react";
 
+import { SkeletonPopoverContent } from "@/components/ui/skeleton-blocks";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -54,9 +55,8 @@ export function ProductStockPopover({
           <p className="text-muted-foreground text-xs">{product.name}</p>
         </div>
         {loading ? (
-          <div className="flex items-center justify-center gap-2 px-3 py-6 text-muted-foreground text-sm">
-            <Loader2 aria-hidden className="size-4 animate-spin" />
-            Cargando…
+          <div className="px-3 py-4">
+            <SkeletonPopoverContent lines={3} />
           </div>
         ) : rows.length === 0 ? (
           <p className="px-3 py-6 text-center text-muted-foreground text-sm">

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { SkeletonTable } from "@/components/ui/skeleton-blocks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -180,10 +181,16 @@ export function CustomerTasksTab({
 
       <div className="rounded-lg border bg-card shadow-sm">
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground text-sm">
-            <Loader2 className="size-4 animate-spin" />
-            Cargando tareas…
-          </div>
+          <SkeletonTable
+            ariaLabel="Cargando tareas"
+            rows={4}
+            columns={[
+              { w: "w-40" },
+              { w: "w-24" },
+              { w: "w-20" },
+              { w: "w-16", align: "right" },
+            ]}
+          />
         ) : (
           <Table>
             <TableHeader>

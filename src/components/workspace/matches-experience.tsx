@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Loader2, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 
 import {
   AlertDialog,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SkeletonCard } from "@/components/ui/skeleton-blocks";
 import { MatchBucketTabs } from "@/components/workspace/matches/match-bucket-tabs";
 import { MatchCreateDialog } from "@/components/workspace/matches/match-create-dialog";
 import { MatchEditSheet } from "@/components/workspace/matches/match-edit-sheet";
@@ -150,9 +151,11 @@ export function MatchesExperience() {
         />
 
         {loading ? (
-          <div className="flex flex-1 items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
-            <Loader2 className="size-5 animate-spin" />
-            Cargando matches…
+          <div role="status" aria-label="Cargando matches" className="space-y-3 py-4">
+            <span className="sr-only">Cargando…</span>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonCard key={i} lines={2} />
+            ))}
           </div>
         ) : (
           <MatchList

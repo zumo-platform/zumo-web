@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { Clock, Loader2 } from "lucide-react";
+import { Clock } from "lucide-react";
+
+import { SkeletonPopoverContent } from "@/components/ui/skeleton-blocks";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -45,10 +47,7 @@ export function MatchHistoryPopover({ aliasId }: Readonly<{ aliasId: string }>) 
       <DropdownMenuContent align="end" className="w-80 p-3">
         <p className="mb-2 font-medium text-sm">Historial de cambios</p>
         {loading ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <Loader2 className="size-4 animate-spin" />
-            Cargando…
-          </div>
+          <SkeletonPopoverContent lines={3} />
         ) : items.length === 0 ? (
           <p className="text-muted-foreground text-sm">Sin registros todavía.</p>
         ) : (

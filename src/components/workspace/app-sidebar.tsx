@@ -15,6 +15,7 @@ import {
   Sparkles,
   Store,
   Tag,
+  Truck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -38,6 +39,10 @@ import {
 } from "@/components/ui/sidebar";
 import type { SellerMe } from "@/lib/dashboard-types";
 import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
+import {
+  prefetchCustomersWorkspaceData,
+  prefetchOrdersWorkspaceData,
+} from "@/lib/orders-catalog-cache";
 import { cn } from "@/lib/utils";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
@@ -75,6 +80,7 @@ const baseMainNav: NavItem[] = [
     label: "Precios",
   },
   { href: "/vendedores", icon: Users, label: "Vendedores" },
+  { href: "/compras", icon: Truck, label: "Compras" },
   { href: "/marketing", icon: Megaphone, label: "Marketing" },
 ];
 
@@ -156,6 +162,14 @@ export function AppSidebar({
                         onMouseEnter={() => {
                           router.prefetch(item.href);
                           if (item.href === "/products") prefetchInventoryWorkspaceData();
+                          if (item.href === "/orders") prefetchOrdersWorkspaceData();
+                          if (item.href === "/clients") prefetchCustomersWorkspaceData();
+                        }}
+                        onFocus={() => {
+                          router.prefetch(item.href);
+                          if (item.href === "/products") prefetchInventoryWorkspaceData();
+                          if (item.href === "/orders") prefetchOrdersWorkspaceData();
+                          if (item.href === "/clients") prefetchCustomersWorkspaceData();
                         }}
                       >
                         <Icon />

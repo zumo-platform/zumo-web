@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 
 import type { AuthTokens } from "./cognito-server";
 
@@ -24,6 +25,25 @@ export async function setAuthSession(tokens: AuthTokens): Promise<void> {
     maxAge: tokens.expiresIn,
   });
   store.set(COOKIE_REFRESH_TOKEN, tokens.refreshToken, {
+    ...BASE_OPTIONS,
+    maxAge: 60 * 60 * 24 * 30,
+  });
+}
+
+/** Ensure refreshed tokens are returned on the Route Handler response. */
+export function applyAuthSessionToResponse(
+  response: NextResponse,
+  tokens: AuthTokens,
+): void {
+  response.cookies.set(COOKIE_ID_TOKEN, tokens.idToken, {
+    ...BASE_OPTIONS,
+    maxAge: tokens.expiresIn,
+  });
+  response.cookies.set(COOKIE_ACCESS_TOKEN, tokens.accessToken, {
+    ...BASE_OPTIONS,
+    maxAge: tokens.expiresIn,
+  });
+  response.cookies.set(COOKIE_REFRESH_TOKEN, tokens.refreshToken, {
     ...BASE_OPTIONS,
     maxAge: 60 * 60 * 24 * 30,
   });

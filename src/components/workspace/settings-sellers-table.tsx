@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Loader2, Trash2, UserMinus, UserPlus } from "lucide-react";
+import { Loader2, Mail, Trash2, UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -48,6 +48,7 @@ import {
   type AssignableRole,
 } from "@/lib/roles";
 import {
+  createTeamInvitationViaProxy,
   fetchTeamViaProxy,
   patchTeamSellerRoleViaProxy,
   removeTeamSellerViaProxy,
@@ -77,6 +78,7 @@ export function SettingsSellersTable({
   const [pendingDelete, setPendingDelete] = useState<TeamMemberRow | null>(null);
   const [roleSavingId, setRoleSavingId] = useState<string | null>(null);
   const [removeSavingId, setRemoveSavingId] = useState<string | null>(null);
+  const [resendSavingId, setResendSavingId] = useState<string | null>(null);
 
   const canInvite = canPerm("users.invite");
   const canRemove = canPerm("users.remove");
@@ -86,12 +88,17 @@ export function SettingsSellersTable({
     setTeam(initialTeam);
   }, [initialTeam]);
 
+  const skipParentSync = useRef(true);
+  useEffect(() => {
+    if (skipParentSync.current) {
+      skipParentSync.current = false;
+      return;
+    }
+    onTeamChange?.(team);
+  }, [team, onTeamChange]);
+
   function updateTeam(next: TeamMemberRow[] | ((prev: TeamMemberRow[]) => TeamMemberRow[])) {
-    setTeam((prev) => {
-      const resolved = typeof next === "function" ? next(prev) : next;
-      onTeamChange?.(resolved);
-      return resolved;
-    });
+    setTeam((prev) => (typeof next === "function" ? next(prev) : next));
   }
 
   async function refreshTeam() {
@@ -101,6 +108,47 @@ export function SettingsSellersTable({
       if (rows) updateTeam(rows);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendInvitation(row: TeamMemberRow) {
+    setResendSavingId(row.id);
+    try {
+      const role = normalizeRole(row.role);
+      if (!role || role === "owner") {
+        toast.error("No se pudo reenviar la invitación.");
+        return;
+      }
+      const { emailSent, acceptUrl, emailMessage } = await createTeamInvitationViaProxy({
+        name: row.name,
+        email: row.email,
+        role,
+      });
+      if (emailSent) {
+        toast.success(`Invitación reenviada a ${row.email}.`);
+        return;
+      }
+      if (acceptUrl) {
+        toast.message(
+          emailMessage ??
+            "No pudimos enviar el correo automáticamente. Compartí este enlace con la persona para que se registre:",
+          {
+            action: {
+              label: "Copiar enlace",
+              onClick: () => {
+                void navigator.clipboard.writeText(acceptUrl);
+                toast.message("Enlace copiado.");
+              },
+            },
+          },
+        );
+        return;
+      }
+      toast.success("Invitación actualizada.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo reenviar la invitación.");
+    } finally {
+      setResendSavingId(null);
     }
   }
 
@@ -254,6 +302,22 @@ export function SettingsSellersTable({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
+                        {row.state === "pending" && canInvite ? (
+                          <Button
+                            disabled={resendSavingId === row.id}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => void handleResendInvitation(row)}
+                          >
+                            {resendSavingId === row.id ? (
+                              <Loader2 aria-hidden className="mr-1 size-4 animate-spin" />
+                            ) : (
+                              <Mail aria-hidden className="mr-1 size-4" />
+                            )}
+                            Reenviar
+                          </Button>
+                        ) : null}
                         {row.state === "pending" && canRemove ? (
                           <Button
                             className="text-destructive hover:text-destructive"

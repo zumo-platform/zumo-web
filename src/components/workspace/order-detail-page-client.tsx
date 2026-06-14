@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SkeletonLine } from "@/components/ui/skeleton-blocks";
+import { OrderDetailSheetSkeleton } from "@/components/workspace/workspace-skeletons";
 import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
 import { OrderLifecycleActions } from "@/components/workspace/order-lifecycle-actions";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
@@ -174,9 +176,10 @@ export function OrderDetailPageClient({
               </Link>
             </Button>
             {loading ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 aria-hidden className="size-4 animate-spin" />
-                Cargando pedido…
+              <div role="status" aria-label="Cargando pedido" className="space-y-2">
+                <span className="sr-only">Cargando…</span>
+                <SkeletonLine className="h-6 w-40" />
+                <SkeletonLine className="h-5 w-24" />
               </div>
             ) : error ? (
               <p className="text-destructive text-sm">{error}</p>
@@ -213,6 +216,9 @@ export function OrderDetailPageClient({
 
       <div className={workspaceContentOuterClassName}>
         <div className={workspaceContentInnerClassName}>
+          {loading ? (
+            <OrderDetailSheetSkeleton />
+          ) : null}
           {!loading && !error && order ? (
             <ul className="space-y-2">
               {order.lines.length === 0 ? (

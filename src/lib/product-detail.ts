@@ -1,6 +1,6 @@
 /** Types + fetch for consolidated GET /dashboard/products/{productId}. */
 
-import type { ProductMovementRow, ProductStockByWarehouseRow } from "@/lib/inventory";
+import type { ProductMovementRow, ProductStockByWarehouseRow, ProductBatch, ProductQtySummary } from "@/lib/inventory";
 
 export type DashboardProductDetailProduct = Readonly<{
   productId: number;
@@ -60,6 +60,8 @@ export type DashboardProductDetail = Readonly<{
     byWarehouse: ProductStockByWarehouseRow[];
   }>;
   movements: ProductMovementRow[];
+  batches: ProductBatch[];
+  qtySummary: ProductQtySummary | null;
   orders: ProductOrderRow[];
   backorderSummary: ProductBackorderSummary;
 }>;
@@ -202,6 +204,67 @@ function parseMovement(raw: unknown): ProductMovementRow | null {
     reason: typeof o.reason === "string" ? o.reason : "",
     occurredAt: typeof o.occurredAt === "string" ? o.occurredAt : "",
     notes: typeof o.notes === "string" ? o.notes : null,
+    refType: typeof o.refType === "string" ? o.refType : null,
+    refId: typeof o.refId === "string" ? o.refId : null,
+    unitCost:
+      o.unitCost === null || o.unitCost === undefined
+        ? null
+        : typeof o.unitCost === "number"
+          ? o.unitCost
+          : Number(o.unitCost),
+  };
+}
+
+function parseBatch(raw: unknown): ProductBatch | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const batchId = typeof o.batchId === "string" ? o.batchId : "";
+  if (!batchId) return null;
+  const onHand = typeof o.onHand === "number" ? o.onHand : Number(o.onHand);
+  const reserved = typeof o.reserved === "number" ? o.reserved : Number(o.reserved);
+  const available =
+    typeof o.available === "number" ? o.available : Number(o.available ?? onHand - reserved);
+  return {
+    batchId,
+    batchNumber: typeof o.batchNumber === "string" ? o.batchNumber : "",
+    status: typeof o.status === "string" ? o.status : "active",
+    expiryDate: typeof o.expiryDate === "string" ? o.expiryDate : null,
+    productionDate: typeof o.productionDate === "string" ? o.productionDate : null,
+    vendorId:
+      o.vendorId === null || o.vendorId === undefined
+        ? null
+        : typeof o.vendorId === "number"
+          ? o.vendorId
+          : Number(o.vendorId),
+    vendorName: typeof o.vendorName === "string" ? o.vendorName : null,
+    poId: typeof o.poId === "string" ? o.poId : null,
+    unitCost:
+      o.unitCost === null || o.unitCost === undefined
+        ? null
+        : typeof o.unitCost === "number"
+          ? o.unitCost
+          : Number(o.unitCost),
+    onHand: Number.isFinite(onHand) ? onHand : 0,
+    reserved: Number.isFinite(reserved) ? reserved : 0,
+    available: Number.isFinite(available) ? available : 0,
+  };
+}
+
+function parseQtySummaryBlock(raw: unknown): ProductQtySummary | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const onHand = typeof o.onHand === "number" ? o.onHand : Number(o.onHand);
+  const reserved = typeof o.reserved === "number" ? o.reserved : Number(o.reserved);
+  const available = typeof o.available === "number" ? o.available : Number(o.available);
+  const incoming = typeof o.incoming === "number" ? o.incoming : Number(o.incoming);
+  const total = typeof o.total === "number" ? o.total : Number(o.total);
+  if (!Number.isFinite(onHand)) return null;
+  return {
+    onHand,
+    reserved: Number.isFinite(reserved) ? reserved : 0,
+    available: Number.isFinite(available) ? available : onHand - reserved,
+    incoming: Number.isFinite(incoming) ? incoming : 0,
+    total: Number.isFinite(total) ? total : onHand + incoming,
   };
 }
 
@@ -228,6 +291,16 @@ export function parseProductDetail(raw: unknown): DashboardProductDetail | null 
     }
   }
 
+  const batches: ProductBatch[] = [];
+  if (Array.isArray(o.batches)) {
+    for (const item of o.batches) {
+      const row = parseBatch(item);
+      if (row) batches.push(row);
+    }
+  }
+
+  const qtySummary = parseQtySummaryBlock(o.qtySummary);
+
   const boRaw = o.backorderSummary;
   const backorderSummary: ProductBackorderSummary =
     boRaw && typeof boRaw === "object"
@@ -237,7 +310,7 @@ export function parseProductDetail(raw: unknown): DashboardProductDetail | null 
         }
       : { totalBackordered: 0, orderCount: 0 };
 
-  return { product, stock, movements, orders, backorderSummary };
+  return { product, stock, movements, batches, qtySummary, orders, backorderSummary };
 }
 
 export async function fetchProductDetailViaProxy(

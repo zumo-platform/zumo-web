@@ -36,6 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CustomStatusFormSheet } from "@/components/workspace/custom-status-form-sheet";
+import { OrderFlowSettingsSkeleton } from "@/components/workspace/workspace-skeletons";
 import {
   DEFAULT_SYSTEM_STATUS_CATALOG,
   deleteCustomStatusViaProxy,
@@ -401,12 +402,7 @@ export function SettingsOrderFlowView({ canEdit }: Readonly<{ canEdit: boolean }
   const catalogCustoms = customStatuses.filter((s) => showDeleted || !s.deletedAt);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
-        <Loader2 aria-hidden className="size-5 animate-spin" />
-        Cargando flujo…
-      </div>
-    );
+    return <OrderFlowSettingsSkeleton />;
   }
 
   return (

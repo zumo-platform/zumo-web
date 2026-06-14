@@ -58,6 +58,32 @@ export type ProductMovementRow = Readonly<{
   reason: string;
   occurredAt: string;
   notes: string | null;
+  refType: string | null;
+  refId: string | null;
+  unitCost: number | null;
+}>;
+
+export type ProductBatch = Readonly<{
+  batchId: string;
+  batchNumber: string;
+  status: string;
+  expiryDate: string | null;
+  productionDate: string | null;
+  vendorId: number | null;
+  vendorName: string | null;
+  poId: string | null;
+  unitCost: number | null;
+  onHand: number;
+  reserved: number;
+  available: number;
+}>;
+
+export type ProductQtySummary = Readonly<{
+  onHand: number;
+  reserved: number;
+  available: number;
+  incoming: number;
+  total: number;
 }>;
 
 type ApiErrorBody = { error?: string; code?: string; message?: string };
@@ -309,12 +335,75 @@ function parseMovementRow(raw: unknown): ProductMovementRow | null {
     reason: typeof o.reason === "string" ? o.reason : "",
     occurredAt: typeof o.occurredAt === "string" ? o.occurredAt : "",
     notes: typeof o.notes === "string" ? o.notes : null,
+    refType: typeof o.refType === "string" ? o.refType : null,
+    refId: typeof o.refId === "string" ? o.refId : null,
+    unitCost:
+      o.unitCost === null || o.unitCost === undefined
+        ? null
+        : typeof o.unitCost === "number"
+          ? o.unitCost
+          : Number(o.unitCost),
+  };
+}
+
+export function parseProductBatch(raw: unknown): ProductBatch | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const batchId = typeof o.batchId === "string" ? o.batchId : "";
+  if (!batchId) return null;
+  const onHand = typeof o.onHand === "number" ? o.onHand : Number(o.onHand);
+  const reserved = typeof o.reserved === "number" ? o.reserved : Number(o.reserved);
+  const available =
+    typeof o.available === "number" ? o.available : Number(o.available ?? onHand - reserved);
+  return {
+    batchId,
+    batchNumber: typeof o.batchNumber === "string" ? o.batchNumber : "",
+    status: typeof o.status === "string" ? o.status : "active",
+    expiryDate: typeof o.expiryDate === "string" ? o.expiryDate : null,
+    productionDate: typeof o.productionDate === "string" ? o.productionDate : null,
+    vendorId:
+      o.vendorId === null || o.vendorId === undefined
+        ? null
+        : typeof o.vendorId === "number"
+          ? o.vendorId
+          : Number(o.vendorId),
+    vendorName: typeof o.vendorName === "string" ? o.vendorName : null,
+    poId: typeof o.poId === "string" ? o.poId : null,
+    unitCost:
+      o.unitCost === null || o.unitCost === undefined
+        ? null
+        : typeof o.unitCost === "number"
+          ? o.unitCost
+          : Number(o.unitCost),
+    onHand: Number.isFinite(onHand) ? onHand : 0,
+    reserved: Number.isFinite(reserved) ? reserved : 0,
+    available: Number.isFinite(available) ? available : 0,
+  };
+}
+
+function parseQtySummary(raw: unknown): ProductQtySummary | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const onHand = typeof o.onHand === "number" ? o.onHand : Number(o.onHand);
+  const reserved = typeof o.reserved === "number" ? o.reserved : Number(o.reserved);
+  const available = typeof o.available === "number" ? o.available : Number(o.available);
+  const incoming = typeof o.incoming === "number" ? o.incoming : Number(o.incoming);
+  const total = typeof o.total === "number" ? o.total : Number(o.total);
+  if (!Number.isFinite(onHand)) return null;
+  return {
+    onHand,
+    reserved: Number.isFinite(reserved) ? reserved : 0,
+    available: Number.isFinite(available) ? available : onHand - reserved,
+    incoming: Number.isFinite(incoming) ? incoming : 0,
+    total: Number.isFinite(total) ? total : onHand + incoming,
   };
 }
 
 export async function getProductStockViaProxy(productId: number): Promise<{
   byWarehouse: ProductStockByWarehouseRow[];
   movements: ProductMovementRow[];
+  batches: ProductBatch[];
+  qtySummary: ProductQtySummary | null;
 }> {
   const res = await fetch(`/api/backend/dashboard/inventory/product/${productId}`, {
     cache: "no-store",
@@ -323,9 +412,11 @@ export async function getProductStockViaProxy(productId: number): Promise<{
   const data = (await res.json().catch(() => ({}))) as {
     byWarehouse?: unknown[];
     movements?: unknown[];
+    batches?: unknown[];
+    qtySummary?: unknown;
   };
   if (!res.ok) {
-    return { byWarehouse: [], movements: [] };
+    return { byWarehouse: [], movements: [], batches: [], qtySummary: null };
   }
 
   const byWarehouse: ProductStockByWarehouseRow[] = [];
@@ -344,7 +435,17 @@ export async function getProductStockViaProxy(productId: number): Promise<{
     }
   }
 
-  return { byWarehouse, movements };
+  const batches: ProductBatch[] = [];
+  if (Array.isArray(data.batches)) {
+    for (const item of data.batches) {
+      const row = parseProductBatch(item);
+      if (row) batches.push(row);
+    }
+  }
+
+  const qtySummary = parseQtySummary(data.qtySummary);
+
+  return { byWarehouse, movements, batches, qtySummary };
 }
 
 export const WAREHOUSE_KIND_LABEL: Record<string, string> = {
@@ -487,6 +588,149 @@ export async function updateShortfallPolicyViaProxy(
   const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
   if (!res.ok) {
     return { ok: false, error: readApiErrorBody(body, res.status) };
+  }
+  return { ok: true };
+}
+
+// ── Vendors (Proveedores) ───────────────────────────────────────────────────
+
+export type DashboardVendorRow = Readonly<{
+  vendorId: number;
+  name: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  defaultCurrency: string | null;
+  leadTimeDays: number | null;
+  notes: string | null;
+  isActive: boolean;
+}>;
+
+export type CreateVendorPayload = Readonly<{
+  name: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  defaultCurrency?: string | null;
+  leadTimeDays?: number | null;
+  notes?: string | null;
+  isActive?: boolean;
+}>;
+
+function parseVendor(raw: unknown): DashboardVendorRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const id = typeof o.vendorId === "number" ? o.vendorId : Number(o.vendorId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  if (!name) return null;
+  const str = (v: unknown): string | null =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  const lead =
+    o.leadTimeDays === null || o.leadTimeDays === undefined
+      ? null
+      : Number.isFinite(Number(o.leadTimeDays))
+        ? Number(o.leadTimeDays)
+        : null;
+  return {
+    vendorId: id,
+    name,
+    contactName: str(o.contactName),
+    email: str(o.email),
+    phone: str(o.phone),
+    defaultCurrency: str(o.defaultCurrency),
+    leadTimeDays: lead,
+    notes: str(o.notes),
+    isActive: o.isActive !== false,
+  };
+}
+
+export async function fetchVendorsViaProxy(): Promise<DashboardVendorRow[]> {
+  const res = await fetch("/api/backend/dashboard/vendors", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    vendors?: unknown[];
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(readApiErrorBody(data, res.status));
+  }
+  if (!Array.isArray(data.vendors)) return [];
+  const rows: DashboardVendorRow[] = [];
+  for (const item of data.vendors) {
+    const row = parseVendor(item);
+    if (row) rows.push(row);
+  }
+  rows.sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return rows;
+}
+
+export async function createVendorViaProxy(
+  payload: CreateVendorPayload,
+): Promise<{ ok: true; vendorId: number } | { ok: false; error: string }> {
+  const res = await fetch("/api/backend/dashboard/vendors", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    vendorId?: unknown;
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(data, res.status) };
+  }
+  const vendorId = typeof data.vendorId === "number" ? data.vendorId : Number(data.vendorId);
+  if (!Number.isFinite(vendorId)) {
+    return { ok: false, error: "Respuesta inválida del servidor." };
+  }
+  return { ok: true, vendorId };
+}
+
+export async function updateVendorViaProxy(
+  vendorId: number,
+  payload: Partial<CreateVendorPayload>,
+): Promise<{ ok: true; vendor: DashboardVendorRow } | { ok: false; error: string }> {
+  const res = await fetch(`/api/backend/dashboard/vendors/${vendorId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    vendor?: unknown;
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(data, res.status) };
+  }
+  const vendor = parseVendor(data.vendor);
+  if (!vendor) {
+    return { ok: false, error: "Respuesta inválida del servidor." };
+  }
+  return { ok: true, vendor };
+}
+
+export async function deleteVendorViaProxy(
+  vendorId: number,
+): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
+  const res = await fetch(`/api/backend/dashboard/vendors/${vendorId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+    return {
+      ok: false,
+      error: typeof body.error === "string" ? body.error : `Error ${res.status}`,
+      code: typeof body.code === "string" ? body.code : undefined,
+    };
   }
   return { ok: true };
 }

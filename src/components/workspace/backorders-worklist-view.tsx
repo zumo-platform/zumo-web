@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ProductsPageHeader } from "@/components/workspace/products-page-header";
+import { BackordersTableSkeleton } from "@/components/workspace/workspace-skeletons";
 import {
   fetchBackordersViaProxy,
   fulfilBackorderViaProxy,
@@ -83,9 +84,7 @@ export function BackordersWorklistView() {
       />
       <div className={workspaceContentInnerClassName}>
         {rows === null ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <Loader2 aria-hidden className="size-5 animate-spin" />
-          </div>
+          <BackordersTableSkeleton />
         ) : error ? (
           <p className="text-destructive text-sm">{error}</p>
         ) : rows.length === 0 ? (

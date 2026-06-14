@@ -189,16 +189,14 @@ export async function createTeamInvitationViaProxy(input: {
   row: TeamMemberRow;
   acceptUrl?: string;
   emailSent: boolean;
-  verificationRequested?: boolean;
-  verificationTarget?: string;
+  emailMessage?: string;
 }> {
   const result = await proxyJson<{
     invitation?: unknown;
     member?: unknown;
     acceptUrl?: string;
     emailSent?: boolean;
-    verificationRequested?: boolean;
-    verificationTarget?: string;
+    emailMessage?: string;
   }>("dashboard/team/invitations", {
     method: "POST",
     body: JSON.stringify({
@@ -217,11 +215,8 @@ export async function createTeamInvitationViaProxy(input: {
     acceptUrl:
       typeof result.data.acceptUrl === "string" ? result.data.acceptUrl : undefined,
     emailSent: result.data.emailSent === true,
-    verificationRequested: result.data.verificationRequested === true,
-    verificationTarget:
-      typeof result.data.verificationTarget === "string"
-        ? result.data.verificationTarget
-        : undefined,
+    emailMessage:
+      typeof result.data.emailMessage === "string" ? result.data.emailMessage : undefined,
   };
 }
 

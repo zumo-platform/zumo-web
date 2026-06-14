@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ArrowLeftRight, PackagePlus } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,9 +17,12 @@ import {
 } from "@/components/ui/table";
 import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
 import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
+import { batchExpiryState, formatDateShort, formatMoneyCRC } from "@/lib/batch-format";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { formatQty, MOVEMENT_REASON_LABEL } from "@/lib/inventory-format";
 import type { DashboardProductDetail } from "@/lib/product-detail";
+
+import type { ProductMovementRow } from "@/lib/inventory";
 
 function formatWhen(iso: string): string {
   if (!iso) return "—";
@@ -29,6 +33,30 @@ function formatWhen(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function movementRefLabel(m: ProductMovementRow): string | null {
+  if (!m.refType || !m.refId) return null;
+  const kind =
+    m.refType === "po" ? "Compra" : m.refType === "order" ? "Venta" : m.refType;
+  return `${kind} ${m.refId}`;
+}
+
+function StatCard({
+  label,
+  value,
+  emphasis = false,
+}: Readonly<{
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}>) {
+  return (
+    <div className="rounded-lg border px-3 py-2">
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className={`tabular-nums ${emphasis ? "font-bold" : "font-medium"}`}>{value}</p>
+    </div>
+  );
 }
 
 export function ProductInventoryTab({
@@ -60,6 +88,8 @@ export function ProductInventoryTab({
     onHand: detail.stock.physical,
     reserved: detail.stock.reserved,
     committed: detail.stock.committed,
+    incoming: detail.qtySummary?.incoming ?? detail.stock.onPurchaseOrder,
+    total: detail.qtySummary?.total ?? detail.stock.physical + detail.stock.onPurchaseOrder,
     minimumStock:
       detail.product.manageMinimumStock && detail.product.minimumStockQuantity != null
         ? Number(detail.product.minimumStockQuantity)
@@ -94,6 +124,15 @@ export function ProductInventoryTab({
           Transferir
         </Button>
       </div>
+
+      {detail.qtySummary ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="En existencia" value={formatQty(detail.qtySummary.onHand)} />
+          <StatCard label="Por llegar" value={formatQty(detail.qtySummary.incoming)} />
+          <StatCard label="Asignado" value={formatQty(detail.qtySummary.reserved)} />
+          <StatCard label="Total" value={formatQty(detail.qtySummary.total)} emphasis />
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-2">
@@ -135,6 +174,49 @@ export function ProductInventoryTab({
         </CardContent>
       </Card>
 
+      {detail.batches.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Lotes</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lote</TableHead>
+                  <TableHead>Vence</TableHead>
+                  <TableHead>Proveedor</TableHead>
+                  <TableHead className="text-right">Existencia</TableHead>
+                  <TableHead className="text-right">Costo unit.</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detail.batches.map((b) => {
+                  const exp = batchExpiryState(b.expiryDate, b.status);
+                  return (
+                    <TableRow key={b.batchId}>
+                      <TableCell className="font-medium">{b.batchNumber}</TableCell>
+                      <TableCell className={exp.className}>
+                        {b.expiryDate ? formatDateShort(b.expiryDate) : "—"}
+                      </TableCell>
+                      <TableCell>{b.vendorName ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatQty(b.onHand)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {b.unitCost != null ? formatMoneyCRC(b.unitCost) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={exp.variant}>{exp.label}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Movimientos recientes</CardTitle>
@@ -143,18 +225,28 @@ export function ProductInventoryTab({
           {detail.movements.length === 0 ? (
             <p className="text-muted-foreground text-sm">Sin movimientos registrados.</p>
           ) : (
-            detail.movements.map((m) => (
-              <div key={m.movementId} className="flex flex-col gap-0.5 border-border border-b pb-3 last:border-0">
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="font-medium">
-                    {MOVEMENT_REASON_LABEL[m.reason] ?? m.reason}
-                  </span>
-                  <span className="tabular-nums">{formatQty(Number(m.qty))}</span>
+            detail.movements.map((m) => {
+              const refLabel = movementRefLabel(m);
+              return (
+                <div key={m.movementId} className="flex flex-col gap-0.5 border-border border-b pb-3 last:border-0">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="font-medium">
+                      {MOVEMENT_REASON_LABEL[m.reason] ?? m.reason}
+                    </span>
+                    <span className="tabular-nums">{formatQty(Number(m.qty))}</span>
+                  </div>
+                  <span className="text-muted-foreground text-xs">{formatWhen(m.occurredAt)}</span>
+                  {refLabel || m.unitCost != null ? (
+                    <span className="text-muted-foreground text-xs">
+                      {refLabel ? refLabel : null}
+                      {refLabel && m.unitCost != null ? " · " : null}
+                      {m.unitCost != null ? formatMoneyCRC(m.unitCost) : null}
+                    </span>
+                  ) : null}
+                  {m.notes ? <span className="text-muted-foreground text-xs">{m.notes}</span> : null}
                 </div>
-                <span className="text-muted-foreground text-xs">{formatWhen(m.occurredAt)}</span>
-                {m.notes ? <span className="text-muted-foreground text-xs">{m.notes}</span> : null}
-              </div>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>

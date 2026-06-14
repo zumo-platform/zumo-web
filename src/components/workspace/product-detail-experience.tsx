@@ -11,7 +11,6 @@ import {
 } from "react";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { FormProvider, type Resolver, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -31,6 +30,7 @@ import { ProductFormFields } from "@/components/workspace/product-form-fields";
 import { ProductInventoryTab } from "@/components/workspace/product-inventory-tab";
 import { ProductOrdersTab } from "@/components/workspace/product-orders-tab";
 import { ProductSidebar } from "@/components/workspace/product-sidebar";
+import { ProductDetailSkeleton } from "@/components/workspace/workspace-skeletons";
 import { WorkspaceComingSoon } from "@/components/workspace/workspace-coming-soon";
 import {
   buildProductPayload,
@@ -195,12 +195,7 @@ export function ProductDetailExperience({
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center py-24 text-muted-foreground">
-        <Loader2 className="mr-2 size-5 animate-spin" />
-        Cargando producto…
-      </div>
-    );
+    return <ProductDetailSkeleton />;
   }
 
   if (error || !detail) {
