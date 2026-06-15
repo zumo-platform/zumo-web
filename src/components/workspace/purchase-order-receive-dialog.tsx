@@ -26,9 +26,12 @@ import {
   receivePurchaseOrderViaProxy,
   type PurchaseOrderItem,
 } from "@/lib/purchase-orders";
+import { fetchNextLotCodeViaProxy } from "@/lib/lot-nomenclature";
 
 type Row = {
   poItemId: string;
+  productId: number;
+  sku: string | null;
   productName: string;
   trackBatches: boolean;
   outstanding: number;
@@ -44,6 +47,8 @@ function buildInitialRows(items: readonly PurchaseOrderItem[]): Row[] {
     .filter((i) => i.qtyOutstanding > 0)
     .map((i) => ({
       poItemId: i.poItemId,
+      productId: i.productId,
+      sku: i.sku,
       productName: i.productName,
       trackBatches: i.trackBatches,
       outstanding: i.qtyOutstanding,
@@ -60,12 +65,16 @@ export function PurchaseOrderReceiveDialog({
   onOpenChange,
   poId,
   items,
+  vendorName,
+  prefillFull = true,
   onReceived,
 }: Readonly<{
   open: boolean;
   onOpenChange: (o: boolean) => void;
   poId: string;
   items: readonly PurchaseOrderItem[];
+  vendorName: string;
+  prefillFull?: boolean;
   onReceived: () => void;
 }>) {
   const [receiptRef, setReceiptRef] = useState("");
@@ -74,11 +83,37 @@ export function PurchaseOrderReceiveDialog({
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setReceiptRef(crypto.randomUUID());
-      setRows(buildInitialRows(items));
-    }
-  }, [open, items]);
+    if (!open) return;
+    setReceiptRef(crypto.randomUUID());
+    const baseRows = buildInitialRows(items);
+    setRows(baseRows);
+
+    const batchRows = baseRows.filter((r) => r.trackBatches);
+    if (batchRows.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const codes = await Promise.all(
+        batchRows.map((r) =>
+          fetchNextLotCodeViaProxy(vendorName, r.sku, r.productId),
+        ),
+      );
+      if (cancelled) return;
+      const byPoItemId = new Map(
+        batchRows.map((r, i) => [r.poItemId, codes[i] ?? null]),
+      );
+      setRows((rs) =>
+        rs.map((r) => {
+          const code = byPoItemId.get(r.poItemId);
+          return code ? { ...r, batchNumber: code } : r;
+        }),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, items, vendorName]);
 
   function setRow(idx: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -175,6 +210,11 @@ export function PurchaseOrderReceiveDialog({
           </p>
         ) : (
           <>
+            {prefillFull ? (
+              <p className="text-muted-foreground text-sm">
+                Se recibirá la orden completa. Ajustá las cantidades si llegó menos.
+              </p>
+            ) : null}
             <div className="flex justify-end">
               <Button size="sm" type="button" variant="outline" onClick={receiveAll}>
                 Recibir todo

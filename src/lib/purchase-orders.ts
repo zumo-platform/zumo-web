@@ -445,6 +445,20 @@ export async function cancelPurchaseOrderViaProxy(
   return { ok: true };
 }
 
+export async function sendPurchaseOrderViaProxy(
+  poId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch(
+    `/api/backend/dashboard/purchase-orders/${encodeURIComponent(poId)}/send`,
+    { method: "POST", credentials: "include" },
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+    return { ok: false, error: readPoErrorBody(body, res.status) };
+  }
+  return { ok: true };
+}
+
 export async function createPurchaseOrderViaProxy(
   payload: CreatePurchaseOrderPayload,
 ): Promise<{ ok: true; poId: string; displayCode: string } | { ok: false; error: string }> {

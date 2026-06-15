@@ -84,14 +84,16 @@ import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 const PAGE_SIZES = [20, 50, 100] as const;
 
+const PRICE_FMT = new Intl.NumberFormat("es", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 function formatPriceLabel(price: string | null): string {
   if (price === null || price === "") return "—";
   const num = Number(price);
   if (!Number.isFinite(num)) return "—";
-  return new Intl.NumberFormat("es", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(num);
+  return PRICE_FMT.format(num);
 }
 
 async function patchProductAvailability(productId: number, available: boolean): Promise<boolean> {
@@ -192,20 +194,22 @@ export function ProductsCatalogTable({
 
   const toggleExpand = useCallback((productId: number, trackStock: boolean) => {
     if (!trackStock) return;
-    setExpandedId((cur) => {
-      const next = cur === productId ? null : productId;
-      if (next === productId) {
-        setLotCache((c) => {
-          if (c[productId] !== undefined) return c;
-          void fetchProductBatchesViaProxy(productId).then((batches) => {
-            setLotCache((prev) => ({ ...prev, [productId]: batches }));
-          });
-          return { ...c, [productId]: "loading" };
-        });
-      }
-      return next;
-    });
+    setExpandedId((cur) => (cur === productId ? null : productId));
   }, []);
+
+  useEffect(() => {
+    if (expandedId == null) return;
+    if (lotCache[expandedId] !== undefined) return;
+    let cancelled = false;
+    setLotCache((c) => ({ ...c, [expandedId]: "loading" }));
+    void fetchProductBatchesViaProxy(expandedId).then((batches) => {
+      if (cancelled) return;
+      setLotCache((c) => ({ ...c, [expandedId]: batches }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedId, lotCache]);
 
   const columns = useMemo<ColumnDef<DashboardProductRow>[]>(
     () => [

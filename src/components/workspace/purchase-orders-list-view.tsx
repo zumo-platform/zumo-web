@@ -33,6 +33,27 @@ import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 type StatusFilter = "all" | PurchaseOrderStatus;
 
+const PO_DATE_FMT = new Intl.DateTimeFormat("es-CR", { dateStyle: "medium" });
+const PO_MONEY_CRC_FMT = new Intl.NumberFormat("es-CR", {
+  style: "currency",
+  currency: "CRC",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatPoMoney(value: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("es-CR", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return value.toLocaleString("es");
+  }
+}
+
 function poStatusLabel(status: PurchaseOrderStatus): string {
   switch (status) {
     case "draft":
@@ -74,7 +95,7 @@ function poStatusVariant(
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Intl.DateTimeFormat("es-CR", { dateStyle: "medium" }).format(new Date(iso));
+    return PO_DATE_FMT.format(new Date(iso));
   } catch {
     return "—";
   }
@@ -82,16 +103,14 @@ function formatDate(iso: string | null): string {
 
 function formatMoney(value: number | null, currency: string | null): string {
   if (value === null) return "—";
-  try {
-    return new Intl.NumberFormat("es-CR", {
-      style: "currency",
-      currency: currency ?? "CRC",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return value.toLocaleString("es");
+  if (currency == null || currency === "CRC") {
+    try {
+      return PO_MONEY_CRC_FMT.format(value);
+    } catch {
+      return value.toLocaleString("es");
+    }
   }
+  return formatPoMoney(value, currency);
 }
 
 function ProgressCell({ row }: Readonly<{ row: PurchaseOrderListRow }>) {

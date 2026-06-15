@@ -30,6 +30,7 @@ import { PurchaseOrderReceiveDialog } from "@/components/workspace/purchase-orde
 import {
   cancelPurchaseOrderViaProxy,
   fetchPurchaseOrderViaProxy,
+  sendPurchaseOrderViaProxy,
   type PurchaseOrderDetail,
   type PurchaseOrderStatus,
 } from "@/lib/purchase-orders";
@@ -81,6 +82,46 @@ function poStatusVariant(
   }
 }
 
+function PoStatusSteps({ status }: Readonly<{ status: PurchaseOrderStatus }>) {
+  if (status === "cancelled") {
+    return <Badge variant="destructive">Cancelada</Badge>;
+  }
+  const steps = [
+    { key: "draft", label: "Borrador" },
+    { key: "sent", label: "Enviada" },
+    { key: "received", label: "Recibida" },
+  ] as const;
+  const activeIndex =
+    status === "draft"
+      ? 0
+      : status === "sent"
+        ? 1
+        : status === "partially_received"
+          ? 1
+          : 2;
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      {steps.map((s, i) => (
+        <span key={s.key} className="flex items-center gap-1.5">
+          <span
+            className={
+              i <= activeIndex ? "font-medium text-foreground" : "text-muted-foreground"
+            }
+          >
+            {s.label}
+            {status === "partially_received" && s.key === "sent" ? " (parcial)" : ""}
+          </span>
+          {i < steps.length - 1 ? (
+            <span aria-hidden className="text-muted-foreground">
+              →
+            </span>
+          ) : null}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -112,8 +153,11 @@ export function PurchaseOrderDetailClient({ poId }: Readonly<{ poId: string }>) 
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<PurchaseOrderDetail | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [receivePrefillFull, setReceivePrefillFull] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendBusy, setSendBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,11 +181,29 @@ export function PurchaseOrderDetailClient({ poId }: Readonly<{ poId: string }>) 
     void load();
   }, [load]);
 
+  const canSend = order != null && order.status === "draft";
   const canReceive =
     order != null &&
     (order.status === "sent" || order.status === "partially_received");
   const canCancel =
     order != null && (order.status === "draft" || order.status === "sent");
+
+  async function confirmSend() {
+    if (!order) return;
+    setSendBusy(true);
+    try {
+      const res = await sendPurchaseOrderViaProxy(order.poId);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Orden enviada al proveedor.");
+      setSendOpen(false);
+      await load();
+    } finally {
+      setSendBusy(false);
+    }
+  }
 
   async function confirmCancel() {
     if (!order) return;
@@ -192,24 +254,56 @@ export function PurchaseOrderDetailClient({ poId }: Readonly<{ poId: string }>) 
                   Orden{" "}
                   <span className="font-mono">{order.displayCode}</span>
                 </h1>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={poStatusVariant(order.status)}>
-                    {poStatusLabel(order.status)}
-                  </Badge>
-                  <span className="text-muted-foreground text-sm">
-                    {order.receivedPct}% recibido
-                  </span>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={poStatusVariant(order.status)}>
+                      {poStatusLabel(order.status)}
+                    </Badge>
+                    {order.status === "partially_received" || order.status === "received" ? (
+                      <span className="text-muted-foreground text-sm">
+                        {order.receivedPct}% recibido
+                      </span>
+                    ) : null}
+                  </div>
+                  <PoStatusSteps status={order.status} />
                 </div>
               </>
             )}
           </div>
           {canEdit && order ? (
             <div className="flex flex-wrap gap-2">
-              {canReceive ? (
-                <Button size="sm" type="button" onClick={() => setReceiveOpen(true)}>
-                  Recibir
+              {canSend ? (
+                <Button size="sm" type="button" onClick={() => setSendOpen(true)}>
+                  Enviar orden
                 </Button>
               ) : null}
+
+              {canReceive ? (
+                <>
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      setReceivePrefillFull(false);
+                      setReceiveOpen(true);
+                    }}
+                  >
+                    Recibir
+                  </Button>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setReceivePrefillFull(true);
+                      setReceiveOpen(true);
+                    }}
+                  >
+                    Recibir orden completa
+                  </Button>
+                </>
+              ) : null}
+
               {canCancel ? (
                 <Button
                   size="sm"
@@ -343,10 +437,34 @@ export function PurchaseOrderDetailClient({ poId }: Readonly<{ poId: string }>) 
           items={order.items}
           open={receiveOpen}
           poId={order.poId}
-          onOpenChange={setReceiveOpen}
+          vendorName={order.vendorName}
+          prefillFull={receivePrefillFull}
+          onOpenChange={(open) => {
+            setReceiveOpen(open);
+            if (!open) setReceivePrefillFull(false);
+          }}
           onReceived={() => void load()}
         />
       ) : null}
+
+      <AlertDialog open={sendOpen} onOpenChange={(o) => !sendBusy && setSendOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Enviar esta orden al proveedor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Marca la orden como enviada. Después podrás registrar la mercadería recibida. Una vez
+              enviada, ya no podrás editar las líneas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sendBusy}>Volver</AlertDialogCancel>
+            <Button disabled={sendBusy} type="button" onClick={() => void confirmSend()}>
+              {sendBusy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+              Enviar orden
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <AlertDialogContent>

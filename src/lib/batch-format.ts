@@ -1,13 +1,14 @@
+const DATE_SHORT_FMT = new Intl.DateTimeFormat("es", { dateStyle: "medium" });
+const MONEY_CRC_FMT = new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC" });
+
 export function formatDateShort(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(d);
+  return Number.isNaN(d.getTime()) ? "—" : DATE_SHORT_FMT.format(d);
 }
 
 export function formatMoneyCRC(n: number): string {
   try {
-    return new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC" }).format(n);
+    return MONEY_CRC_FMT.format(n);
   } catch {
     return `CRC ${n.toFixed(2)}`;
   }

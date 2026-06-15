@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { ArrowLeftRight, PackagePlus } from "lucide-react";
@@ -20,26 +21,61 @@ import { InventoryTransferDialog } from "@/components/workspace/inventory-transf
 import { batchExpiryState, formatDateShort, formatMoneyCRC } from "@/lib/batch-format";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { formatQty, MOVEMENT_REASON_LABEL } from "@/lib/inventory-format";
+import type { ProductMovementRow } from "@/lib/inventory";
 import type { DashboardProductDetail } from "@/lib/product-detail";
 
-import type { ProductMovementRow } from "@/lib/inventory";
+const MOVEMENT_WHEN_FMT = new Intl.DateTimeFormat("es-CR", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "America/Costa_Rica",
+});
 
 function formatWhen(iso: string): string {
   if (!iso) return "—";
   try {
-    return new Intl.DateTimeFormat("es", { dateStyle: "medium", timeStyle: "short" }).format(
-      new Date(iso),
-    );
+    return MOVEMENT_WHEN_FMT.format(new Date(iso));
   } catch {
     return iso;
   }
 }
 
 function movementRefLabel(m: ProductMovementRow): string | null {
-  if (!m.refType || !m.refId) return null;
+  if (!m.refType) return null;
   const kind =
-    m.refType === "po" ? "Compra" : m.refType === "order" ? "Venta" : m.refType;
-  return `${kind} ${m.refId}`;
+    m.refType === "po" ? "Compra" : m.refType === "order" ? "Venta" : null;
+  if (!kind) return null;
+  return m.displayCode ? `${kind} ${m.displayCode}` : kind;
+}
+
+function shouldShowMovementNotes(m: ProductMovementRow): boolean {
+  if (!m.notes) return false;
+  const label = MOVEMENT_REASON_LABEL[m.reason] ?? "";
+  if (m.notes === label) return false;
+  if (/^(Recepción|Compra)\s+(pur_|poi_)/i.test(m.notes)) return false;
+  if (/^opening_balance\s+\d/i.test(m.notes)) return false;
+  return true;
+}
+
+function MovementRefLine({ m }: Readonly<{ m: ProductMovementRow }>) {
+  const refLabel = movementRefLabel(m);
+  if (!refLabel && m.unitCost == null) return null;
+
+  const refContent =
+    m.refType === "po" && m.poId && m.displayCode ? (
+      <Link className="hover:underline" href={`/compras/ordenes/${encodeURIComponent(m.poId)}`}>
+        {refLabel}
+      </Link>
+    ) : (
+      refLabel
+    );
+
+  return (
+    <span className="text-muted-foreground text-xs">
+      {refContent}
+      {refLabel && m.unitCost != null ? " · " : null}
+      {m.unitCost != null ? formatMoneyCRC(m.unitCost) : null}
+    </span>
+  );
 }
 
 function StatCard({
@@ -225,28 +261,21 @@ export function ProductInventoryTab({
           {detail.movements.length === 0 ? (
             <p className="text-muted-foreground text-sm">Sin movimientos registrados.</p>
           ) : (
-            detail.movements.map((m) => {
-              const refLabel = movementRefLabel(m);
-              return (
-                <div key={m.movementId} className="flex flex-col gap-0.5 border-border border-b pb-3 last:border-0">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="font-medium">
-                      {MOVEMENT_REASON_LABEL[m.reason] ?? m.reason}
-                    </span>
-                    <span className="tabular-nums">{formatQty(Number(m.qty))}</span>
-                  </div>
-                  <span className="text-muted-foreground text-xs">{formatWhen(m.occurredAt)}</span>
-                  {refLabel || m.unitCost != null ? (
-                    <span className="text-muted-foreground text-xs">
-                      {refLabel ? refLabel : null}
-                      {refLabel && m.unitCost != null ? " · " : null}
-                      {m.unitCost != null ? formatMoneyCRC(m.unitCost) : null}
-                    </span>
-                  ) : null}
-                  {m.notes ? <span className="text-muted-foreground text-xs">{m.notes}</span> : null}
+            detail.movements.map((m) => (
+              <div key={m.movementId} className="flex flex-col gap-0.5 border-border border-b pb-3 last:border-0">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium">
+                    {MOVEMENT_REASON_LABEL[m.reason] ?? m.reason}
+                  </span>
+                  <span className="tabular-nums">{formatQty(Number(m.qty))}</span>
                 </div>
-              );
-            })
+                <span className="text-muted-foreground text-xs">{formatWhen(m.occurredAt)}</span>
+                <MovementRefLine m={m} />
+                {shouldShowMovementNotes(m) ? (
+                  <span className="text-muted-foreground text-xs">{m.notes}</span>
+                ) : null}
+              </div>
+            ))
           )}
         </CardContent>
       </Card>

@@ -60,6 +60,8 @@ export type ProductMovementRow = Readonly<{
   notes: string | null;
   refType: string | null;
   refId: string | null;
+  displayCode: string | null;
+  poId: string | null;
   unitCost: number | null;
 }>;
 
@@ -337,6 +339,8 @@ function parseMovementRow(raw: unknown): ProductMovementRow | null {
     notes: typeof o.notes === "string" ? o.notes : null,
     refType: typeof o.refType === "string" ? o.refType : null,
     refId: typeof o.refId === "string" ? o.refId : null,
+    displayCode: typeof o.displayCode === "string" && o.displayCode.trim() ? o.displayCode.trim() : null,
+    poId: typeof o.poId === "string" && o.poId.trim() ? o.poId.trim() : null,
     unitCost:
       o.unitCost === null || o.unitCost === undefined
         ? null
