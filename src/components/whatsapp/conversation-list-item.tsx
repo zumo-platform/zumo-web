@@ -45,10 +45,12 @@ export function ConversationListItem({
     <li>
       <Button
         className={cn(
-          "h-auto min-h-[3rem] w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left font-normal transition-colors",
-          "hover:bg-accent hover:text-accent-foreground",
+          "h-auto min-h-[3rem] w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left font-normal shadow-sm transition-colors",
+          "border-border/60 bg-card",
+          "hover:border-primary/40 hover:bg-accent/40",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          selectedId === conv.conversationId && "bg-accent text-accent-foreground shadow-sm",
+          selectedId === conv.conversationId &&
+            "border-primary/50 bg-accent/60 text-accent-foreground ring-1 ring-primary/20",
         )}
         onClick={() => onSelect(conv.conversationId)}
         type="button"

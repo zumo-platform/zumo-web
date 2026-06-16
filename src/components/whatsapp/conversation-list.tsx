@@ -37,9 +37,9 @@ export function ConversationList({
   if (loading) {
     return (
       <WhatsappScrollPane>
-        <div className="space-y-3 p-3">
+        <div className="space-y-2 p-3">
           {Array.from({ length: 7 }).map((_, i) => (
-            <div className="space-y-2 rounded-lg border border-transparent px-2 py-2" key={i}>
+            <div className="space-y-2 rounded-lg border border-border/60 bg-card px-3 py-2.5 shadow-sm" key={i}>
               <Skeleton className="h-4 w-[85%]" />
               <div className="flex justify-between gap-2">
                 <Skeleton className="h-3 w-16" />
@@ -76,7 +76,7 @@ export function ConversationList({
 
   return (
     <WhatsappScrollPane>
-      <ul className="space-y-0.5 p-2">
+      <ul className="space-y-2 p-2">
         {conversations.map((conv) => (
           <ConversationListItem
             conversation={conv}

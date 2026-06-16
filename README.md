@@ -41,7 +41,7 @@ Invite → accept link → Cognito user + seller row → workspace. Backend invi
 
 ## Recent workspace features (2026-06)
 
-- **Inbox / WhatsApp** — conversation filter bar (estado, asignado, pedido, tipo de contacto, búsqueda, orden); enriched list (pills, assigned seller, unread); open/close tracking on select.
+- **Inbox / WhatsApp** — 3-column triage board at `/inbox` (Pedidos / No son pedidos / Errores); conversation filter bar on WhatsApp; enriched list; open/close tracking.
 - **Orders** — **Lista / Flujo** toggle on `/orders` (`?view=list|board`, `?q=` search, `?status=` multi-select with OR/AND); estado dropdown pill next to delivery date (replaces status chip row); drag-to-move between flow columns; unified search + delivery date filter; detail sheet; **`/orders/creation`** manual create (**delivery date required**); list view pagination footer (20/50/100 rows).
 - **Profile** — **`/settings/profile`**: edit name/phone, change Cognito password.
 - **Order flow settings** — **`/settings/order-flow`**: rename system statuses, reorder columns, add custom statuses (owner/admin).
@@ -131,6 +131,7 @@ Run only **one** `next dev` per clone.
 | `/` | Redirect → `/es` |
 | `/en`, `/es` | Marketing |
 | `/login` | Sign in / sign up (`?tab=signup`) |
+| `/inbox` | WhatsApp triage board — Pedidos / No son pedidos / Errores |
 | `/whatsapp` | WhatsApp inbox + draft orders |
 | `/orders` | Orders catalog — **Lista** table or **Flujo** board (`?view=`, `?q=`, `?status=`), detail sheet |
 | `/orders/creation` | Manual order create (delivery date required) |
