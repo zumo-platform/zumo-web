@@ -2,13 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { ConversationFilterBar, type SellerOption } from "@/components/whatsapp/conversation-filter-bar";
+import {
+  applyClientPipeline,
+  buildConversationsQuery,
+  defaultConversationFilters,
+  type ConversationFilterState,
+} from "@/components/whatsapp/conversation-filters";
 import { ConversationList } from "@/components/whatsapp/conversation-list";
 import { InformationPanel } from "@/components/whatsapp/information-panel";
 import { MessageComposer } from "@/components/whatsapp/message-composer";
 import { MessageThread } from "@/components/whatsapp/message-thread";
-import { backendGet, isUnknownConversationCustomer } from "@/components/whatsapp/whatsapp-helpers";
+import {
+  backendGet,
+  backendPost,
+  isUnknownConversationCustomer,
+} from "@/components/whatsapp/whatsapp-helpers";
 import { ErrorAlert } from "@/components/workspace/error-alert";
 import type { Conversation, Message, Order } from "@/lib/dashboard-types";
+import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 function PanelHeading({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -19,16 +31,27 @@ function PanelHeading({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 export function WhatsappClient() {
+  const { can } = useWorkspacePermissions();
+  const canViewAll = can("conversations.view_all");
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sellers, setSellers] = useState<SellerOption[]>([]);
+
+  const [filters, setFilters] = useState<ConversationFilterState>(() =>
+    defaultConversationFilters(canViewAll),
+  );
 
   const [convsLoading, setConvsLoading] = useState(true);
   const [msgsLoading, setMsgsLoading] = useState(false);
-
   const [convsFetchError, setConvsFetchError] = useState<string | null>(null);
   const [msgsFetchError, setMsgsFetchError] = useState<string | null>(null);
+
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const userTouchedFiltersRef = useRef(false);
 
   const refreshOrders = useCallback(async () => {
     try {
@@ -38,9 +61,7 @@ export function WhatsappClient() {
       ]);
       const merged = [...(draftRes.orders ?? []), ...(pendingRes.orders ?? [])];
       const byKey = new Map<string, Order>();
-      for (const o of merged) {
-        byKey.set(o.orderId, o);
-      }
+      for (const o of merged) byKey.set(o.orderId, o);
       setOrders([...byKey.values()]);
     } catch {
       /* non-fatal */
@@ -50,13 +71,36 @@ export function WhatsappClient() {
   const fetchConversations = useCallback(async () => {
     setConvsFetchError(null);
     try {
-      const data = await backendGet<{ conversations?: Conversation[] }>("dashboard/conversations");
+      const qs = buildConversationsQuery(filtersRef.current);
+      const data = await backendGet<{ conversations?: Conversation[] }>(`dashboard/conversations${qs}`);
       setConversations(data.conversations ?? []);
     } catch (err) {
       setConversations([]);
       setConvsFetchError(err instanceof Error ? err.message : "No se pudieron cargar las conversaciones.");
     }
   }, []);
+
+  const fetchSellers = useCallback(async () => {
+    if (!canViewAll) {
+      setSellers([]);
+      return;
+    }
+    try {
+      const data = await backendGet<{ team?: Array<{ kind?: string; sellerId?: number; id?: string; name?: string }> }>(
+        "dashboard/team",
+      );
+      const rows = (data.team ?? [])
+        .filter((m) => m.kind === "seller")
+        .map((m) => ({
+          sellerId: m.sellerId ?? Number.parseInt(m.id ?? "0", 10),
+          name: (m.name ?? "").trim() || "Sin nombre",
+        }))
+        .filter((s) => Number.isFinite(s.sellerId) && s.sellerId > 0);
+      setSellers(rows);
+    } catch {
+      setSellers([]);
+    }
+  }, [canViewAll]);
 
   const fetchMessages = useCallback(async (convId: string, opts?: { silent?: boolean }) => {
     if (!opts?.silent) setMsgsLoading(true);
@@ -90,14 +134,18 @@ export function WhatsappClient() {
   useEffect(() => {
     async function init() {
       setConvsLoading(true);
-      await Promise.all([fetchConversations(), refreshOrders()]);
+      await Promise.all([fetchConversations(), refreshOrders(), fetchSellers()]);
       setConvsLoading(false);
     }
     void init();
-  }, [fetchConversations, refreshOrders]);
+  }, [fetchConversations, refreshOrders, fetchSellers]);
+
+  const serverQuery = buildConversationsQuery(filters);
+  useEffect(() => {
+    void fetchConversations();
+  }, [serverQuery, fetchConversations]);
 
   const prevSelectedIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!selectedId) {
       setMessages([]);
@@ -105,9 +153,7 @@ export function WhatsappClient() {
       prevSelectedIdRef.current = null;
       return;
     }
-    if (prevSelectedIdRef.current !== selectedId) {
-      setMessages([]);
-    }
+    if (prevSelectedIdRef.current !== selectedId) setMessages([]);
     prevSelectedIdRef.current = selectedId;
     void fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
@@ -121,10 +167,45 @@ export function WhatsappClient() {
     return () => window.clearInterval(id);
   }, [fetchConversations, fetchMessages, refreshOrders, selectedId]);
 
-  const handleSelect = useCallback((id: string) => {
-    setSelectedId(id);
-    setMsgsFetchError(null);
-  }, []);
+  useEffect(() => {
+    if (userTouchedFiltersRef.current) return;
+    setFilters((prev) => ({
+      ...prev,
+      assigned: canViewAll ? { mode: "all" } : { mode: "me" },
+    }));
+  }, [canViewAll]);
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      setMsgsFetchError(null);
+      void (async () => {
+        try {
+          await backendPost(`dashboard/conversations/${encodeURIComponent(id)}/open`);
+          void fetchConversations();
+        } catch {
+          /* non-fatal */
+        }
+      })();
+    },
+    [fetchConversations],
+  );
+
+  const visibleConversations = useMemo(
+    () => applyClientPipeline(conversations, filters),
+    [conversations, filters],
+  );
+
+  const hasActiveFilters = useMemo(() => {
+    const d = defaultConversationFilters(canViewAll);
+    return (
+      filters.search.trim() !== "" ||
+      filters.pedidoStates.length > 0 ||
+      filters.assigned.mode !== d.assigned.mode ||
+      filters.statuses.length !== d.statuses.length ||
+      filters.kinds.length !== d.kinds.length
+    );
+  }, [filters, canViewAll]);
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.conversationId === selectedId) ?? null,
@@ -139,24 +220,34 @@ export function WhatsappClient() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,18rem)_minmax(0,calc((100%-18rem-22rem)*0.9))_minmax(22rem,calc(22rem+(100%-18rem-22rem)*0.1))] divide-x divide-border overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,20rem)_minmax(0,calc((100%-20rem-22rem)*0.9))_minmax(22rem,calc(22rem+(100%-20rem-22rem)*0.1))] divide-x divide-border overflow-hidden">
         <aside className="flex min-h-0 flex-col overflow-hidden">
           <PanelHeading>Conversaciones</PanelHeading>
+          <ConversationFilterBar
+            canViewAll={canViewAll}
+            filters={filters}
+            onChange={(next) => {
+              userTouchedFiltersRef.current = true;
+              setFilters(next);
+            }}
+            sellers={sellers}
+          />
           {convsFetchError ? (
             <div className="shrink-0 border-b p-3">
               <ErrorAlert
                 code="WA-001"
                 message={convsFetchError}
-                title="No se pudieron cargar las conversaciones"
                 onRetry={() => void fetchConversations()}
+                title="No se pudieron cargar las conversaciones"
               />
             </div>
           ) : null}
           <ConversationList
-            conversations={conversations}
+            conversations={visibleConversations}
+            hasActiveFilters={hasActiveFilters}
             loading={convsLoading}
-            selectedId={selectedId}
             onSelect={handleSelect}
+            selectedId={selectedId}
           />
         </aside>
 
@@ -167,12 +258,12 @@ export function WhatsappClient() {
               <ErrorAlert
                 code="WA-002"
                 message={msgsFetchError}
-                title="No se pudieron cargar los mensajes"
                 onRetry={() => void fetchMessages(selectedId)}
+                title="No se pudieron cargar los mensajes"
               />
             </div>
           ) : null}
-          <MessageThread conversationId={selectedId} messages={messages} loading={msgsLoading} />
+          <MessageThread conversationId={selectedId} loading={msgsLoading} messages={messages} />
           <MessageComposer
             conversationId={selectedId}
             onSent={(msg) => {
@@ -186,8 +277,8 @@ export function WhatsappClient() {
           <PanelHeading>Información</PanelHeading>
           <InformationPanel
             conversation={selectedConversation}
-            orders={orders}
             onOrdersDirty={() => void refreshOrders()}
+            orders={orders}
           />
         </aside>
       </div>

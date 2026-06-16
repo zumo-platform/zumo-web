@@ -6,28 +6,45 @@ import { LayoutGrid, List, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OrderStatusFilterDropdown } from "@/components/workspace/order-status-filter-dropdown";
+import {
+  ordersBoardViewLabel,
+  type OrderStatusFilterLogic,
+  type OrdersViewMode,
+} from "@/lib/dashboard-orders";
+import type { EffectiveStatusItem } from "@/lib/order-status-flow";
+import { useWorkspaceLocale } from "@/lib/use-workspace-locale";
 import { cn } from "@/lib/utils";
-import type { OrdersViewMode } from "@/lib/dashboard-orders";
 
 export const OrdersToolbar = memo(function OrdersToolbar({
   view,
   searchQuery,
   deliveryDateFilter,
   resultCount,
+  flow,
+  statusFilter,
+  statusLogic,
   onViewChange,
   onSearchChange,
   onDeliveryDateChange,
   onClearSearch,
+  onStatusFilterChange,
 }: Readonly<{
   view: OrdersViewMode;
   searchQuery: string;
   deliveryDateFilter: string;
   resultCount: number;
+  flow: EffectiveStatusItem[];
+  statusFilter: readonly string[];
+  statusLogic: OrderStatusFilterLogic;
   onViewChange: (view: OrdersViewMode) => void;
   onSearchChange: (value: string) => void;
   onDeliveryDateChange: (value: string) => void;
   onClearSearch: () => void;
+  onStatusFilterChange: (next: readonly string[], logic: OrderStatusFilterLogic) => void;
 }>) {
+  const locale = useWorkspaceLocale();
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -56,6 +73,13 @@ export const OrdersToolbar = memo(function OrdersToolbar({
         </div>
 
         <div className="flex items-center gap-2">
+          <OrderStatusFilterDropdown
+            flow={flow}
+            logic={statusLogic}
+            selected={statusFilter}
+            onChange={onStatusFilterChange}
+          />
+
           <label className="sr-only" htmlFor="orders-delivery-filter">
             Fecha de entrega
           </label>
@@ -93,7 +117,7 @@ export const OrdersToolbar = memo(function OrdersToolbar({
             onClick={() => onViewChange("board")}
           >
             <LayoutGrid aria-hidden className="size-4" />
-            Kanban
+            {ordersBoardViewLabel(locale)}
           </Button>
         </div>
       </div>

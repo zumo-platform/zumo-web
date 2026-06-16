@@ -1,6 +1,7 @@
 /** Types + server fetch for GET /dashboard/orders (per status; merged for list views). */
 
 import { joinApiGatewayPath } from "@/lib/api";
+import type { MarketingLocale } from "@/lib/marketing-locale";
 import { parseMatchCoverage } from "@/lib/match-coverage";
 
 export const DASHBOARD_ORDER_STATUSES = [
@@ -34,15 +35,44 @@ export const ORDER_STATUS_FILTER_OPTIONS: ReadonlyArray<{
   { value: "cancelled", label: "Cancelados" },
 ];
 
-/** Parse `?status=draft,pending` from URL; defaults to active-work statuses. */
+export type OrderStatusFilterLogic = "or" | "and";
+
+/** Parse `?status=draft,pending` from URL; `all` = no status filter; defaults to active-work statuses. */
 export function parseOrderStatusFilter(raw: string | undefined): string[] {
+  if (raw === "all") return [];
   if (!raw?.trim()) return [...DEFAULT_ORDER_STATUS_FILTER];
   const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
   return parts.length > 0 ? parts : [...DEFAULT_ORDER_STATUS_FILTER];
 }
 
 export function orderStatusFilterToParam(statuses: readonly string[]): string {
-  return statuses.join(",");
+  return statuses.length === 0 ? "all" : statuses.join(",");
+}
+
+export function parseOrderStatusFilterLogic(raw: string | null | undefined): OrderStatusFilterLogic {
+  return raw === "and" ? "and" : "or";
+}
+
+export function orderMatchesStatusFilter(
+  orderStatusKey: string,
+  selected: readonly string[],
+  logic: OrderStatusFilterLogic,
+): boolean {
+  if (selected.length === 0) return true;
+  if (logic === "or") return selected.includes(orderStatusKey);
+  if (selected.length === 1) return selected[0] === orderStatusKey;
+  return false;
+}
+
+export function formatOrderStatusFilterSummary(
+  selected: readonly string[],
+  labelByKey: ReadonlyMap<string, string>,
+): string | null {
+  if (selected.length === 0) return null;
+  const first = selected[0]!;
+  const firstLabel = labelByKey.get(first) ?? first;
+  if (selected.length === 1) return firstLabel;
+  return `${firstLabel} + ${String(selected.length - 1)}`;
 }
 
 /** Accent- and case-insensitive search normalization. */
@@ -57,6 +87,23 @@ export function normalizeOrderSearchText(value: string): string {
 export type OrdersViewMode = "list" | "board";
 
 export const ORDERS_VIEW_STORAGE_KEY = "zumo.orders.view";
+
+export function ordersBoardViewLabel(locale: MarketingLocale): string {
+  return locale === "en" ? "Flow" : "Flujo";
+}
+
+export function ordersBoardFilteredDescription(locale: MarketingLocale, count: number): string {
+  if (locale === "en") {
+    return `Showing ${String(count)} order${count === 1 ? "" : "s"} in the flow.`;
+  }
+  return `Mostrando ${String(count)} ${count === 1 ? "pedido" : "pedidos"} en el flujo.`;
+}
+
+export function ordersBoardEmptyDescription(locale: MarketingLocale): string {
+  return locale === "en"
+    ? "Drag orders between columns to change their status."
+    : "Arrastrá pedidos entre columnas para cambiar su estado.";
+}
 
 export function parseOrdersViewMode(raw: string | null | undefined): OrdersViewMode {
   if (raw === "board" || raw === "list") return raw;

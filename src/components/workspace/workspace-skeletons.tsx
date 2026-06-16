@@ -143,7 +143,7 @@ export function OrdersBoardSkeleton({ columnCount }: { columnCount?: number }) {
   return (
     <div
       role="status"
-      aria-label="Cargando tablero de pedidos"
+      aria-label="Cargando flujo de pedidos"
       className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1"
     >
       <span className="sr-only">Cargando…</span>

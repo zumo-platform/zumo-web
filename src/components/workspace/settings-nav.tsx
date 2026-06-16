@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Building, Package, Shield, Sparkles, Truck, Warehouse, Workflow } from "lucide-react";
+import { Building, Package, Shield, Sparkles, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -12,6 +12,7 @@ const SETTINGS_NAV: ReadonlyArray<{
   label: string;
   icon: LucideIcon;
 }> = [
+  { href: "/settings/profile", label: "Perfil", icon: UserRound },
   { href: "/settings/business", label: "Negocio", icon: Building },
   { href: "/settings/delivery", label: "Logística", icon: Truck },
   { href: "/settings/warehouses", label: "Bodegas", icon: Warehouse },

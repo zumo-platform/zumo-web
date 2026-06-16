@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, SearchX } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Conversation } from "@/lib/dashboard-types";
@@ -11,11 +11,7 @@ function EmptyState({
   icon: Icon,
   title,
   description,
-}: Readonly<{
-  icon: LucideIcon;
-  title: string;
-  description: string;
-}>) {
+}: Readonly<{ icon: LucideIcon; title: string; description: string }>) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/10 p-8 text-center">
       <Icon aria-hidden className="size-8 text-muted-foreground opacity-50" />
@@ -30,11 +26,13 @@ export function ConversationList({
   loading,
   selectedId,
   onSelect,
+  hasActiveFilters,
 }: Readonly<{
   conversations: Conversation[];
   loading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  hasActiveFilters?: boolean;
 }>) {
   if (loading) {
     return (
@@ -58,11 +56,19 @@ export function ConversationList({
     return (
       <WhatsappScrollPane>
         <div className="p-4">
-          <EmptyState
-            description="Los mensajes aparecerán acá cuando un cliente te escriba por WhatsApp."
-            icon={MessageSquare}
-            title="Aún no hay conversaciones"
-          />
+          {hasActiveFilters ? (
+            <EmptyState
+              description="Probá ajustar los filtros o la búsqueda para ver más conversaciones."
+              icon={SearchX}
+              title="Sin resultados"
+            />
+          ) : (
+            <EmptyState
+              description="Los mensajes aparecerán acá cuando un cliente te escriba por WhatsApp."
+              icon={MessageSquare}
+              title="Aún no hay conversaciones"
+            />
+          )}
         </div>
       </WhatsappScrollPane>
     );
@@ -75,8 +81,8 @@ export function ConversationList({
           <ConversationListItem
             conversation={conv}
             key={conv.conversationId}
-            selectedId={selectedId}
             onSelect={onSelect}
+            selectedId={selectedId}
           />
         ))}
       </ul>

@@ -20,7 +20,7 @@ Runtime: **Next.js 16**, **TypeScript**, **React 19**, **Node 24**, **Tailwind C
 | **next-themes** | Theme switching |
 | **sonner** | Toasts |
 | **@tanstack/react-query** | Server/async state (queries & mutations) |
-| **@dnd-kit/core** | Kanban drag-and-drop on `/orders` board view |
+| **@dnd-kit/core** | Drag-and-drop on `/orders` Flow view (`?view=board`) |
 | **@tanstack/react-table** | Paginated catalog tables (Inventario, Pedidos, Clientes) |
 | **Session cookies** + **Cognito** (via Route Handlers) | Sign-up, confirm, login, JWT proxy to API |
 
@@ -39,10 +39,11 @@ Seller roles in Postgres are **`seller_role`**: `owner` \| `admin` \| `seller`.
 
 Invite → accept link → Cognito user + seller row → workspace. Backend invitations not fully wired in UI yet.
 
-## Recent workspace features (2026-05)
+## Recent workspace features (2026-06)
 
-- **WhatsApp** — three-column UI, draft order sheet with editable lines, lifecycle actions (convert / confirm / reject).
-- **Orders** — **Lista / Kanban** toggle on `/orders` (`?view=list|board`, `?q=` search); drag-to-move between flow columns; unified search + delivery date filter; detail sheet; **`/orders/creation`** manual create (**delivery date required**); list view pagination footer (20/50/100 rows).
+- **Inbox / WhatsApp** — conversation filter bar (estado, asignado, pedido, tipo de contacto, búsqueda, orden); enriched list (pills, assigned seller, unread); open/close tracking on select.
+- **Orders** — **Lista / Flujo** toggle on `/orders` (`?view=list|board`, `?q=` search, `?status=` multi-select with OR/AND); estado dropdown pill next to delivery date (replaces status chip row); drag-to-move between flow columns; unified search + delivery date filter; detail sheet; **`/orders/creation`** manual create (**delivery date required**); list view pagination footer (20/50/100 rows).
+- **Profile** — **`/settings/profile`**: edit name/phone, change Cognito password.
 - **Order flow settings** — **`/settings/order-flow`**: rename system statuses, reorder columns, add custom statuses (owner/admin).
 - **Clients** — table + **`/clients/[customerId]`** detail (sidebar edits, orders/products/users tabs, product picker); pagination footer (10/30/50/100 rows).
 - **Inventory** — full-width catalog table synced with dashboard products API; pagination footer (20/50/100 rows).
@@ -50,6 +51,10 @@ Invite → accept link → Cognito user + seller row → workspace. Backend invi
 - **Settings** — business profile, AI autocommit, locale; timezone loaded for all date/time display.
 - **Layout** — full-width list/table pages via **`src/lib/workspace-layout.ts`**: shared padding, **`workspaceTableScrollClassName`** (vertical scroll below page header), **`workspaceTableCardClassName`** (horizontal scroll on wide tables), extra bottom padding so content is not flush with the viewport.
 - **Supplier timezone** — all order/message times shown in supplier IANA timezone (from settings), not browser or US server time. Instants without `Z` suffix are parsed as UTC before formatting.
+
+## Recent workspace features (2026-05)
+
+- **WhatsApp** — three-column UI, draft order sheet with editable lines, lifecycle actions (convert / confirm / reject).
 
 ## Zustand — good fits for Zumo
 
@@ -72,10 +77,10 @@ zumo-web/
 │   │   │   ├── (auth)/                 # /login, /register → signup tab
 │   │   │   └── (workspace)/            # authenticated shell
 │   │   │       ├── whatsapp/
-│   │   │       ├── orders/             # list + Kanban board, creation, [orderId]/edit
+│   │   │       ├── orders/             # list + Flow board, creation, [orderId]/edit
 │   │   │       ├── clients/            # list + [customerId] detail
 │   │   │       ├── matches/            # alias governance
-│   │   │       ├── settings/           # business, AI, order-flow
+│   │   │       ├── settings/           # business, AI, order-flow, profile
 │   │   │       └── layout.tsx          # loads settings → WorkspacePreferencesProvider
 │   │   ├── api/
 │   │   │   ├── auth/                   # signup, login, confirm, logout
@@ -127,14 +132,14 @@ Run only **one** `next dev` per clone.
 | `/en`, `/es` | Marketing |
 | `/login` | Sign in / sign up (`?tab=signup`) |
 | `/whatsapp` | WhatsApp inbox + draft orders |
-| `/orders` | Orders catalog — **Lista** table or **Kanban** board (`?view=`, `?q=`), detail sheet |
+| `/orders` | Orders catalog — **Lista** table or **Flujo** board (`?view=`, `?q=`, `?status=`), detail sheet |
 | `/orders/creation` | Manual order create (delivery date required) |
 | `/matches` | Product alias governance (Matches tab) |
 | `/clients` | Customer list |
 | `/clients/[customerId]` | Customer detail (sidebar, tabs) |
 | `/settings` | Business + AI settings |
 | `/settings/order-flow` | Order status flow (rename, reorder, custom statuses) |
-| `/profile` | Seller profile |
+| `/settings/profile` | Seller profile (name, phone, password) |
 
 ## Build & production
 

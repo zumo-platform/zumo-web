@@ -307,6 +307,7 @@ export function OrdersBoard({
   flow,
   customerNameById,
   ordersByStatus,
+  visibleColumnKeys,
   onOrderStatusChange,
   onOrderSeen,
   onOrderRemoved,
@@ -315,12 +316,18 @@ export function OrdersBoard({
   flow: EffectiveStatusItem[];
   customerNameById: ReadonlyMap<number, string>;
   ordersByStatus: ReadonlyMap<string, DashboardOrderListRow[]>;
+  visibleColumnKeys?: readonly string[];
   onOrderStatusChange?: DashboardOrderStatusChangeHandler;
   onOrderSeen?: (orderId: string) => void;
   onOrderRemoved?: (orderId: string) => void;
 }>) {
   useWorkspacePreferences();
-  const columns = useMemo(() => flowToBoardColumns(flow), [flow]);
+  const columns = useMemo(() => {
+    const all = flowToBoardColumns(flow);
+    if (!visibleColumnKeys || visibleColumnKeys.length === 0) return all;
+    const allowed = new Set(visibleColumnKeys);
+    return all.filter((column) => allowed.has(column.key));
+  }, [flow, visibleColumnKeys]);
   const [movingOrderId, setMovingOrderId] = useState<string | null>(null);
   const [activeDragOrder, setActiveDragOrder] = useState<DashboardOrderListRow | null>(null);
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);

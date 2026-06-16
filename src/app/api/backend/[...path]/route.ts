@@ -62,7 +62,15 @@ async function proxyRequest(
   }
 
   /** Prefer id_token (tenant claims); retry with access_token if the gateway rejects the first. */
-  const bearerCandidates = [...new Set([idToken, accessToken].filter((t): t is string => Boolean(t)))];
+  const pathStr = segments.join("/");
+  const preferAccessToken = pathStr === "sellers/me/password";
+  const bearerCandidates = [
+    ...new Set(
+      preferAccessToken
+        ? [accessToken, idToken].filter((t): t is string => Boolean(t))
+        : [idToken, accessToken].filter((t): t is string => Boolean(t)),
+    ),
+  ];
 
   if (bearerCandidates.length === 0) {
     return NextResponse.json(
@@ -94,7 +102,6 @@ async function proxyRequest(
     );
   }
 
-  const pathStr = segments.join("/");
   const { searchParams } = new URL(request.url);
   const qs = searchParams.toString();
   const upstream = `${joinApiGatewayPath(baseUrl, pathStr)}${qs ? `?${qs}` : ""}`;

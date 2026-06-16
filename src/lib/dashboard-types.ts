@@ -1,3 +1,12 @@
+export type ConversationUiStatus = "sin_responder" | "abierto" | "cerrado";
+
+export type ConversationOrderState =
+  | "pedido_pendiente"
+  | "borrador"
+  | "en_ruta"
+  | "rechazado"
+  | "sin_pedido";
+
 export interface Conversation {
   conversationId: string;
   /** Null for unregistered WhatsApp contacts (not in clientes table yet). */
@@ -14,6 +23,16 @@ export interface Conversation {
   customerPhone: string;
   /** Prefer API value; if absent, treat empty `customerName` as unknown. */
   isUnknownCustomer?: boolean;
+
+  /** Derived estado: sin_responder | abierto | cerrado. */
+  uiStatus?: ConversationUiStatus;
+  /** First seller-open timestamp; null → sin responder. */
+  openedAt?: string | null;
+  /** Assigned seller (from customer.assigned_seller_id); null for unknown/unassigned. */
+  assignedSellerId?: number | null;
+  assignedSellerName?: string | null;
+  /** Derived pedido state for the card pill + filter. */
+  orderState?: ConversationOrderState;
 }
 
 export interface Message {

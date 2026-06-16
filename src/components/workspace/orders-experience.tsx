@@ -7,7 +7,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { OrderStatusFilterChips } from "@/components/workspace/order-status-filter-chips";
 import { OrdersBoard } from "@/components/workspace/orders-board";
 import { OrdersCatalogTable } from "@/components/workspace/orders-catalog-table";
 import { OrdersHeaderActions } from "@/components/workspace/orders-header-actions";
@@ -19,11 +18,16 @@ import {
   DEFAULT_ORDER_STATUS_FILTER,
   ORDERS_VIEW_STORAGE_KEY,
   normalizeOrderSearchText,
+  orderMatchesStatusFilter,
+  ordersBoardEmptyDescription,
+  ordersBoardFilteredDescription,
   orderStatusFilterToParam,
   parseOrderStatusFilter,
+  parseOrderStatusFilterLogic,
   parseOrdersViewMode,
   type DashboardOrderListRow,
   type DashboardOrderPatch,
+  type OrderStatusFilterLogic,
   type OrdersViewMode,
 } from "@/lib/dashboard-orders";
 import {
@@ -39,6 +43,7 @@ import {
   readCachedOrders,
 } from "@/lib/orders-catalog-cache";
 import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
+import { useWorkspaceLocale } from "@/lib/use-workspace-locale";
 import { cn } from "@/lib/utils";
 import {
   workspaceContentInnerClassName,
@@ -63,6 +68,7 @@ export function OrdersExperience() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
+  const locale = useWorkspaceLocale();
 
   const defaultBoardKeys = useMemo(
     () => flowToBoardColumns(buildDefaultFlowItems()).map((column) => column.key),
@@ -89,6 +95,11 @@ export function OrdersExperience() {
     if (raw !== null) return parseOrderStatusFilter(raw);
     return [...DEFAULT_ORDER_STATUS_FILTER];
   }, [searchParams]);
+
+  const statusLogic = useMemo(
+    (): OrderStatusFilterLogic => parseOrderStatusFilterLogic(searchParams.get("statusLogic")),
+    [searchParams],
+  );
 
   const boardStatusKeys = useMemo(
     () => flowToBoardColumns(supplierFlow).map((column) => column.key),
@@ -203,9 +214,11 @@ export function OrdersExperience() {
   );
 
   const handleStatusFilterChange = useCallback(
-    (next: string[]) => {
+    (next: readonly string[], logic: OrderStatusFilterLogic) => {
       replaceSearchParams((params) => {
         params.set("status", orderStatusFilterToParam(next));
+        if (logic === "or") params.delete("statusLogic");
+        else params.set("statusLogic", logic);
       });
     },
     [replaceSearchParams],
@@ -243,17 +256,32 @@ export function OrdersExperience() {
     });
   }, [orders, debouncedQuery, customerNameById, deliveryDateFilter]);
 
-  const listOrders = useMemo(() => {
-    if (deferredViewMode === "board") return searchFilteredOrders;
-    const allowed = new Set(statusFilter);
-    return searchFilteredOrders.filter((o) =>
-      allowed.has(o.effectiveStatusKey ?? o.status),
+  const statusFilteredOrders = useMemo(
+    () =>
+      searchFilteredOrders.filter((o) =>
+        orderMatchesStatusFilter(
+          o.effectiveStatusKey ?? o.status,
+          statusFilter,
+          statusLogic,
+        ),
+      ),
+    [searchFilteredOrders, statusFilter, statusLogic],
+  );
+
+  const listOrders = statusFilteredOrders;
+
+  const boardColumnKeys = useMemo(() => {
+    const allColumns = flowToBoardColumns(
+      supplierFlow.length > 0 ? supplierFlow : buildDefaultFlowItems(),
     );
-  }, [searchFilteredOrders, statusFilter, deferredViewMode]);
+    if (statusFilter.length === 0) return allColumns.map((column) => column.key);
+    const allowed = new Set(statusFilter);
+    return allColumns.filter((column) => allowed.has(column.key)).map((column) => column.key);
+  }, [supplierFlow, statusFilter]);
 
   const ordersByStatus = useMemo(() => {
     const bucket = new Map<string, DashboardOrderListRow[]>();
-    for (const order of searchFilteredOrders) {
+    for (const order of statusFilteredOrders) {
       const key = order.effectiveStatusKey ?? order.status;
       const list = bucket.get(key) ?? [];
       list.push(order);
@@ -267,7 +295,7 @@ export function OrdersExperience() {
       });
     }
     return bucket;
-  }, [searchFilteredOrders]);
+  }, [statusFilteredOrders]);
 
   const handleOrderStatusChange = useCallback(
     (orderId: string, status: string, patch?: DashboardOrderPatch) => {
@@ -300,7 +328,7 @@ export function OrdersExperience() {
   }
 
   const hasAnyOrders = orders.length > 0;
-  const hasVisibleResults = searchFilteredOrders.length > 0;
+  const hasVisibleResults = statusFilteredOrders.length > 0;
   const flow = supplierFlow.length > 0 ? supplierFlow : buildDefaultFlowItems();
 
   const description = ordersFetchFailed
@@ -309,7 +337,9 @@ export function OrdersExperience() {
       ? "Los pedidos se muestran, pero no pudimos cargar los nombres de clientes (se muestra el ID)."
       : hasAnyOrders
         ? viewMode === "board"
-          ? "Arrastrá pedidos entre columnas para cambiar su estado."
+          ? statusFilter.length > 0
+            ? ordersBoardFilteredDescription(locale, listOrders.length)
+            : ordersBoardEmptyDescription(locale)
           : `Tenés ${listOrders.length} ${listOrders.length === 1 ? "pedido" : "pedidos"} en la lista.`
         : "No hay pedidos todavía. Creá uno manualmente o esperá pedidos desde WhatsApp.";
 
@@ -379,29 +409,25 @@ export function OrdersExperience() {
                 <header className="shrink-0 space-y-3">
                   <OrdersToolbar
                     deliveryDateFilter={deliveryDateFilter}
-                    resultCount={searchFilteredOrders.length}
+                    flow={flow}
+                    resultCount={statusFilteredOrders.length}
                     searchQuery={searchQuery}
+                    statusFilter={statusFilter}
+                    statusLogic={statusLogic}
                     view={viewMode}
                     onClearSearch={() => setSearchQuery("")}
                     onDeliveryDateChange={setDeliveryDateFilter}
                     onSearchChange={setSearchQuery}
+                    onStatusFilterChange={handleStatusFilterChange}
                     onViewChange={handleViewChange}
                   />
-
-                  {viewMode === "list" ? (
-                    <OrderStatusFilterChips
-                      flow={flow}
-                      selected={statusFilter}
-                      onChange={handleStatusFilterChange}
-                    />
-                  ) : null}
                 </header>
 
                 {!hasVisibleResults ? (
                   <div className="min-h-0 flex-1 overflow-y-auto">
                     <div className="rounded-lg border border-dashed bg-muted/15 px-6 py-10 text-center">
                     <p className="text-muted-foreground text-sm">
-                      Ningún pedido coincide con la búsqueda o el filtro de entrega.
+                      Ningún pedido coincide con la búsqueda, el estado o el filtro de entrega.
                     </p>
                     <Button
                       className="mt-4"
@@ -411,6 +437,7 @@ export function OrdersExperience() {
                       onClick={() => {
                         setSearchQuery("");
                         setDeliveryDateFilter("");
+                        handleStatusFilterChange([], "or");
                       }}
                     >
                       Limpiar filtros
@@ -450,8 +477,9 @@ export function OrdersExperience() {
                         <OrdersBoard
                           customerNameById={customerNameById}
                           flow={flow}
-                          orders={searchFilteredOrders}
+                          orders={statusFilteredOrders}
                           ordersByStatus={ordersByStatus}
+                          visibleColumnKeys={boardColumnKeys}
                           onOrderRemoved={handleOrderRemoved}
                           onOrderSeen={handleOrderSeen}
                           onOrderStatusChange={handleOrderStatusChange}
