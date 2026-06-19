@@ -146,7 +146,7 @@ export function AuthForms({
     e.preventDefault();
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    const email = String(fd.get("email") ?? "");
+    const email = String(fd.get("email") ?? "").trim().toLowerCase();
     const password = String(fd.get("password") ?? "");
 
     const { ok, status, data } = await apiFetch("/api/auth/login", { email, password }, locale);

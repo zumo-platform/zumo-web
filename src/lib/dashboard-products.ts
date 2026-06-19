@@ -161,17 +161,49 @@ export function selectableProducts(rows: readonly DashboardProductRow[]): Dashbo
   return activeProducts(rows).filter((p) => p.status === "active");
 }
 
+const productBatchesCache = new Map<number, Promise<ProductBatch[]>>();
+const PRODUCT_BATCHES_TIMEOUT_MS = 4500;
+
 /** Client-side catalog load via Route Handler. */
 export async function fetchProductBatchesViaProxy(productId: number): Promise<ProductBatch[]> {
-  const res = await fetch(`/api/backend/dashboard/products/${productId}/batches`, {
-    cache: "no-store",
-    credentials: "include",
+  const cached = productBatchesCache.get(productId);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), PRODUCT_BATCHES_TIMEOUT_MS);
+    try {
+      const res = await fetch(`/api/backend/dashboard/products/${productId}/batches`, {
+        cache: "no-store",
+        credentials: "include",
+        signal: controller.signal,
+      });
+      const data = (await res.json().catch(() => ({}))) as { batches?: unknown[] };
+      if (!res.ok || !Array.isArray(data.batches)) {
+        throw new Error("No se pudieron cargar los lotes.");
+      }
+      return data.batches
+        .map((item) => parseProductBatch(item))
+        .filter((b): b is ProductBatch => b !== null);
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  })();
+
+  const guarded = promise.catch((err) => {
+    productBatchesCache.delete(productId);
+    throw err;
   });
-  const data = (await res.json().catch(() => ({}))) as { batches?: unknown[] };
-  if (!res.ok || !Array.isArray(data.batches)) return [];
-  return data.batches
-    .map((item) => parseProductBatch(item))
-    .filter((b): b is ProductBatch => b !== null);
+  productBatchesCache.set(productId, guarded);
+  return guarded;
+}
+
+export function prefetchProductBatchesViaProxy(productIds: readonly number[]): void {
+  for (const productId of productIds) {
+    if (!productBatchesCache.has(productId)) {
+      void fetchProductBatchesViaProxy(productId);
+    }
+  }
 }
 
 /** Client-side catalog load via Route Handler. */

@@ -13,7 +13,7 @@ import { OrdersHeaderActions } from "@/components/workspace/orders-header-action
 import { OrdersPageHeader } from "@/components/workspace/orders-page-header";
 import { OrdersToolbar } from "@/components/workspace/orders-toolbar";
 import { OrdersPageSkeleton } from "@/components/workspace/workspace-skeletons";
-import { parseDashboardCustomersEnvelope, type DashboardCustomerRow } from "@/lib/dashboard-customers";
+import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
 import {
   DEFAULT_ORDER_STATUS_FILTER,
   ORDERS_VIEW_STORAGE_KEY,
@@ -105,6 +105,7 @@ export function OrdersExperience() {
     () => flowToBoardColumns(supplierFlow).map((column) => column.key),
     [supplierFlow],
   );
+  const boardStatusKeysKey = useMemo(() => boardStatusKeys.join(","), [boardStatusKeys]);
 
   const [orders, setOrders] = useState<DashboardOrderListRow[]>(() => cachedOrdersOnMount ?? []);
   const [ordersFetchFailed, setOrdersFetchFailed] = useState(false);
@@ -165,7 +166,7 @@ export function OrdersExperience() {
     return () => {
       cancelled = true;
     };
-  }, [flowReady, boardStatusKeys.join(",")]);
+  }, [flowReady, boardStatusKeys, boardStatusKeysKey]);
 
   const replaceSearchParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -178,8 +179,11 @@ export function OrdersExperience() {
 
   useEffect(() => {
     if (urlView !== "board" && urlView !== "list") return;
-    setViewMode(urlView);
-    if (urlView === "board") setBoardMounted(true);
+    const timer = window.setTimeout(() => {
+      setViewMode(urlView);
+      if (urlView === "board") setBoardMounted(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [urlView]);
 
   useEffect(() => {
@@ -269,15 +273,6 @@ export function OrdersExperience() {
   );
 
   const listOrders = statusFilteredOrders;
-
-  const boardColumnKeys = useMemo(() => {
-    const allColumns = flowToBoardColumns(
-      supplierFlow.length > 0 ? supplierFlow : buildDefaultFlowItems(),
-    );
-    if (statusFilter.length === 0) return allColumns.map((column) => column.key);
-    const allowed = new Set(statusFilter);
-    return allColumns.filter((column) => allowed.has(column.key)).map((column) => column.key);
-  }, [supplierFlow, statusFilter]);
 
   const ordersByStatus = useMemo(() => {
     const bucket = new Map<string, DashboardOrderListRow[]>();
@@ -479,7 +474,6 @@ export function OrdersExperience() {
                           flow={flow}
                           orders={statusFilteredOrders}
                           ordersByStatus={ordersByStatus}
-                          visibleColumnKeys={boardColumnKeys}
                           onOrderRemoved={handleOrderRemoved}
                           onOrderSeen={handleOrderSeen}
                           onOrderStatusChange={handleOrderStatusChange}

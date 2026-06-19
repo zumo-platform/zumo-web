@@ -10,8 +10,9 @@ export async function POST(request: Request) {
 
   try {
     const { email, password } = await request.json();
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return NextResponse.json(
         {
           error: "ValidationError",
@@ -22,13 +23,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const tokens = await signIn({ email, password });
+    const tokens = await signIn({ email: normalizedEmail, password });
     await setAuthSession(tokens);
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     const mapped = mapCognitoError(err, locale);
-    const status = mapped.error === "UserNotConfirmedException" ? 403 : 401;
-    return NextResponse.json(mapped, { status });
+    const loginMapped =
+      mapped.error === "InvalidParameterException"
+        ? {
+            error: "NotAuthorizedException",
+            message:
+              locale === "es" ? "Correo o contraseña incorrectos." : "Invalid email or password.",
+          }
+        : mapped;
+    const status = loginMapped.error === "UserNotConfirmedException" ? 403 : 401;
+    return NextResponse.json(loginMapped, { status });
   }
 }

@@ -1,14 +1,16 @@
 "use client";
 
+import { CircleHelp } from "lucide-react";
 import { Controller, useFormContext } from "react-hook-form";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatQty } from "@/lib/inventory-format";
-import type { ProductFormValues } from "@/lib/product-form";
 import type { DashboardProductDetail } from "@/lib/product-detail";
+import type { ProductFormValues } from "@/lib/product-form";
 
 function StockRow({
   label,
@@ -26,13 +28,35 @@ function StockRow({
 function ToggleRow({
   name,
   label,
+  tooltip,
   readOnly,
 }: Readonly<{
   name: "trackStock" | "trackBatches" | "manageMinimumStock" | "availableForCustomers";
   label: string;
+  tooltip: string;
   readOnly?: boolean;
 }>) {
   const { control } = useFormContext<ProductFormValues>();
+
+  const labelNode = (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Label htmlFor={`${name}-toggle`}>{label}</Label>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            aria-label={`Ayuda: ${label}`}
+            className="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            type="button"
+          >
+            <CircleHelp aria-hidden className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64" side="top" sideOffset={6}>
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
 
   if (name === "availableForCustomers") {
     return (
@@ -41,9 +65,9 @@ function ToggleRow({
         control={control}
         render={({ field }) => (
           <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="active-toggle">{label}</Label>
+            {labelNode}
             <Switch
-              id="active-toggle"
+              id={`${name}-toggle`}
               checked={field.value}
               disabled={readOnly}
               onCheckedChange={field.onChange}
@@ -60,7 +84,7 @@ function ToggleRow({
       control={control}
       render={({ field }) => (
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor={`${name}-toggle`}>{label}</Label>
+          {labelNode}
           <Switch
             id={`${name}-toggle`}
             checked={field.value === "yes"}
@@ -123,10 +147,30 @@ export function ProductSidebar({
           <CardTitle className="text-base">Configuración</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <ToggleRow name="trackStock" label="Rastrear stock" readOnly={readOnly} />
-          <ToggleRow name="trackBatches" label="Rastrear lotes" readOnly={readOnly} />
-          <ToggleRow name="manageMinimumStock" label="Gestionar stock mínimo" readOnly={readOnly} />
-          <ToggleRow name="availableForCustomers" label="Activo / Vendible" readOnly={readOnly} />
+          <ToggleRow
+            name="trackStock"
+            label="Rastrear stock"
+            tooltip="Controla existencias físicas, disponibilidad y movimientos de inventario para este producto."
+            readOnly={readOnly}
+          />
+          <ToggleRow
+            name="trackBatches"
+            label="Rastrear lotes"
+            tooltip="Permite registrar lotes, fechas de vencimiento, proveedor y costo por lote al recibir inventario."
+            readOnly={readOnly}
+          />
+          <ToggleRow
+            name="manageMinimumStock"
+            label="Gestionar stock mínimo"
+            tooltip="Activa alertas y sugerencias de compra cuando la existencia disponible baja del mínimo configurado."
+            readOnly={readOnly}
+          />
+          <ToggleRow
+            name="availableForCustomers"
+            label="Activo / Vendible"
+            tooltip="Define si el producto está disponible para venderse y aparecer en flujos de pedidos."
+            readOnly={readOnly}
+          />
         </CardContent>
       </Card>
 

@@ -15,6 +15,7 @@ const CACHEABLE_DASHBOARD_GET_PATHS = new Set([
   "dashboard/customers",
   "dashboard/products",
   "dashboard/warehouses",
+  "dashboard/vendors",
   "dashboard/product-categories",
   "dashboard/order-status-flow",
 ]);
@@ -143,6 +144,36 @@ async function proxyRequest(
       }
       upstream_res = await upstreamFetch(bearerCandidates[i]);
       text = await upstream_res.text();
+    }
+
+    if (
+      (upstream_res.status === 401 || upstream_res.status === 403) &&
+      !refreshedTokens &&
+      typeof refreshToken === "string" &&
+      refreshToken.length > 0
+    ) {
+      try {
+        refreshedTokens = await refreshAuthSession(refreshToken);
+        await setAuthSession(refreshedTokens);
+        idToken = refreshedTokens.idToken;
+        accessToken = refreshedTokens.accessToken;
+        const refreshedCandidates = [
+          ...new Set(
+            preferAccessToken
+              ? [accessToken, idToken].filter((t): t is string => Boolean(t))
+              : [idToken, accessToken].filter((t): t is string => Boolean(t)),
+          ),
+        ];
+        for (const bearer of refreshedCandidates) {
+          upstream_res = await upstreamFetch(bearer);
+          text = await upstream_res.text();
+          if (upstream_res.status !== 401 && upstream_res.status !== 403) {
+            break;
+          }
+        }
+      } catch (err) {
+        console.error("[api/backend] Cognito refresh retry failed", err);
+      }
     }
   } catch {
     return NextResponse.json(

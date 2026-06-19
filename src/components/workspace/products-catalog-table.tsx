@@ -1,9 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type ColumnDef,
@@ -14,6 +11,8 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, MoreHorizontal, Package } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -25,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -49,18 +49,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
 import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-dialog";
 import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
 import { ProductStockPopover } from "@/components/workspace/product-stock-popover";
+import { batchExpiryState, formatDateShort, formatMoneyCRC } from "@/lib/batch-format";
 import {
   catalogIncomingQty,
   catalogTotalQty,
   fetchProductBatchesViaProxy,
   formatProductStockLabel,
+  prefetchProductBatchesViaProxy,
   type DashboardProductRow,
 } from "@/lib/dashboard-products";
-import { batchExpiryState, formatDateShort, formatMoneyCRC } from "@/lib/batch-format";
 import type { ProductBatch } from "@/lib/inventory";
 import {
   catalogAvailableQty,
@@ -83,6 +83,7 @@ import { workspaceTableCardClassName } from "@/lib/workspace-layout";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 const PAGE_SIZES = [20, 50, 100] as const;
+type LotCacheValue = ProductBatch[] | "loading" | "error";
 
 const PRICE_FMT = new Intl.NumberFormat("es", {
   minimumFractionDigits: 0,
@@ -150,9 +151,11 @@ function ProductThumb({ imageUrl }: Readonly<{ imageUrl: string | null }>) {
 export function ProductsCatalogTable({
   data,
   onCatalogChanged,
+  prefetchBatchProductIds = [],
 }: Readonly<{
   data: DashboardProductRow[];
   onCatalogChanged: () => void;
+  prefetchBatchProductIds?: readonly number[];
 }>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [categoryById, setCategoryById] = useState<Map<number, string>>(() => {
@@ -164,12 +167,22 @@ export function ProductsCatalogTable({
   const [adjustProduct, setAdjustProduct] = useState<DashboardProductRow | null>(null);
   const [transferProduct, setTransferProduct] = useState<DashboardProductRow | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [lotCache, setLotCache] = useState<Record<number, ProductBatch[] | "loading">>({});
+  const [lotCache, setLotCache] = useState<Record<number, LotCacheValue>>({});
+  const lotCacheRef = useRef<Record<number, LotCacheValue>>({});
+  const activeLotRequestsRef = useRef(new Set<number>());
   const { role } = useWorkspacePermissions();
   const canEditInventory = canMutateInventory(role);
   const router = useRouter();
 
   const productIdsKey = useMemo(() => data.map((p) => p.productId).join(","), [data]);
+  const prefetchBatchProductIdsKey = useMemo(
+    () => prefetchBatchProductIds.join(","),
+    [prefetchBatchProductIds],
+  );
+
+  useEffect(() => {
+    lotCacheRef.current = lotCache;
+  }, [lotCache]);
 
   useEffect(() => {
     if (!productIdsKey) return;
@@ -197,19 +210,67 @@ export function ProductsCatalogTable({
     setExpandedId((cur) => (cur === productId ? null : productId));
   }, []);
 
+  const loadProductLots = useCallback((productId: number) => {
+    if (lotCacheRef.current[productId] !== undefined) return;
+    if (activeLotRequestsRef.current.has(productId)) {
+      setLotCache((cache) => (cache[productId] === undefined ? { ...cache, [productId]: "loading" } : cache));
+      return;
+    }
+    activeLotRequestsRef.current.add(productId);
+    setLotCache((cache) => ({ ...cache, [productId]: "loading" }));
+    void fetchProductBatchesViaProxy(productId)
+      .then((batches) => {
+        setLotCache((c) => ({ ...c, [productId]: batches }));
+      })
+      .catch(() => {
+        setLotCache((c) => ({ ...c, [productId]: "error" }));
+      })
+      .finally(() => {
+        activeLotRequestsRef.current.delete(productId);
+      });
+  }, []);
+
   useEffect(() => {
     if (expandedId == null) return;
-    if (lotCache[expandedId] !== undefined) return;
+    loadProductLots(expandedId);
+  }, [expandedId, loadProductLots]);
+
+  useEffect(() => {
+    if (!prefetchBatchProductIdsKey) return;
+    const idsToLoad = prefetchBatchProductIdsKey
+      .split(",")
+      .map((id) => Number(id))
+      .filter(
+        (id) =>
+          Number.isFinite(id) &&
+          id > 0 &&
+          lotCacheRef.current[id] === undefined &&
+          !activeLotRequestsRef.current.has(id),
+      );
+    if (idsToLoad.length === 0) return;
+    idsToLoad.forEach((id) => activeLotRequestsRef.current.add(id));
+    prefetchProductBatchesViaProxy(idsToLoad);
     let cancelled = false;
-    setLotCache((c) => ({ ...c, [expandedId]: "loading" }));
-    void fetchProductBatchesViaProxy(expandedId).then((batches) => {
+    void Promise.allSettled(idsToLoad.map((id) => fetchProductBatchesViaProxy(id))).then((results) => {
+      idsToLoad.forEach((id) => activeLotRequestsRef.current.delete(id));
       if (cancelled) return;
-      setLotCache((c) => ({ ...c, [expandedId]: batches }));
+      setLotCache((cache) => {
+        const next = { ...cache };
+        idsToLoad.forEach((id, index) => {
+          const result = results[index];
+          if ((next[id] === undefined || next[id] === "loading") && result?.status === "fulfilled") {
+            next[id] = result.value;
+          } else if (next[id] === "loading" && result?.status === "rejected") {
+            next[id] = "error";
+          }
+        });
+        return next;
+      });
     });
     return () => {
       cancelled = true;
     };
-  }, [expandedId, lotCache]);
+  }, [prefetchBatchProductIdsKey]);
 
   const columns = useMemo<ColumnDef<DashboardProductRow>[]>(
     () => [
@@ -492,7 +553,6 @@ export function ProductsCatalogTable({
     [canEditInventory, categoryLabel, expandedId, onCatalogChanged, toggleExpand],
   );
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table useReactTable
   const table = useReactTable({
     data,
     columns,
@@ -539,15 +599,16 @@ export function ProductsCatalogTable({
                   <TableHead
                     key={header.id}
                     className={cn(
+                      "sticky top-0 z-20 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]",
                       header.column.id === "select" && "w-10 px-2",
                       header.column.id === "expander" && "w-10 px-1",
                       header.column.id === "photo" && "w-14",
                       header.column.id === "actions" && "w-10 px-2",
                       header.column.id === "incoming" && "text-right",
                       header.column.id === "total" && "text-right",
-                      header.column.id === "name" && "min-w-[10rem]",
-                      header.column.id === "sku" && "min-w-[7rem]",
-                      header.column.id === "category" && "min-w-[6rem]",
+                      header.column.id === "name" && "min-w-40",
+                      header.column.id === "sku" && "min-w-28",
+                      header.column.id === "category" && "min-w-24",
                     )}
                   >
                     {header.isPlaceholder
@@ -588,6 +649,27 @@ export function ProductsCatalogTable({
                             <div className="flex items-center gap-2 text-muted-foreground text-sm">
                               <Loader2 aria-hidden className="size-4 animate-spin" />
                               Cargando lotes…
+                            </div>
+                          ) : lotCache[row.original.productId] === "error" ? (
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
+                              <span className="text-muted-foreground">
+                                No se pudieron cargar los lotes. Intentá de nuevo.
+                              </span>
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  const productId = row.original.productId;
+                                  const next = { ...lotCacheRef.current };
+                                  delete next[productId];
+                                  lotCacheRef.current = next;
+                                  setLotCache(next);
+                                  loadProductLots(productId);
+                                }}
+                              >
+                                Reintentar
+                              </Button>
                             </div>
                           ) : (lotCache[row.original.productId] as ProductBatch[])?.length ? (
                             <Table>
@@ -662,7 +744,7 @@ export function ProductsCatalogTable({
                   table.setPageIndex(0);
                 }}
               >
-                <SelectTrigger className="h-8 w-[4.5rem]" size="sm">
+                <SelectTrigger className="h-8 w-18" size="sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
