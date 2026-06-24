@@ -16,11 +16,7 @@ export default async function ComprasPage({
   const { tab } = await searchParams;
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-5xl p-6">
-          <ComprasView initialTab={tab === "ordenes" ? "ordenes" : "proveedores"} />
-        </div>
-      </div>
+      <ComprasView initialTab={tab === "ordenes" ? "ordenes" : "proveedores"} />
     </div>
   );
 }

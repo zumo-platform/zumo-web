@@ -1,6 +1,8 @@
 "use client";
 
-import { AlertTriangle, Clock, Eye, PackageCheck, User } from "lucide-react";
+import type { KeyboardEvent } from "react";
+
+import { AlertTriangle, Clock, ExternalLink, Eye, FileText, PackageCheck, User } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,48 @@ function formatWhen(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function AssociatedOrderChip({
+  card,
+  onOpenOrder,
+}: Readonly<{
+  card: InboxCardData;
+  onOpenOrder?: (card: InboxCardData) => void;
+}>) {
+  const label = card.orderDisplayCode ?? card.orderId;
+  if (!label) return null;
+
+  if (!onOpenOrder || !card.orderId) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground text-xs">
+        <FileText aria-hidden className="size-3 shrink-0" />
+        <span className="truncate">Pedido {label}</span>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      className={cn(
+        "group/order inline-flex min-w-0 items-center gap-1 rounded-full px-1.5 py-0.5",
+        "text-muted-foreground text-xs transition-colors hover:bg-accent hover:text-foreground",
+      )}
+      title={`Abrir pedido ${label}`}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpenOrder(card);
+      }}
+    >
+      <FileText aria-hidden className="size-3 shrink-0" />
+      <span className="truncate">Pedido {label}</span>
+      <ExternalLink
+        aria-hidden
+        className="size-3 shrink-0 opacity-0 transition-opacity group-hover/order:opacity-100 group-focus-visible/order:opacity-100"
+      />
+    </button>
+  );
 }
 
 export function InboxCard({
@@ -98,13 +142,18 @@ export function InboxCard({
       ) : null}
 
       <div className="mt-2 flex items-center justify-between gap-2">
-        {isError && card.errorDisplayCode ? (
-          <Badge variant="outline">{card.errorDisplayCode}</Badge>
-        ) : card.orderDisplayCode || card.orderId ? (
-          <Badge variant="outline">{card.orderDisplayCode ?? card.orderId}</Badge>
-        ) : (
-          <span className="text-muted-foreground text-xs">{card.customerPhone}</span>
-        )}
+        <div className="flex min-w-0 items-center gap-1.5">
+          {isError && card.errorDisplayCode ? (
+            <Badge className="shrink-0" variant="outline">{card.errorDisplayCode}</Badge>
+          ) : card.orderDisplayCode || card.orderId ? (
+            <Badge className="shrink-0" variant="outline">{card.orderDisplayCode ?? card.orderId}</Badge>
+          ) : (
+            <span className="truncate text-muted-foreground text-xs">{card.customerPhone}</span>
+          )}
+          {isError ? (
+            <AssociatedOrderChip card={card} onOpenOrder={onOpenOrder} />
+          ) : null}
+        </div>
         {card.lastMessageAt ? (
           <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
             <Clock aria-hidden className="size-3" />
@@ -121,24 +170,32 @@ export function InboxCard({
     isError ? "border-destructive/40" : "border-border/60",
   );
 
+  if (isError && card.errorId && onOpenError) {
+    const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      onOpenError(card);
+    };
+
+    return (
+      <div
+        className={cn(className, "cursor-pointer")}
+        role="button"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onClick={() => onOpenError(card)}
+      >
+        {content}
+      </div>
+    );
+  }
+
   if (card.orderId && onOpenOrder) {
     return (
       <button
         className={className}
         type="button"
         onClick={() => onOpenOrder(card)}
-      >
-        {content}
-      </button>
-    );
-  }
-
-  if (card.errorId && onOpenError) {
-    return (
-      <button
-        className={className}
-        type="button"
-        onClick={() => onOpenError(card)}
       >
         {content}
       </button>

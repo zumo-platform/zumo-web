@@ -5,6 +5,18 @@ export type LotNomenclature = Readonly<{
   nextSeq: number;
 }>;
 
+export type ExpiredStockPolicy = "warn" | "block";
+
+export type BatchSettings = Readonly<{
+  trackBatchesDefault: boolean;
+  requireLotOnReceipt: boolean;
+  trackExpiry: boolean;
+  expiryWarningDays: number;
+  expiredStockPolicy: ExpiredStockPolicy;
+}>;
+
+export type TrackBatchesMode = "inherit" | "on" | "off";
+
 export const LOT_TOKENS = ["{YYYY}", "{YY}", "{MM}", "{DD}", "{VENDOR}", "{SKU}", "{SEQ}"] as const;
 
 export type LotCodeContext = Readonly<{
@@ -60,7 +72,7 @@ export async function fetchLotNomenclatureViaProxy(): Promise<LotNomenclature> {
   }
   const s = data.settings;
   if (!s) {
-    return { enabled: false, pattern: "{YYYY}{MM}{DD}-{SEQ}", seqPadding: 4, nextSeq: 1 };
+    return { enabled: true, pattern: "{YYYY}{MM}{DD}-{SEQ}", seqPadding: 4, nextSeq: 1 };
   }
   return s;
 }
@@ -103,4 +115,67 @@ export async function fetchNextLotCodeViaProxy(
     return null;
   }
   return typeof data.code === "string" ? data.code : null;
+}
+
+function parseBatchSettings(raw: unknown): BatchSettings {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const expiredStockPolicy = o.expiredStockPolicy === "block" ? "block" : "warn";
+  const days = typeof o.expiryWarningDays === "number" ? o.expiryWarningDays : Number(o.expiryWarningDays);
+  return {
+    trackBatchesDefault: o.trackBatchesDefault !== false,
+    requireLotOnReceipt: o.requireLotOnReceipt !== false,
+    trackExpiry: o.trackExpiry !== false,
+    expiryWarningDays: Number.isFinite(days) ? Math.max(1, Math.min(365, Math.trunc(days))) : 7,
+    expiredStockPolicy,
+  };
+}
+
+export async function fetchBatchSettingsViaProxy(): Promise<BatchSettings> {
+  const res = await fetch("/api/backend/dashboard/settings/batch", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    settings?: unknown;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(typeof data.error === "string" ? data.error : `Error ${res.status}`);
+  }
+  return parseBatchSettings(data.settings);
+}
+
+export async function updateBatchSettingsViaProxy(
+  input: Partial<BatchSettings>,
+): Promise<{ ok: true; settings: BatchSettings } | { ok: false; error: string }> {
+  const res = await fetch("/api/backend/dashboard/settings/batch", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody & {
+    settings?: unknown;
+  };
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(body, res.status) };
+  }
+  return { ok: true, settings: parseBatchSettings(body.settings) };
+}
+
+export async function updateProductTrackBatchesModeViaProxy(
+  productId: number,
+  mode: TrackBatchesMode,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch(`/api/backend/dashboard/products/${productId}/track-batches`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(body, res.status) };
+  }
+  return { ok: true };
 }

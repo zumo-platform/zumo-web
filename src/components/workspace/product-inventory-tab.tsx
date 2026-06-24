@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { ArrowLeftRight, PackagePlus } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,9 @@ import { InventoryAdjustDialog } from "@/components/workspace/inventory-adjust-d
 import { InventoryTransferDialog } from "@/components/workspace/inventory-transfer-dialog";
 import { batchExpiryState, formatDateShort, formatMoneyCRC } from "@/lib/batch-format";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
-import { formatQty, MOVEMENT_REASON_LABEL } from "@/lib/inventory-format";
 import type { ProductMovementRow } from "@/lib/inventory";
+import { formatQty, MOVEMENT_REASON_LABEL } from "@/lib/inventory-format";
+import type { BatchSettings } from "@/lib/lot-nomenclature";
 import type { DashboardProductDetail } from "@/lib/product-detail";
 
 const MOVEMENT_WHEN_FMT = new Intl.DateTimeFormat("es-CR", {
@@ -97,10 +98,12 @@ function StatCard({
 
 export function ProductInventoryTab({
   detail,
+  batchSettings,
   canEditInventory,
   onRefresh,
 }: Readonly<{
   detail: DashboardProductDetail;
+  batchSettings: BatchSettings | null;
   canEditInventory: boolean;
   onRefresh: () => void;
 }>) {
@@ -139,6 +142,8 @@ export function ProductInventoryTab({
     const av = r.available != null ? Number(r.available) : Number(r.onHand) - Number(r.reserved);
     return s + (Number.isFinite(av) ? av : 0);
   }, 0);
+  const expiryWarningDays =
+    detail.product.expiryWarningDays ?? batchSettings?.expiryWarningDays ?? 7;
 
   if (!detail.product.trackStock) {
     return (
@@ -229,7 +234,7 @@ export function ProductInventoryTab({
               </TableHeader>
               <TableBody>
                 {detail.batches.map((b) => {
-                  const exp = batchExpiryState(b.expiryDate, b.status);
+                  const exp = batchExpiryState(b.expiryDate, b.status, expiryWarningDays);
                   return (
                     <TableRow key={b.batchId}>
                       <TableCell className="font-medium">{b.batchNumber}</TableCell>

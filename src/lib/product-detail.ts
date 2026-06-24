@@ -1,6 +1,7 @@
 /** Types + fetch for consolidated GET /dashboard/products/{productId}. */
 
 import type { ProductMovementRow, ProductStockByWarehouseRow, ProductBatch, ProductQtySummary } from "@/lib/inventory";
+import type { TrackBatchesMode } from "@/lib/lot-nomenclature";
 
 export type DashboardProductDetailProduct = Readonly<{
   productId: number;
@@ -25,6 +26,7 @@ export type DashboardProductDetailProduct = Readonly<{
   notes: string | null;
   trackStock: boolean;
   trackBatches: boolean;
+  trackBatchesMode: TrackBatchesMode;
   expiryWarningDays: number | null;
 }>;
 
@@ -114,6 +116,8 @@ function parseProductDetailProduct(raw: unknown): DashboardProductDetailProduct 
     notes: typeof o.notes === "string" ? o.notes : null,
     trackStock: o.trackStock === true,
     trackBatches: o.trackBatches === true,
+    trackBatchesMode:
+      o.trackBatchesMode === "on" || o.trackBatchesMode === "off" ? o.trackBatchesMode : "inherit",
     expiryWarningDays:
       typeof o.expiryWarningDays === "number" && Number.isFinite(o.expiryWarningDays)
         ? o.expiryWarningDays

@@ -18,6 +18,7 @@ export function formatMoneyCRC(n: number): string {
 export function batchExpiryState(
   expiryDate: string | null,
   status: string,
+  warningDays = 7,
 ): {
   label: string;
   variant: "default" | "secondary" | "destructive" | "outline";
@@ -31,7 +32,7 @@ export function batchExpiryState(
   if (Number.isFinite(days) && days < 0) {
     return { label: "Vencido", variant: "destructive", className: "text-destructive" };
   }
-  if (Number.isFinite(days) && days <= 7) {
+  if (Number.isFinite(days) && days <= warningDays) {
     return {
       label: `Vence en ${days}d`,
       variant: "outline",

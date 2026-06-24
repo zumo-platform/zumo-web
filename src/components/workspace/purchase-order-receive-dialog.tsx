@@ -23,10 +23,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  fetchBatchSettingsViaProxy,
+  fetchNextLotCodeViaProxy,
+  type BatchSettings,
+} from "@/lib/lot-nomenclature";
+import {
   receivePurchaseOrderViaProxy,
   type PurchaseOrderItem,
 } from "@/lib/purchase-orders";
-import { fetchNextLotCodeViaProxy } from "@/lib/lot-nomenclature";
 
 type Row = {
   poItemId: string;
@@ -81,12 +85,19 @@ export function PurchaseOrderReceiveDialog({
   const initialRows = useMemo(() => buildInitialRows(items), [items]);
   const [rows, setRows] = useState<Row[]>(initialRows);
   const [pending, setPending] = useState(false);
+  const [batchSettings, setBatchSettings] = useState<BatchSettings | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setReceiptRef(crypto.randomUUID());
     const baseRows = buildInitialRows(items);
     setRows(baseRows);
+
+    void fetchBatchSettingsViaProxy()
+      .then(setBatchSettings)
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "No se pudo cargar configuración de lotes.");
+      });
 
     const batchRows = baseRows.filter((r) => r.trackBatches);
     if (batchRows.length === 0) return;
@@ -156,7 +167,7 @@ export function PurchaseOrderReceiveDialog({
         hasError = true;
         continue;
       }
-      if (r.trackBatches && !r.batchNumber.trim()) {
+      if (r.trackBatches && batchSettings?.requireLotOnReceipt && !r.batchNumber.trim()) {
         nextRows[i] = {
           ...r,
           batchError: "El lote es obligatorio para este producto.",
@@ -168,7 +179,7 @@ export function PurchaseOrderReceiveDialog({
         poItemId: r.poItemId,
         qtyReceived: q,
         batchNumber: r.trackBatches ? r.batchNumber.trim() : null,
-        expiryDate: r.trackBatches && r.expiryDate ? r.expiryDate : null,
+        expiryDate: r.trackBatches && batchSettings?.trackExpiry && r.expiryDate ? r.expiryDate : null,
       });
     }
 
@@ -227,7 +238,7 @@ export function PurchaseOrderReceiveDialog({
                   <TableHead className="text-right">Pendiente</TableHead>
                   <TableHead className="w-28">Recibir</TableHead>
                   <TableHead>Lote</TableHead>
-                  <TableHead>Vence</TableHead>
+                  {batchSettings?.trackExpiry !== false ? <TableHead>Vence</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -255,7 +266,9 @@ export function PurchaseOrderReceiveDialog({
                       {r.trackBatches ? (
                         <div className="space-y-1">
                           <Input
-                            placeholder="N.º de lote"
+                            placeholder={
+                              batchSettings?.requireLotOnReceipt ? "N.º de lote" : "N.º de lote (opcional)"
+                            }
                             value={r.batchNumber}
                             onChange={(e) =>
                               setRow(idx, {
@@ -272,17 +285,19 @@ export function PurchaseOrderReceiveDialog({
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {r.trackBatches ? (
-                        <Input
-                          type="date"
-                          value={r.expiryDate}
-                          onChange={(e) => setRow(idx, { expiryDate: e.target.value })}
-                        />
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </TableCell>
+                    {batchSettings?.trackExpiry !== false ? (
+                      <TableCell>
+                        {r.trackBatches ? (
+                          <Input
+                            type="date"
+                            value={r.expiryDate}
+                            onChange={(e) => setRow(idx, { expiryDate: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>

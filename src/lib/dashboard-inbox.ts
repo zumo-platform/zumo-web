@@ -50,6 +50,31 @@ export type InboxBoard = Readonly<{
   counts: Record<InboxColumnKey, number>;
 }>;
 
+export type ReclamoType =
+  | "wrong_quantity"
+  | "late_delivery"
+  | "wrong_product"
+  | "bad_condition"
+  | "seller_error"
+  | "seller_attitude"
+  | "near_expiry"
+  | "other";
+
+export type ReclamoStatus = "open" | "in_progress" | "resolved" | "reopened";
+
+export type InboxErrorInvolvedProduct = Readonly<{
+  productId: number | null;
+  name: string;
+  sku: string;
+}>;
+
+export type InboxErrorOrderOption = Readonly<{
+  orderId: string;
+  displayCode: string | null;
+  status: string;
+  createdAt: string | null;
+}>;
+
 export type InboxErrorDetail = Readonly<{
   errorId: string;
   displayCode: string;
@@ -57,6 +82,8 @@ export type InboxErrorDetail = Readonly<{
   title: string;
   messageText: string;
   kind: string;
+  reclamoType: ReclamoType | null;
+  resolutionNote: string;
   conversationId: string;
   messageId: string | null;
   customerId: number | null;
@@ -66,10 +93,44 @@ export type InboxErrorDetail = Readonly<{
   isUnknownCustomer: boolean;
   assignedSellerId: number | null;
   assignedSellerName: string;
+  orderId: string | null;
+  orderDisplayCode: string | null;
+  orderStatus: string | null;
+  orderOptions: InboxErrorOrderOption[];
+  involvedProducts: InboxErrorInvolvedProduct[];
   productNames: string[];
   productSkus: string[];
   createdAt: string | null;
   resolvedAt: string | null;
+}>;
+
+export const RECLAMO_TYPE_LABELS: Record<ReclamoType, string> = {
+  wrong_quantity: "Cantidad incorrecta",
+  late_delivery: "Entrega tardía",
+  wrong_product: "Producto equivocado",
+  bad_condition: "Mal estado del producto",
+  seller_error: "Error del vendedor",
+  seller_attitude: "Mal trato del vendedor",
+  near_expiry: "Próximo a vencer",
+  other: "Otro",
+};
+
+export const RECLAMO_TYPE_OPTIONS: ReadonlyArray<{ value: ReclamoType; label: string }> = (
+  Object.keys(RECLAMO_TYPE_LABELS) as ReclamoType[]
+).map((value) => ({ value, label: RECLAMO_TYPE_LABELS[value] }));
+
+export const RECLAMO_STATUS_LABELS: Record<ReclamoStatus, string> = {
+  open: "Abierto",
+  in_progress: "En proceso",
+  resolved: "Resuelto",
+  reopened: "Reabierto",
+};
+
+export type InboxSellerOption = Readonly<{
+  sellerId: number;
+  name: string;
+  role: string;
+  active: boolean;
 }>;
 
 export const INBOX_COLUMN_ORDER: readonly InboxColumnKey[] = [
@@ -154,6 +215,53 @@ export async function resolveInboxErrorViaProxy(errorId: string): Promise<InboxE
   if (!res.ok) return null;
   const body = (await res.json().catch(() => ({}))) as { error?: InboxErrorDetail };
   return body.error ?? null;
+}
+
+export type UpdateInboxErrorPayload = Partial<{
+  reclamoType: ReclamoType | null;
+  resolutionNote: string;
+  orderId: string | null;
+  involvedProducts: InboxErrorInvolvedProduct[];
+  assignedSellerId: number | null;
+  status: ReclamoStatus;
+}>;
+
+export async function updateInboxErrorViaProxy(
+  errorId: string,
+  payload: UpdateInboxErrorPayload,
+): Promise<InboxErrorDetail | null> {
+  const res = await fetch(`/api/backend/dashboard/inbox/errors/${encodeURIComponent(errorId)}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => ({}))) as { error?: InboxErrorDetail };
+  return body.error ?? null;
+}
+
+export async function fetchInboxErrorOrderLinesViaProxy(
+  errorId: string,
+): Promise<InboxErrorInvolvedProduct[]> {
+  const res = await fetch(
+    `/api/backend/dashboard/inbox/errors/${encodeURIComponent(errorId)}/order-lines`,
+    { credentials: "same-origin", cache: "no-store" },
+  );
+  if (!res.ok) return [];
+  const body = (await res.json().catch(() => ({}))) as { lines?: InboxErrorInvolvedProduct[] };
+  return body.lines ?? [];
+}
+
+export async function fetchSellerOptionsViaProxy(): Promise<InboxSellerOption[]> {
+  const res = await fetch("/api/backend/dashboard/sellers", {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const body = (await res.json().catch(() => ({}))) as { sellers?: InboxSellerOption[] };
+  return (body.sellers ?? []).filter((seller) => seller.active);
 }
 
 export function draftOrderToInboxCard(

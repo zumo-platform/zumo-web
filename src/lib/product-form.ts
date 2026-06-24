@@ -4,6 +4,7 @@ import {
   DASHBOARD_PRODUCT_UNLIMITED_STOCK,
   type DashboardProductRow,
 } from "@/lib/dashboard-products";
+import type { TrackBatchesMode } from "@/lib/lot-nomenclature";
 import type { DashboardProductDetailProduct } from "@/lib/product-detail";
 
 export const UNIT_OPTIONS = [
@@ -23,6 +24,7 @@ export type DashboardCategoryOption = Readonly<{ categoryId: number; name: strin
 
 const catSourceSchema = z.enum(["existing", "new"]);
 const yn = z.enum(["yes", "no"]);
+const trackBatchesMode = z.enum(["inherit", "on", "off"]);
 
 export const productFormSchema = z
   .object({
@@ -45,7 +47,7 @@ export const productFormSchema = z
     cost: z.string().trim().min(1, "Costo obligatorio."),
     availableForCustomers: z.boolean(),
     trackStock: yn,
-    trackBatches: yn,
+    trackBatchesMode,
     expiryWarningDays: z.string().optional(),
     notes: z.string().optional(),
   })
@@ -135,7 +137,7 @@ export const emptyProductFormValues: ProductFormValues = {
   cost: "",
   availableForCustomers: true,
   trackStock: "no",
-  trackBatches: "no",
+  trackBatchesMode: "inherit",
   expiryWarningDays: "",
   notes: "",
 };
@@ -164,7 +166,7 @@ export function productDetailToFormValues(
     cost: product.cost ?? "",
     availableForCustomers: product.status === "active",
     trackStock: product.trackStock ? "yes" : "no",
-    trackBatches: product.trackBatches ? "yes" : "no",
+    trackBatchesMode: product.trackBatchesMode,
     expiryWarningDays:
       product.expiryWarningDays != null ? String(product.expiryWarningDays) : "",
     notes: product.notes ?? "",
@@ -205,7 +207,6 @@ export function buildProductPayload(
     }
   } else {
     payload.trackStock = values.trackStock === "yes";
-    payload.trackBatches = values.trackBatches === "yes";
     const expiryRaw = values.expiryWarningDays?.trim() ?? "";
     payload.expiryWarningDays = expiryRaw.length ? Number.parseInt(expiryRaw, 10) : null;
     const notesRaw = values.notes?.trim() ?? "";
@@ -217,6 +218,15 @@ export function buildProductPayload(
   }
 
   return payload;
+}
+
+export function resolveEffectiveTrackBatchesMode(
+  mode: TrackBatchesMode,
+  globalDefault: boolean,
+): boolean {
+  if (mode === "on") return true;
+  if (mode === "off") return false;
+  return globalDefault;
 }
 
 export function validateDataUrlLocally(url: string | null): boolean {

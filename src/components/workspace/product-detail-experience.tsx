@@ -30,19 +30,24 @@ import { ProductFormFields } from "@/components/workspace/product-form-fields";
 import { ProductInventoryTab } from "@/components/workspace/product-inventory-tab";
 import { ProductOrdersTab } from "@/components/workspace/product-orders-tab";
 import { ProductSidebar } from "@/components/workspace/product-sidebar";
-import { ProductDetailSkeleton } from "@/components/workspace/workspace-skeletons";
 import { WorkspaceComingSoon } from "@/components/workspace/workspace-coming-soon";
+import { ProductDetailSkeleton } from "@/components/workspace/workspace-skeletons";
+import {
+  fetchBatchSettingsViaProxy,
+  updateProductTrackBatchesModeViaProxy,
+  type BatchSettings,
+} from "@/lib/lot-nomenclature";
+import {
+  fetchProductDetailViaProxy,
+  patchProductDetailViaProxy,
+  type DashboardProductDetail,
+} from "@/lib/product-detail";
 import {
   buildProductPayload,
   productDetailToFormValues,
   productFormSchema,
   type ProductFormValues,
 } from "@/lib/product-form";
-import {
-  fetchProductDetailViaProxy,
-  patchProductDetailViaProxy,
-  type DashboardProductDetail,
-} from "@/lib/product-detail";
 import { canMutateInventory } from "@/lib/roles";
 import { workspaceContentOuterClassName } from "@/lib/workspace-layout";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
@@ -99,13 +104,28 @@ const ProductFormEditor = forwardRef<
           toast.error(result.error);
           return;
         }
+        if (values.trackBatchesMode !== detail.product.trackBatchesMode) {
+          const modeResult = await updateProductTrackBatchesModeViaProxy(
+            productId,
+            values.trackBatchesMode,
+          );
+          if (!modeResult.ok) {
+            toast.error(modeResult.error);
+            return;
+          }
+        }
+        const refreshed = await fetchProductDetailViaProxy(productId);
+        if (!refreshed) {
+          toast.error("Producto guardado pero no se pudo recargar el detalle.");
+          return;
+        }
         toast.success("Producto guardado.");
-        onSaved(result.detail);
+        onSaved(refreshed);
       } finally {
         onSavingChange(false);
       }
     },
-    [onSaved, onSavingChange, productId, readOnly],
+    [detail.product.trackBatchesMode, onSaved, onSavingChange, productId, readOnly],
   );
 
   useImperativeHandle(ref, () => ({
@@ -140,6 +160,7 @@ export function ProductDetailExperience({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<DashboardProductDetail | null>(null);
+  const [batchSettings, setBatchSettings] = useState<BatchSettings | null>(null);
   const [categories, setCategories] = useState<DashboardCategoryOption[]>([]);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
 
@@ -164,6 +185,16 @@ export function ProductDetailExperience({
   useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setBatchSettings(await fetchBatchSettingsViaProxy());
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo cargar configuración de lotes.");
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -269,6 +300,7 @@ export function ProductDetailExperience({
             <TabsContent value="inventario" className="mt-4">
               <ProductInventoryTab
                 detail={detail}
+                batchSettings={batchSettings}
                 canEditInventory={canEdit}
                 onRefresh={() => void loadDetail()}
               />
@@ -287,7 +319,7 @@ export function ProductDetailExperience({
             </TabsContent>
           </Tabs>
 
-          <ProductSidebar detail={detail} readOnly={!canEdit} />
+          <ProductSidebar detail={detail} batchSettings={batchSettings} readOnly={!canEdit} />
         </div>
       </ProductFormEditor>
     </div>
