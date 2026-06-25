@@ -165,7 +165,13 @@ const productBatchesCache = new Map<number, Promise<ProductBatch[]>>();
 const PRODUCT_BATCHES_TIMEOUT_MS = 4500;
 
 /** Client-side catalog load via Route Handler. */
-export async function fetchProductBatchesViaProxy(productId: number): Promise<ProductBatch[]> {
+export async function fetchProductBatchesViaProxy(
+  productId: number,
+  options?: Readonly<{ force?: boolean }>,
+): Promise<ProductBatch[]> {
+  if (options?.force) {
+    productBatchesCache.delete(productId);
+  }
   const cached = productBatchesCache.get(productId);
   if (cached) return cached;
 

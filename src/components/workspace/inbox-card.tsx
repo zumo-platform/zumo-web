@@ -11,18 +11,21 @@ import {
   type InboxCard as InboxCardData,
 } from "@/lib/dashboard-inbox";
 import { inboxCardHref } from "@/lib/inbox-columns";
+import { parseInstantIso } from "@/lib/supplier-timezone";
 import { cn } from "@/lib/utils";
+import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
-function formatWhen(iso: string | null): string {
+function formatWhen(iso: string | null, timeZone: string): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("es-CR", {
+  const d = parseInstantIso(iso);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("es-CR", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    timeZone,
+  }).format(d);
 }
 
 function AssociatedOrderChip({
@@ -76,6 +79,7 @@ export function InboxCard({
   onOpenOrder?: (card: InboxCardData) => void;
   onOpenError?: (card: InboxCardData) => void;
 }>) {
+  const { timeZone } = useWorkspacePreferences();
   const title = card.isUnknownCustomer
     ? card.customerPhone || "Contacto sin registrar"
     : card.customerName;
@@ -157,7 +161,7 @@ export function InboxCard({
         {card.lastMessageAt ? (
           <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
             <Clock aria-hidden className="size-3" />
-            {formatWhen(card.lastMessageAt)}
+            {formatWhen(card.lastMessageAt, timeZone)}
           </span>
         ) : null}
       </div>

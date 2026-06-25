@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { DashboardCategoryOption } from "@/components/workspace/create-product-form";
+import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import { ProductFormFields } from "@/components/workspace/product-form-fields";
 import { ProductInventoryTab } from "@/components/workspace/product-inventory-tab";
 import { ProductOrdersTab } from "@/components/workspace/product-orders-tab";
@@ -163,6 +164,8 @@ export function ProductDetailExperience({
   const [batchSettings, setBatchSettings] = useState<BatchSettings | null>(null);
   const [categories, setCategories] = useState<DashboardCategoryOption[]>([]);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
+  const [orderDetailOpen, setOrderDetailOpen] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -185,6 +188,11 @@ export function ProductDetailExperience({
   useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
+
+  const openOrderDetail = useCallback((orderId: string) => {
+    setOrderDetailId(orderId);
+    setOrderDetailOpen(true);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -309,7 +317,7 @@ export function ProductDetailExperience({
               <WorkspaceComingSoon title="Ventas" />
             </TabsContent>
             <TabsContent value="pedidos" className="mt-4">
-              <ProductOrdersTab orders={detail.orders} />
+              <ProductOrdersTab orders={detail.orders} onOpenOrder={openOrderDetail} />
             </TabsContent>
             <TabsContent value="clientes" className="mt-4">
               <WorkspaceComingSoon title="Clientes" />
@@ -322,6 +330,15 @@ export function ProductDetailExperience({
           <ProductSidebar detail={detail} batchSettings={batchSettings} readOnly={!canEdit} />
         </div>
       </ProductFormEditor>
+      <OrderDetailSheet
+        navigationOrderIds={detail.orders.map((order) => order.orderId)}
+        open={orderDetailOpen}
+        orderId={orderDetailId}
+        onNavigateOrder={setOrderDetailId}
+        onOpenChange={setOrderDetailOpen}
+        onOrderRemoved={() => void loadDetail()}
+        onOrderStatusChange={() => void loadDetail()}
+      />
     </div>
   );
 }

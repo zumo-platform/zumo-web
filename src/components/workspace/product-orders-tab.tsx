@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 import {
   Table,
   TableBody,
@@ -58,7 +56,11 @@ function formatMoney(value: string | null): string {
 
 export function ProductOrdersTab({
   orders,
-}: Readonly<{ orders: readonly ProductOrderRow[] }>) {
+  onOpenOrder,
+}: Readonly<{
+  orders: readonly ProductOrderRow[];
+  onOpenOrder?: (orderId: string) => void;
+}>) {
   if (orders.length === 0) {
     return (
       <p className="py-16 text-center text-muted-foreground text-sm">
@@ -92,14 +94,22 @@ export function ProductOrdersTab({
               backordered > 0;
             const when = order.confirmedAt ?? order.createdAt;
             return (
-              <TableRow key={`${order.orderId}-${order.lineQuantity}`}>
+              <TableRow
+                className={onOpenOrder ? "cursor-pointer" : undefined}
+                key={`${order.orderId}-${order.lineQuantity}`}
+                onClick={() => onOpenOrder?.(order.orderId)}
+              >
                 <TableCell>
-                  <Link
+                  <button
                     className="font-medium text-primary hover:underline"
-                    href={`/orders?orderId=${encodeURIComponent(order.orderId)}`}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenOrder?.(order.orderId);
+                    }}
                   >
                     {formatOrderDisplayCode(order.orderId, order.displayCode)}
-                  </Link>
+                  </button>
                 </TableCell>
                 <TableCell>{order.customerName || "—"}</TableCell>
                 <TableCell>{formatDate(when)}</TableCell>

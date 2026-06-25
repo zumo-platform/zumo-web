@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,8 +28,17 @@ import { fetchProductsViaProxy } from "@/lib/dashboard-products";
 import {
   adjustStockViaProxy,
   fetchWarehousesViaProxy,
+  getProductStockViaProxy,
   type DashboardWarehouseRow,
+  type ProductStockByWarehouseRow,
 } from "@/lib/inventory";
+
+function rowAvailable(row: ProductStockByWarehouseRow | undefined): number {
+  if (!row) return 0;
+  const available =
+    row.available != null ? Number(row.available) : Number(row.onHand) - Number(row.reserved);
+  return Number.isFinite(available) ? Math.max(0, available) : 0;
+}
 
 export function InventoryAdjustDialog({
   open,
@@ -44,6 +53,7 @@ export function InventoryAdjustDialog({
 }>) {
   const [warehouses, setWarehouses] = useState<DashboardWarehouseRow[]>([]);
   const [products, setProducts] = useState<DashboardProductRow[]>([]);
+  const [stockRows, setStockRows] = useState<ProductStockByWarehouseRow[]>([]);
   const [productId, setProductId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [mode, setMode] = useState<"add" | "remove">("add");
@@ -66,16 +76,50 @@ export function InventoryAdjustDialog({
       },
     );
     setProductId(product ? String(product.productId) : "");
+    setStockRows([]);
     setMode("add");
     setQty("");
     setNotes("");
   }, [open, product]);
 
   useEffect(() => {
-    if (open && warehouses.length > 0 && !warehouseId) {
-      setWarehouseId(String(warehouses[0]!.warehouseId));
+    if (!open) return;
+    const pid = Number(productId);
+    if (!Number.isFinite(pid) || pid <= 0) {
+      setStockRows([]);
+      return;
     }
-  }, [open, warehouses, warehouseId]);
+
+    let cancelled = false;
+    void getProductStockViaProxy(pid).then((stock) => {
+      if (cancelled) return;
+      setStockRows(stock.byWarehouse);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, productId]);
+
+  const stockByWarehouseId = useMemo(
+    () => new Map(stockRows.map((row) => [row.warehouseId, row])),
+    [stockRows],
+  );
+  const warehouseOptions = useMemo(() => {
+    if (mode === "add") return warehouses;
+    return warehouses.filter((warehouse) => rowAvailable(stockByWarehouseId.get(warehouse.warehouseId)) > 0);
+  }, [mode, stockByWarehouseId, warehouses]);
+  const selectedAvailable = rowAvailable(stockByWarehouseId.get(Number(warehouseId)));
+
+  useEffect(() => {
+    if (!open) return;
+    if (warehouseOptions.length === 0) {
+      setWarehouseId("");
+      return;
+    }
+    if (!warehouseOptions.some((warehouse) => String(warehouse.warehouseId) === warehouseId)) {
+      setWarehouseId(String(warehouseOptions[0]!.warehouseId));
+    }
+  }, [open, warehouseId, warehouseOptions]);
 
   async function submit() {
     const pid = Number(productId);
@@ -91,6 +135,14 @@ export function InventoryAdjustDialog({
     }
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Ingresá una cantidad válida.");
+      return;
+    }
+    if (mode === "remove" && selectedAvailable <= 0) {
+      toast.error("La bodega seleccionada no tiene stock disponible para este producto.");
+      return;
+    }
+    if (mode === "remove" && amount > selectedAvailable) {
+      toast.error(`La cantidad supera el disponible en bodega (${selectedAvailable}).`);
       return;
     }
     if (!notes.trim()) {
@@ -155,13 +207,21 @@ export function InventoryAdjustDialog({
                 <SelectValue placeholder="Seleccionar bodega" />
               </SelectTrigger>
               <SelectContent>
-                {warehouses.map((wh) => (
+                {warehouseOptions.map((wh) => (
                   <SelectItem key={wh.warehouseId} value={String(wh.warehouseId)}>
                     {wh.name}
+                    {mode === "remove"
+                      ? ` (${rowAvailable(stockByWarehouseId.get(wh.warehouseId))} disp.)`
+                      : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {mode === "remove" && warehouseOptions.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                No hay bodegas con stock disponible para quitar de este producto.
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label>Operación</Label>
@@ -198,7 +258,11 @@ export function InventoryAdjustDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button disabled={pending} type="button" onClick={() => void submit()}>
+          <Button
+            disabled={pending || (mode === "remove" && warehouseOptions.length === 0)}
+            type="button"
+            onClick={() => void submit()}
+          >
             {pending ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
             Aplicar
           </Button>

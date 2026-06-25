@@ -37,14 +37,14 @@ import {
   type ReclamoType,
   type UpdateInboxErrorPayload,
 } from "@/lib/dashboard-inbox";
+import { formatInstantDateTimeInTimezone } from "@/lib/supplier-timezone";
+import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
 const NONE_VALUE = "__none";
 
-function formatErrorWhen(iso: string | null): string {
-  if (!iso) return "Unknown";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleString("es-CR", { dateStyle: "medium", timeStyle: "short" });
+function formatErrorWhen(iso: string | null, timeZone: string): string {
+  const formatted = formatInstantDateTimeInTimezone(iso, timeZone, "es-CR");
+  return formatted === "—" ? "Unknown" : formatted;
 }
 
 function nextStatusOptions(current: ReclamoStatus): ReclamoStatus[] {
@@ -81,6 +81,7 @@ export function InboxErrorSheet({
   onUpdated?: (detail: InboxErrorDetail) => void;
   onOpenOrder?: (orderId: string) => void;
 }>) {
+  const { timeZone } = useWorkspacePreferences();
   const [detail, setDetail] = useState<InboxErrorDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -196,7 +197,7 @@ export function InboxErrorSheet({
                 </div>
                 <div>
                   <dt className="text-muted-foreground text-xs">Fecha / hora</dt>
-                  <dd className="font-medium">{formatErrorWhen(detail.createdAt)}</dd>
+                  <dd className="font-medium">{formatErrorWhen(detail.createdAt, timeZone)}</dd>
                 </div>
               </dl>
 

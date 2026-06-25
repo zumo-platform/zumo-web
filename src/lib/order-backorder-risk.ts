@@ -19,10 +19,10 @@ export function productAvailableStock(product: DashboardProductRow | undefined):
 function catalogByProductId(
   catalog: ReadonlyMap<number, DashboardProductRow> | readonly DashboardProductRow[],
 ): Map<number, DashboardProductRow> {
-  if (Array.isArray(catalog)) {
-    return new Map(catalog.map((product) => [product.productId, product]));
+  if ("get" in catalog) {
+    return new Map(catalog.entries());
   }
-  return new Map(catalog);
+  return new Map(catalog.map((product) => [product.productId, product]));
 }
 
 export function orderHasBackorderRiskFromEditableLines(

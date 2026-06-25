@@ -155,7 +155,7 @@ export function canEditTargetRole(actorRole: string, targetRole: string): boolea
   const target = normalizeRole(targetRole);
   if (!actor || !target) return false;
   if (target === "owner") return false;
-  if (actor === "owner") return target !== "owner";
+  if (actor === "owner") return true;
   if (actor === "operator") return target === "seller" || target === "marketing";
   return false;
 }

@@ -13,6 +13,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { HeroMockup } from "@/components/marketing/hero-mockup";
+import { Reveal } from "@/components/marketing/reveal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,21 +101,27 @@ export default async function MarketingHomePage({ params }: PageProps) {
           </h2>
 
           <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-3">
-            <StepBlock
-              description={messages.home.steps[0][1]}
-              icon={<MessageCircle aria-hidden className="size-5" />}
-              title={messages.home.steps[0][0]}
-            />
-            <StepBlock
-              description={messages.home.steps[1][1]}
-              icon={<Sparkles aria-hidden className="size-5" />}
-              title={messages.home.steps[1][0]}
-            />
-            <StepBlock
-              description={messages.home.steps[2][1]}
-              icon={<CheckCircle2 aria-hidden className="size-5" />}
-              title={messages.home.steps[2][0]}
-            />
+            <Reveal delay={0}>
+              <StepBlock
+                description={messages.home.steps[0][1]}
+                icon={<MessageCircle aria-hidden className="size-5" />}
+                title={messages.home.steps[0][0]}
+              />
+            </Reveal>
+            <Reveal delay={0.08}>
+              <StepBlock
+                description={messages.home.steps[1][1]}
+                icon={<Sparkles aria-hidden className="size-5" />}
+                title={messages.home.steps[1][0]}
+              />
+            </Reveal>
+            <Reveal delay={0.16}>
+              <StepBlock
+                description={messages.home.steps[2][1]}
+                icon={<CheckCircle2 aria-hidden className="size-5" />}
+                title={messages.home.steps[2][0]}
+              />
+            </Reveal>
           </div>
         </div>
       </section>
@@ -129,21 +136,27 @@ export default async function MarketingHomePage({ params }: PageProps) {
           </h2>
 
           <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-            <FeatureCard
-              description={messages.home.features[0][1]}
-              icon={<Inbox aria-hidden className="size-5" />}
-              title={messages.home.features[0][0]}
-            />
-            <FeatureCard
-              description={messages.home.features[1][1]}
-              icon={<Languages aria-hidden className="size-5" />}
-              title={messages.home.features[1][0]}
-            />
-            <FeatureCard
-              description={messages.home.features[2][1]}
-              icon={<Database aria-hidden className="size-5" />}
-              title={messages.home.features[2][0]}
-            />
+            <Reveal delay={0}>
+              <FeatureCard
+                description={messages.home.features[0][1]}
+                icon={<Inbox aria-hidden className="size-5" />}
+                title={messages.home.features[0][0]}
+              />
+            </Reveal>
+            <Reveal delay={0.08}>
+              <FeatureCard
+                description={messages.home.features[1][1]}
+                icon={<Languages aria-hidden className="size-5" />}
+                title={messages.home.features[1][0]}
+              />
+            </Reveal>
+            <Reveal delay={0.16}>
+              <FeatureCard
+                description={messages.home.features[2][1]}
+                icon={<Database aria-hidden className="size-5" />}
+                title={messages.home.features[2][0]}
+              />
+            </Reveal>
           </div>
         </div>
       </section>

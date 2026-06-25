@@ -175,6 +175,13 @@ export function ProductsCatalogTable({
   const router = useRouter();
 
   const productIdsKey = useMemo(() => data.map((p) => p.productId).join(","), [data]);
+  const productInventoryKey = useMemo(
+    () =>
+      data
+        .map((p) => [p.productId, p.onHand, p.reserved, p.available, p.incoming, p.total].join(":"))
+        .join("|"),
+    [data],
+  );
   const prefetchBatchProductIdsKey = useMemo(
     () => prefetchBatchProductIds.join(","),
     [prefetchBatchProductIds],
@@ -210,15 +217,15 @@ export function ProductsCatalogTable({
     setExpandedId((cur) => (cur === productId ? null : productId));
   }, []);
 
-  const loadProductLots = useCallback((productId: number) => {
-    if (lotCacheRef.current[productId] !== undefined) return;
+  const loadProductLots = useCallback((productId: number, force = false) => {
+    if (!force && lotCacheRef.current[productId] !== undefined) return;
     if (activeLotRequestsRef.current.has(productId)) {
       setLotCache((cache) => (cache[productId] === undefined ? { ...cache, [productId]: "loading" } : cache));
       return;
     }
     activeLotRequestsRef.current.add(productId);
     setLotCache((cache) => ({ ...cache, [productId]: "loading" }));
-    void fetchProductBatchesViaProxy(productId)
+    void fetchProductBatchesViaProxy(productId, { force })
       .then((batches) => {
         setLotCache((c) => ({ ...c, [productId]: batches }));
       })
@@ -232,8 +239,17 @@ export function ProductsCatalogTable({
 
   useEffect(() => {
     if (expandedId == null) return;
-    loadProductLots(expandedId);
+    loadProductLots(expandedId, true);
   }, [expandedId, loadProductLots]);
+
+  useEffect(() => {
+    if (expandedId == null) return;
+    const next = { ...lotCacheRef.current };
+    delete next[expandedId];
+    lotCacheRef.current = next;
+    setLotCache(next);
+    loadProductLots(expandedId, true);
+  }, [expandedId, loadProductLots, productInventoryKey]);
 
   useEffect(() => {
     if (!prefetchBatchProductIdsKey) return;

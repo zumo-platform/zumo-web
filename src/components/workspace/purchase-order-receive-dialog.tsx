@@ -24,8 +24,11 @@ import {
 } from "@/components/ui/table";
 import {
   fetchBatchSettingsViaProxy,
+  fetchLotNomenclatureViaProxy,
   fetchNextLotCodeViaProxy,
+  renderLotCode,
   type BatchSettings,
+  type LotNomenclature,
 } from "@/lib/lot-nomenclature";
 import {
   receivePurchaseOrderViaProxy,
@@ -86,15 +89,35 @@ export function PurchaseOrderReceiveDialog({
   const [rows, setRows] = useState<Row[]>(initialRows);
   const [pending, setPending] = useState(false);
   const [batchSettings, setBatchSettings] = useState<BatchSettings | null>(null);
+  const [lotSettings, setLotSettings] = useState<LotNomenclature | null>(null);
+
+  const lotGuide = useMemo(() => {
+    if (!lotSettings?.enabled) return null;
+    const sampleRow = rows.find((r) => r.trackBatches);
+    return {
+      pattern: lotSettings.pattern,
+      example: renderLotCode(lotSettings.pattern, {
+        date: new Date(),
+        vendorName,
+        sku: sampleRow?.sku ?? null,
+        seq: lotSettings.nextSeq,
+        seqPadding: lotSettings.seqPadding,
+      }),
+    };
+  }, [lotSettings, rows, vendorName]);
 
   useEffect(() => {
     if (!open) return;
     setReceiptRef(crypto.randomUUID());
     const baseRows = buildInitialRows(items);
     setRows(baseRows);
+    setLotSettings(null);
 
-    void fetchBatchSettingsViaProxy()
-      .then(setBatchSettings)
+    void Promise.all([fetchBatchSettingsViaProxy(), fetchLotNomenclatureViaProxy()])
+      .then(([batch, lot]) => {
+        setBatchSettings(batch);
+        setLotSettings(lot);
+      })
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "No se pudo cargar configuración de lotes.");
       });
@@ -211,7 +234,7 @@ export function PurchaseOrderReceiveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="flex max-h-[92vh] w-[96vw] max-w-[96vw]! flex-col overflow-hidden lg:max-w-360!">
         <DialogHeader>
           <DialogTitle>Recibir mercadería</DialogTitle>
         </DialogHeader>
@@ -231,14 +254,24 @@ export function PurchaseOrderReceiveDialog({
                 Recibir todo
               </Button>
             </div>
-            <Table>
+            {lotGuide ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-muted-foreground text-sm">
+                <span className="font-medium text-foreground">Guía de nomenclatura:</span>{" "}
+                <span className="font-mono">{lotGuide.pattern}</span>
+                <span>·</span>
+                <span>Ejemplo: </span>
+                <span className="font-mono text-foreground">{lotGuide.example}</span>
+              </div>
+            ) : null}
+            <div className="min-h-0 overflow-auto">
+            <Table className="min-w-[1180px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead className="text-right">Pendiente</TableHead>
+                  <TableHead className="min-w-64">Producto</TableHead>
+                  <TableHead className="w-24 text-right">Pendiente</TableHead>
                   <TableHead className="w-28">Recibir</TableHead>
-                  <TableHead>Lote</TableHead>
-                  {batchSettings?.trackExpiry !== false ? <TableHead>Vence</TableHead> : null}
+                  <TableHead className="w-lg">Lote</TableHead>
+                  {batchSettings?.trackExpiry !== false ? <TableHead className="w-64">Vence</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -249,6 +282,7 @@ export function PurchaseOrderReceiveDialog({
                     <TableCell>
                       <div className="space-y-1">
                         <Input
+                          className="w-24"
                           inputMode="decimal"
                           min={0}
                           max={r.outstanding}
@@ -266,8 +300,10 @@ export function PurchaseOrderReceiveDialog({
                       {r.trackBatches ? (
                         <div className="space-y-1">
                           <Input
+                            className="w-120 font-mono"
                             placeholder={
-                              batchSettings?.requireLotOnReceipt ? "N.º de lote" : "N.º de lote (opcional)"
+                              lotGuide?.example ??
+                              (batchSettings?.requireLotOnReceipt ? "N.º de lote" : "N.º de lote (opcional)")
                             }
                             value={r.batchNumber}
                             onChange={(e) =>
@@ -289,6 +325,7 @@ export function PurchaseOrderReceiveDialog({
                       <TableCell>
                         {r.trackBatches ? (
                           <Input
+                            className="w-60"
                             type="date"
                             value={r.expiryDate}
                             onChange={(e) => setRow(idx, { expiryDate: e.target.value })}
@@ -302,6 +339,7 @@ export function PurchaseOrderReceiveDialog({
                 ))}
               </TableBody>
             </Table>
+            </div>
           </>
         )}
         <DialogFooter>

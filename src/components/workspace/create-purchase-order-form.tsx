@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import {
   type Control,
   type FieldErrors,
+  type Resolver,
   useFieldArray,
   useForm,
   useWatch,
@@ -117,6 +118,7 @@ export function CreatePurchaseOrderForm({
   );
 
   const defaultWarehouseId = warehouses.length === 1 ? warehouses[0]!.warehouseId : 0;
+  const resolver = zodResolver(formSchema) as Resolver<FormValues>;
 
   const {
     control,
@@ -126,7 +128,7 @@ export function CreatePurchaseOrderForm({
     getValues,
     formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver,
     defaultValues: {
       vendorId: 0,
       warehouseId: defaultWarehouseId,

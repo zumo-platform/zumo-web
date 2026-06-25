@@ -131,7 +131,7 @@ export function parsePermissionsPayload(data: unknown): TeamPermissionsPayload {
   const roleOverrides = (o.roleOverrides ?? o.role ?? {}) as TeamPermissionsPayload["roleOverrides"];
   const userOverrides = (o.userOverrides ?? o.users ?? {}) as TeamPermissionsPayload["userOverrides"];
   const sellersRaw = o.sellers;
-  const sellers: TeamPermissionsPayload["sellers"] = [];
+  const sellers: TeamPermissionsPayload["sellers"][number][] = [];
   if (Array.isArray(sellersRaw)) {
     for (const item of sellersRaw) {
       if (!item || typeof item !== "object") continue;

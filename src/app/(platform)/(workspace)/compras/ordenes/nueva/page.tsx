@@ -16,9 +16,11 @@ export default async function NewPurchaseOrderPage() {
   if (!idToken && !accessToken) redirect("/login");
 
   const apiUrl = getServerApiBaseUrl();
+  const idTokenHeader = idToken ?? undefined;
+  const accessTokenHeader = accessToken ?? undefined;
   const [vendors, warehouses, productsRaw] = await Promise.all([
-    fetchVendorsServer(apiUrl, idToken, accessToken),
-    fetchWarehousesServer(apiUrl, idToken, accessToken),
+    fetchVendorsServer(apiUrl, idTokenHeader, accessTokenHeader),
+    fetchWarehousesServer(apiUrl, idTokenHeader, accessTokenHeader),
     fetchProductsDashboard(apiUrl, idToken, accessToken),
   ]);
 

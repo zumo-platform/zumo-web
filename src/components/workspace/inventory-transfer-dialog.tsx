@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,9 +26,18 @@ import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { fetchProductsViaProxy } from "@/lib/dashboard-products";
 import {
   fetchWarehousesViaProxy,
+  getProductStockViaProxy,
   transferStockViaProxy,
   type DashboardWarehouseRow,
+  type ProductStockByWarehouseRow,
 } from "@/lib/inventory";
+
+function rowAvailable(row: ProductStockByWarehouseRow | undefined): number {
+  if (!row) return 0;
+  const available =
+    row.available != null ? Number(row.available) : Number(row.onHand) - Number(row.reserved);
+  return Number.isFinite(available) ? Math.max(0, available) : 0;
+}
 
 export function InventoryTransferDialog({
   open,
@@ -43,6 +52,7 @@ export function InventoryTransferDialog({
 }>) {
   const [warehouses, setWarehouses] = useState<DashboardWarehouseRow[]>([]);
   const [products, setProducts] = useState<DashboardProductRow[]>([]);
+  const [stockRows, setStockRows] = useState<ProductStockByWarehouseRow[]>([]);
   const [productId, setProductId] = useState("");
   const [fromWarehouseId, setFromWarehouseId] = useState("");
   const [toWarehouseId, setToWarehouseId] = useState("");
@@ -55,14 +65,69 @@ export function InventoryTransferDialog({
       ([wh, prods]) => {
         setWarehouses(wh);
         setProducts(prods);
-        if (wh[0]) setFromWarehouseId(String(wh[0].warehouseId));
-        if (wh[1]) setToWarehouseId(String(wh[1].warehouseId));
-        else if (wh[0]) setToWarehouseId("");
       },
     );
     setProductId(product ? String(product.productId) : "");
+    setFromWarehouseId("");
+    setToWarehouseId("");
     setQty("");
+    setStockRows([]);
   }, [open, product]);
+
+  useEffect(() => {
+    if (!open) return;
+    const pid = Number(productId);
+    if (!Number.isFinite(pid) || pid <= 0) {
+      setStockRows([]);
+      setFromWarehouseId("");
+      return;
+    }
+
+    let cancelled = false;
+    void getProductStockViaProxy(pid).then((stock) => {
+      if (cancelled) return;
+      setStockRows(stock.byWarehouse);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, productId]);
+
+  const stockByWarehouseId = useMemo(
+    () => new Map(stockRows.map((row) => [row.warehouseId, row])),
+    [stockRows],
+  );
+  const sourceWarehouses = useMemo(
+    () => warehouses.filter((warehouse) => rowAvailable(stockByWarehouseId.get(warehouse.warehouseId)) > 0),
+    [stockByWarehouseId, warehouses],
+  );
+  const destinationWarehouses = useMemo(
+    () => warehouses.filter((warehouse) => String(warehouse.warehouseId) !== fromWarehouseId),
+    [fromWarehouseId, warehouses],
+  );
+  const selectedSourceAvailable = rowAvailable(stockByWarehouseId.get(Number(fromWarehouseId)));
+
+  useEffect(() => {
+    if (!open) return;
+    if (sourceWarehouses.length === 0) {
+      setFromWarehouseId("");
+      return;
+    }
+    if (!sourceWarehouses.some((warehouse) => String(warehouse.warehouseId) === fromWarehouseId)) {
+      setFromWarehouseId(String(sourceWarehouses[0]!.warehouseId));
+    }
+  }, [fromWarehouseId, open, sourceWarehouses]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (destinationWarehouses.length === 0) {
+      setToWarehouseId("");
+      return;
+    }
+    if (!destinationWarehouses.some((warehouse) => String(warehouse.warehouseId) === toWarehouseId)) {
+      setToWarehouseId(String(destinationWarehouses[0]!.warehouseId));
+    }
+  }, [destinationWarehouses, open, toWarehouseId]);
 
   async function submit() {
     const pid = Number(productId);
@@ -78,12 +143,20 @@ export function InventoryTransferDialog({
       toast.error("Seleccioná bodegas de origen y destino.");
       return;
     }
+    if (selectedSourceAvailable <= 0) {
+      toast.error("La bodega de origen no tiene stock disponible para este producto.");
+      return;
+    }
     if (fromId === toId) {
       toast.error("Origen y destino deben ser distintos.");
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Ingresá una cantidad válida.");
+      return;
+    }
+    if (amount > selectedSourceAvailable) {
+      toast.error(`La cantidad supera el disponible en origen (${selectedSourceAvailable}).`);
       return;
     }
 
@@ -142,13 +215,18 @@ export function InventoryTransferDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {warehouses.map((wh) => (
+                {sourceWarehouses.map((wh) => (
                   <SelectItem key={wh.warehouseId} value={String(wh.warehouseId)}>
-                    {wh.name}
+                    {wh.name} ({rowAvailable(stockByWarehouseId.get(wh.warehouseId))} disp.)
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {sourceWarehouses.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                No hay bodegas con stock disponible para este producto.
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label>Bodega destino</Label>
@@ -157,7 +235,7 @@ export function InventoryTransferDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {warehouses.map((wh) => (
+                {destinationWarehouses.map((wh) => (
                   <SelectItem key={wh.warehouseId} value={String(wh.warehouseId)}>
                     {wh.name}
                   </SelectItem>
@@ -179,7 +257,7 @@ export function InventoryTransferDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button disabled={pending} type="button" onClick={() => void submit()}>
+          <Button disabled={pending || sourceWarehouses.length === 0} type="button" onClick={() => void submit()}>
             {pending ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
             Transferir
           </Button>
