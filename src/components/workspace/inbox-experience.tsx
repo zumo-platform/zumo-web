@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Inbox as InboxIcon, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { InboxCard } from "@/components/workspace/inbox-card";
 import { InboxErrorSheet } from "@/components/workspace/inbox-error-sheet";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
+import { InboxBoardSkeleton } from "@/components/workspace/workspace-skeletons";
 import {
   INBOX_COLUMN_LABELS,
   INBOX_COLUMN_ORDER,
@@ -100,31 +101,52 @@ export function InboxExperience() {
     setBoard(nextBoard);
   }, []);
 
+  const loadDraftOrderCards = useCallback(async (): Promise<InboxCardData[]> => {
+    const draftResult = await loadOrdersCatalog(["draft"]);
+    if (!draftResult.ok || draftResult.orders.length === 0) {
+      return [];
+    }
+
+    const customers = await loadCustomersList();
+    const customerById = new Map((customers ?? []).map((customer) => [customer.customerId, customer]));
+    return draftResult.orders
+      .filter((order) => order.status === "draft")
+      .map((order) => draftOrderToInboxCard(order, customerById.get(order.customerId)));
+  }, []);
+
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      fetchInboxBoardViaProxy(),
-      loadOrdersCatalog(["draft"], { force: true }),
-      loadCustomersList(),
-    ]).then(([b, draftResult, customers]) => {
-      if (!active) return;
-      setBoard(b);
-      if (draftResult.ok) {
-        const customerById = new Map((customers ?? []).map((customer) => [customer.customerId, customer]));
-        setDraftOrderCards(
-          draftResult.orders
-            .filter((order) => order.status === "draft")
-            .map((order) => draftOrderToInboxCard(order, customerById.get(order.customerId))),
-        );
+    void (async () => {
+      try {
+        const nextBoard = await fetchInboxBoardViaProxy();
+        if (!active) return;
+        setBoard(nextBoard);
+      } finally {
+        if (active) setReady(true);
       }
-      setReady(true);
-    });
+    })();
     return () => {
       active = false;
     };
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
+    let active = true;
+    void loadDraftOrderCards()
+      .then((cards) => {
+        if (active) setDraftOrderCards(cards);
+      })
+      .catch(() => {
+        if (active) setDraftOrderCards([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [ready, loadDraftOrderCards]);
+
+  useEffect(() => {
+    if (!ready) return;
     const POLL_MS = 15_000;
     let inFlight = false;
 
@@ -151,7 +173,7 @@ export function InboxExperience() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [refreshBoard]);
+  }, [ready, refreshBoard]);
 
   useEffect(() => {
     let active = true;
@@ -324,10 +346,7 @@ export function InboxExperience() {
       </WorkspacePageHeader>
 
       {!ready ? (
-        <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground text-sm">
-          <InboxIcon aria-hidden className="size-5 opacity-40" />
-          Cargando bandeja…
-        </div>
+        <InboxBoardSkeleton />
       ) : (
         <div className="flex h-full min-h-0 w-full flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden px-3 py-4 md:px-4">
           {INBOX_COLUMN_ORDER.map((column) => (

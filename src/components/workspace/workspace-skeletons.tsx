@@ -168,6 +168,48 @@ export function OrdersBoardSkeleton({ columnCount }: { columnCount?: number }) {
   );
 }
 
+export function InboxBoardSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Cargando inbox"
+      className="flex h-full min-h-0 w-full flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden px-3 py-4 md:px-4"
+    >
+      <span className="sr-only">Cargando…</span>
+      {Array.from({ length: 3 }).map((_, columnIndex) => (
+        <section
+          className="flex h-full min-h-0 flex-1 flex-col rounded-xl border border-border/60 bg-muted/50"
+          key={columnIndex}
+          style={{ minWidth: BOARD_MIN_COLUMN_WIDTH }}
+        >
+          <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-muted/70 px-3 py-2.5">
+            <SkeletonLine className="h-4 w-24" />
+            <SkeletonLine className="h-5 w-8 rounded-full" />
+          </header>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+            {Array.from({ length: columnIndex === 1 ? 2 : 4 }).map((_, cardIndex) => (
+              <div
+                className="rounded-lg border border-border/60 bg-card px-3 py-2.5 shadow-sm"
+                key={cardIndex}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <SkeletonLine className="h-4 w-28" />
+                  <SkeletonLine className="h-5 w-16 rounded-full" />
+                </div>
+                <SkeletonLine className="mt-3 h-3 w-4/5" />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <SkeletonLine className="h-5 w-20 rounded-full" />
+                  <SkeletonLine className="h-3 w-16" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function OrdersPageSkeleton({ viewMode = "list" }: { viewMode?: "list" | "board" }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">

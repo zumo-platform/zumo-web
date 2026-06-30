@@ -73,12 +73,7 @@ const baseMainNav: NavItem[] = [
   { href: "/products", icon: Package, label: "Inventario" },
   { href: "/matches", icon: Sparkles, label: "Matches" },
   { href: "/clients", icon: Store, label: "Clientes" },
-  {
-    disabled: true,
-    tooltip: "Pronto",
-    icon: Tag,
-    label: "Precios",
-  },
+  { href: "/precios", icon: Tag, label: "Precios" },
   { href: "/vendedores", icon: Users, label: "Vendedores" },
   { href: "/compras", icon: Truck, label: "Compras" },
   { href: "/marketing", icon: Megaphone, label: "Marketing" },

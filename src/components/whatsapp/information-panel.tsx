@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { LucideIcon } from "lucide-react";
-import { Info } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Info } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { markDashboardOrderSeenViaProxy } from "@/lib/dashboard-orders";
 import type { Conversation, Order } from "@/lib/dashboard-types";
 
@@ -39,6 +40,15 @@ function EmptyState({
 
 const BLOCK_TOOLTIP = "Creá primero el cliente para gestionar el pedido";
 
+type ExtractedOrderSort = "newest" | "oldest";
+
+function orderTimeValue(order: Order): number {
+  const raw = order.createdAt ?? null;
+  if (!raw) return 0;
+  const time = new Date(raw).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 export function InformationPanel({
   conversation,
   orders,
@@ -50,6 +60,20 @@ export function InformationPanel({
 }>) {
   const [sheetOrder, setSheetOrder] = useState<Order | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sort, setSort] = useState<ExtractedOrderSort>("newest");
+  const draftOrPending = useMemo(
+    () =>
+      conversation
+        ? ordersForConversationDraftStates(orders, conversation.conversationId)
+        : [],
+    [conversation, orders],
+  );
+  const sortedDraftOrPending = useMemo(() => {
+    const direction = sort === "newest" ? -1 : 1;
+    return [...draftOrPending].sort(
+      (a, b) => direction * (orderTimeValue(a) - orderTimeValue(b)),
+    );
+  }, [draftOrPending, sort]);
 
   if (!conversation) {
     return (
@@ -63,7 +87,6 @@ export function InformationPanel({
     );
   }
 
-  const draftOrPending = ordersForConversationDraftStates(orders, conversation.conversationId);
   const unreviewedExtracted = countUnreviewedExtractedOrders(draftOrPending);
   const unknown = isUnknownConversationCustomer(conversation);
   const pocName = conversationPocName(conversation);
@@ -90,16 +113,37 @@ export function InformationPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
-          <div className="shrink-0 px-4 pt-3 pb-2">
+          <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-2">
             <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
               Pedidos extraídos{" "}
               <span className="tabular-nums">({unreviewedExtracted})</span>
             </p>
+            {draftOrPending.length > 1 ? (
+              <Button
+                aria-label={
+                  sort === "newest"
+                    ? "Ordenar pedidos extraídos de más antiguo a más reciente"
+                    : "Ordenar pedidos extraídos de más reciente a más antiguo"
+                }
+                className="size-8 shrink-0 p-0"
+                size="sm"
+                title={sort === "newest" ? "Más reciente primero" : "Más antiguo primero"}
+                type="button"
+                variant="outline"
+                onClick={() => setSort((current) => (current === "newest" ? "oldest" : "newest"))}
+              >
+                {sort === "newest" ? (
+                  <ArrowDownWideNarrow aria-hidden className="size-4" />
+                ) : (
+                  <ArrowUpNarrowWide aria-hidden className="size-4" />
+                )}
+              </Button>
+            ) : null}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
             {draftOrPending.length > 0 ? (
               <div className="space-y-2">
-                {draftOrPending.map((order) => (
+                {sortedDraftOrPending.map((order) => (
                   <DraftOrderPreviewCard
                     key={order.orderId}
                     order={order}
