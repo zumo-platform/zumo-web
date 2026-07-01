@@ -670,6 +670,7 @@ export async function deleteDashboardDraftViaProxy(orderId: string): Promise<voi
 export type PatchOrderLineInput = Readonly<{
   productId: number;
   quantity: number;
+  unitPrice?: number;
 }>;
 
 export type PatchOrderInput = Readonly<{
@@ -686,6 +687,9 @@ export type DashboardOrderDetailLine = Readonly<{
   unit: string;
   unitPrice: number | null;
   lineSubtotal: number | null;
+  bandMin: number | null;
+  bandMax: number | null;
+  resolvedUnitPrice: number | null;
 }>;
 
 export type DashboardOrderDetail = Readonly<{
@@ -771,6 +775,9 @@ export function parseDashboardOrderDetail(
       unit: readStringFieldOrNull(line, "unit") ?? "—",
       unitPrice: asNumberOrNull(line.unitPrice),
       lineSubtotal: asNumberOrNull(line.lineSubtotal),
+      bandMin: asNumberOrNull(line.bandMin),
+      bandMax: asNumberOrNull(line.bandMax),
+      resolvedUnitPrice: asNumberOrNull(line.resolvedUnitPrice),
     });
   }
 

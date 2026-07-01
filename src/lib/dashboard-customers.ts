@@ -163,6 +163,7 @@ export type PatchDashboardCustomerInput = Readonly<{
   primaryContactEmail?: string;
   primaryContactPhone?: string;
   cartProductIds?: readonly number[];
+  priceLevelId?: number | null;
   newContacts?: ReadonlyArray<{
     name: string;
     email: string;
@@ -224,6 +225,7 @@ export type DashboardCustomerFullDetail = Readonly<{
   productIds: number[];
   /** ISO timestamp of the customer's earliest order containing each product. */
   productFirstOrderedAt: Readonly<Record<number, string>>;
+  priceLevelId: number | null;
 }>;
 
 export type CustomerDraftState = Readonly<{
@@ -251,6 +253,7 @@ export type CustomerDraftState = Readonly<{
     email: string;
     phone: string;
   }>;
+  priceLevelId: number | null;
 }>;
 
 function parseCustomerDetail(raw: unknown): DashboardCustomerDetail | null {
@@ -468,6 +471,12 @@ function parseCustomerFullDetail(
     }
   }
 
+  let priceLevelId: number | null = null;
+  if (o.priceLevelId !== null && o.priceLevelId !== undefined && o.priceLevelId !== "") {
+    const pl = typeof o.priceLevelId === "number" ? o.priceLevelId : Number(o.priceLevelId);
+    if (Number.isFinite(pl) && pl > 0) priceLevelId = pl;
+  }
+
   return {
     ...base,
     email: strOrNull("email"),
@@ -481,6 +490,7 @@ function parseCustomerFullDetail(
     contacts,
     orders,
     productIds,
+    priceLevelId,
     productFirstOrderedAt: {
       ...buildProductFirstOrderedAtFromOrders(orders),
       ...parseProductFirstOrderedAt(productFirstOrderedAtRaw),
@@ -511,6 +521,7 @@ export function customerDetailToDraft(detail: DashboardCustomerFullDetail): Cust
     primaryContactPhone: primary?.phone ?? detail.phone ?? "",
     productIds: [...detail.productIds],
     pendingContacts: [],
+    priceLevelId: detail.priceLevelId,
   };
 }
 
@@ -534,6 +545,7 @@ export function draftToSavePayload(draft: CustomerDraftState): PatchDashboardCus
     primaryContactEmail: draft.primaryContactEmail.trim(),
     primaryContactPhone: draft.primaryContactPhone.trim(),
     cartProductIds: draft.productIds,
+    priceLevelId: draft.priceLevelId,
     newContacts:
       draft.pendingContacts.length > 0
         ? draft.pendingContacts.map((c) => ({

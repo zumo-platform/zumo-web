@@ -70,6 +70,7 @@ import {
   rejectDashboardOrderViaProxy,
   type DashboardOrderPatch,
 } from "@/lib/dashboard-orders";
+import { fetchDashboardSettingsViaProxy } from "@/lib/dashboard-settings";
 import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import { patchDashboardCustomerViaProxy } from "@/lib/dashboard-customers";
 import { parseMatchCoverage } from "@/lib/match-coverage";
@@ -78,6 +79,7 @@ import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import { statusBadgeVariant, statusLabel } from "@/lib/order-status-flow";
 import {
   useSupplierTimeFormatters,
+  useWorkspacePermissions,
   useWorkspacePreferences,
 } from "@/lib/workspace-preferences-context";
 import { formatOrderMoney } from "@/lib/order-product-search";
@@ -326,6 +328,8 @@ export function OrderDetailSheet({
   onNavigateOrder,
 }: OrderDetailSheetProps) {
   const { autoCommitEnabled } = useWorkspacePreferences();
+  const { can } = useWorkspacePermissions();
+  const canOverrideBand = can("pricing.override_band");
   const { formatInstantDate, formatInstantDateTime, formatStoredDateOnly } =
     useSupplierTimeFormatters();
   const productsCatalogRef = useRef<Map<number, ProductLookup> | null>(null);
@@ -343,6 +347,7 @@ export function OrderDetailSheet({
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [pricingEngineEnabled, setPricingEngineEnabled] = useState(false);
 
   const navIndex =
     orderId && navigationOrderIds.length > 0
@@ -488,8 +493,12 @@ export function OrderDetailSheet({
 
       let catalog = productsCatalogRef.current;
       try {
-        const productRowsFetched = await fetchProductsViaProxy();
+        const [productRowsFetched, settings] = await Promise.all([
+          fetchProductsViaProxy(),
+          fetchDashboardSettingsViaProxy(),
+        ]);
         if (!signal.aborted) {
+          setPricingEngineEnabled(settings?.pricing.engineEnabled ?? false);
           const selectable = selectableProducts(productRowsFetched);
           setProductRows(selectable);
           if (editable) {
@@ -706,6 +715,12 @@ export function OrderDetailSheet({
         if (l.productId !== productId) return l;
         return { ...l, quantity: Math.max(1, l.quantity + delta) };
       }),
+    );
+  }
+
+  function changeUnitPrice(productId: number, unitPrice: number) {
+    setEditLines((prev) =>
+      prev.map((l) => (l.productId === productId ? { ...l, unitPrice } : l)),
     );
   }
 
@@ -1012,8 +1027,11 @@ export function OrderDetailSheet({
                     />
                   </div>
                   <EditableOrderLinesTable
+                    canOverrideBand={canOverrideBand}
                     lines={editLines}
+                    pricingEngineEnabled={pricingEngineEnabled}
                     onChangeQuantity={changeQuantity}
+                    onChangeUnitPrice={changeUnitPrice}
                     onRemoveLine={removeLine}
                   />
                   <div className="flex justify-end">

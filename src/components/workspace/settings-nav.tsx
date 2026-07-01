@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Building, MessageCircle, Package, Shield, Sparkles, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
+import { Building, Layers, MessageCircle, Package, Shield, Sparkles, Tag, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,6 +19,8 @@ const SETTINGS_NAV: ReadonlyArray<{
   { href: "/settings/warehouses", label: "Bodegas", icon: Warehouse },
   { href: "/settings/inventory", label: "Inventario", icon: Package },
   { href: "/settings/ai", label: "Comportamiento del AI", icon: Sparkles },
+  { href: "/settings/pricing", label: "Precios", icon: Tag },
+  { href: "/settings/price-levels", label: "Niveles de precio", icon: Layers },
   { href: "/settings/permissions", label: "Permisos del equipo", icon: Shield },
   { href: "/settings/order-flow", label: "Flujo de pedidos", icon: Workflow },
 ];

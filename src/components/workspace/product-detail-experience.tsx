@@ -30,9 +30,11 @@ import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import { ProductFormFields } from "@/components/workspace/product-form-fields";
 import { ProductInventoryTab } from "@/components/workspace/product-inventory-tab";
 import { ProductOrdersTab } from "@/components/workspace/product-orders-tab";
+import { ProductPricingCard } from "@/components/workspace/product-pricing-card";
 import { ProductSidebar } from "@/components/workspace/product-sidebar";
 import { WorkspaceComingSoon } from "@/components/workspace/workspace-coming-soon";
 import { ProductDetailSkeleton } from "@/components/workspace/workspace-skeletons";
+import { fetchDashboardSettingsViaProxy } from "@/lib/dashboard-settings";
 import {
   fetchBatchSettingsViaProxy,
   updateProductTrackBatchesModeViaProxy,
@@ -153,8 +155,9 @@ const ProductFormEditor = forwardRef<
 export function ProductDetailExperience({
   productId,
 }: Readonly<{ productId: number }>) {
-  const { role } = useWorkspacePermissions();
+  const { role, can } = useWorkspacePermissions();
   const canEdit = canMutateInventory(role);
+  const canEditPricing = can("pricing.edit_own");
   const formRef = useRef<ProductFormHandle>(null);
 
   const [loading, setLoading] = useState(true);
@@ -162,6 +165,7 @@ export function ProductDetailExperience({
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<DashboardProductDetail | null>(null);
   const [batchSettings, setBatchSettings] = useState<BatchSettings | null>(null);
+  const [pricingEngineEnabled, setPricingEngineEnabled] = useState(false);
   const [categories, setCategories] = useState<DashboardCategoryOption[]>([]);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
@@ -195,13 +199,22 @@ export function ProductDetailExperience({
   }, []);
 
   useEffect(() => {
-    void (async () => {
+    async function loadPricingSettings() {
       try {
-        setBatchSettings(await fetchBatchSettingsViaProxy());
+        const [batch, settings] = await Promise.all([
+          fetchBatchSettingsViaProxy(),
+          fetchDashboardSettingsViaProxy(),
+        ]);
+        setBatchSettings(batch);
+        setPricingEngineEnabled(settings?.pricing.engineEnabled ?? false);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "No se pudo cargar configuración de lotes.");
       }
-    })();
+    }
+    void loadPricingSettings();
+    const onFocus = () => void loadPricingSettings();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   useEffect(() => {
@@ -327,7 +340,16 @@ export function ProductDetailExperience({
             </TabsContent>
           </Tabs>
 
-          <ProductSidebar detail={detail} batchSettings={batchSettings} readOnly={!canEdit} />
+          <div className="space-y-4">
+            <ProductPricingCard
+              cost={detail.product.cost}
+              engineEnabled={pricingEngineEnabled}
+              listPrice={detail.product.price}
+              productId={productId}
+              readOnly={!canEditPricing}
+            />
+            <ProductSidebar detail={detail} batchSettings={batchSettings} readOnly={!canEdit} />
+          </div>
         </div>
       </ProductFormEditor>
       <OrderDetailSheet

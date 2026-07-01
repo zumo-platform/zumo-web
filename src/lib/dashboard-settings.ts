@@ -48,6 +48,10 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
     root.ai && typeof root.ai === "object" && !Array.isArray(root.ai)
       ? (root.ai as Record<string, unknown>)
       : null;
+  const pricingRaw =
+    root.pricing && typeof root.pricing === "object" && !Array.isArray(root.pricing)
+      ? (root.pricing as Record<string, unknown>)
+      : null;
 
   if (!businessRaw || !aiRaw) return null;
 
@@ -89,6 +93,9 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,
       chatbotEnabled: aiRaw.chatbotEnabled !== false,
       draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
+    },
+    pricing: {
+      engineEnabled: pricingRaw?.engineEnabled === true,
     },
   };
 }
@@ -197,12 +204,25 @@ export type PatchSupplierSettingsInput = Readonly<{
   aiChatbotEnabled?: boolean;
   draftExpirationHours?: DraftExpirationHours;
   defaultLocale?: "es" | "en";
+  pricingEngineEnabled?: boolean;
 }>;
 
 export type PatchSupplierSettingsResult = Readonly<{
   ai?: SupplierSettings["ai"];
   business?: Pick<SupplierSettings["business"], "defaultLocale">;
+  pricing?: SupplierSettings["pricing"];
 }>;
+
+/** Browser: GET `/api/backend/dashboard/settings` (pricing flag, etc.). */
+export async function fetchDashboardSettingsViaProxy(): Promise<SupplierSettings | null> {
+  const res = await fetch("/api/backend/dashboard/settings", {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) return null;
+  return parseSupplierSettings(body);
+}
 
 /** Browser / Route Handler: PATCH `/api/backend/dashboard/settings`. */
 export async function patchDashboardSettingsViaProxy(
@@ -236,9 +256,15 @@ export async function patchDashboardSettingsViaProxy(
       ? (body.business as Record<string, unknown>)
       : null;
 
+  const pricingRaw =
+    body.pricing && typeof body.pricing === "object" && !Array.isArray(body.pricing)
+      ? (body.pricing as Record<string, unknown>)
+      : null;
+
   const result: {
     ai?: SupplierSettings["ai"];
     business?: Pick<SupplierSettings["business"], "defaultLocale">;
+    pricing?: SupplierSettings["pricing"];
   } = {};
 
   if (aiRaw) {
@@ -255,7 +281,13 @@ export async function patchDashboardSettingsViaProxy(
     setWorkspaceLocaleCookie(defaultLocale);
   }
 
-  if (!result.ai && !result.business) {
+  if (pricingRaw) {
+    result.pricing = {
+      engineEnabled: pricingRaw.engineEnabled === true,
+    };
+  }
+
+  if (!result.ai && !result.business && !result.pricing) {
     throw new Error("Respuesta de configuración inválida.");
   }
 

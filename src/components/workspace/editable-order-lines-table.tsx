@@ -16,7 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EditableOrderLine } from "@/lib/editable-order-lines";
-import { editableLineSubtotal } from "@/lib/editable-order-lines";
+import {
+  editableLineSubtotal,
+  hasBandConstraints,
+  isPriceWithinBand,
+} from "@/lib/editable-order-lines";
 import { formatQty } from "@/lib/inventory-format";
 import { lineHasBackorderRisk } from "@/lib/order-backorder-risk";
 import { formatOrderMoney } from "@/lib/order-product-search";
@@ -26,11 +30,17 @@ import { cn } from "@/lib/utils";
 export function EditableOrderLinesTable({
   lines,
   onChangeQuantity,
+  onChangeUnitPrice,
   onRemoveLine,
+  pricingEngineEnabled = false,
+  canOverrideBand = false,
 }: Readonly<{
   lines: readonly EditableOrderLine[];
   onChangeQuantity: (productId: number, delta: number) => void;
+  onChangeUnitPrice?: (productId: number, unitPrice: number) => void;
   onRemoveLine: (key: string) => void;
+  pricingEngineEnabled?: boolean;
+  canOverrideBand?: boolean;
 }>) {
   return (
     <div className="overflow-hidden rounded-md border">
@@ -40,7 +50,7 @@ export function EditableOrderLinesTable({
             <TableHead>Producto</TableHead>
             <TableHead className="w-[72px] text-right">Stock</TableHead>
             <TableHead className="w-[168px] text-center">Cant.</TableHead>
-            <TableHead className="w-[100px] text-right">P. unit.</TableHead>
+            <TableHead className="min-w-[140px] text-right">P. unit.</TableHead>
             <TableHead className="w-[100px] text-right">Subtotal</TableHead>
             <TableHead className="w-[44px]" />
           </TableRow>
@@ -107,8 +117,51 @@ export function EditableOrderLinesTable({
                     </div>
                   )}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-sm">
-                  {formatOrderMoney(line.unitPrice)}
+                <TableCell className="text-right text-sm">
+                  {pricingEngineEnabled &&
+                  hasBandConstraints(line.bandMin, line.bandMax) &&
+                  line.bandMin != null &&
+                  line.bandMax != null &&
+                  onChangeUnitPrice &&
+                  line.productId != null ? (
+                    <div className="space-y-1">
+                      <input
+                        aria-label={`Precio unitario ${line.productName}`}
+                        className="w-full accent-primary"
+                        max={line.bandMax}
+                        min={line.bandMin}
+                        step={0.01}
+                        type="range"
+                        value={line.unitPrice}
+                        onChange={(e) => {
+                          const next = Number(e.target.value);
+                          if (!Number.isFinite(next) || !line.productId) return;
+                          if (
+                            !isPriceWithinBand(next, line.bandMin, line.bandMax) &&
+                            !canOverrideBand
+                          ) {
+                            return;
+                          }
+                          onChangeUnitPrice(line.productId, next);
+                        }}
+                      />
+                      <div className="flex justify-between text-muted-foreground text-[10px] tabular-nums">
+                        <span>{formatOrderMoney(line.bandMin)}</span>
+                        <span className="font-medium text-foreground">
+                          {formatOrderMoney(line.unitPrice)}
+                        </span>
+                        <span>{formatOrderMoney(line.bandMax)}</span>
+                      </div>
+                      {!isPriceWithinBand(line.unitPrice, line.bandMin, line.bandMax) ? (
+                        <p className="text-amber-700 text-[10px] dark:text-amber-300">
+                          Fuera de banda
+                          {canOverrideBand ? " — permitido con tu permiso" : ""}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="tabular-nums">{formatOrderMoney(line.unitPrice)}</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-sm">
                   {line.unmatched ? "—" : formatOrderMoney(editableLineSubtotal(line))}

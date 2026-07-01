@@ -66,3 +66,34 @@ export const DISCOUNT_LIST_STATUS_LABEL = {
   expired: "Vencida",
   inactive: "Inactiva",
 } as const;
+
+export const PRICING_TOOLTIPS = {
+  cost: "Lo que te cuesta comprar una unidad de este producto. Es la base para calcular tu precio de venta.",
+  avgCost:
+    "El promedio de lo que has pagado por este producto en tus últimas compras. Útil cuando el precio de compra varía.",
+  marketVal:
+    "El precio de referencia del producto en el mercado hoy. Úsalo para productos cuyo precio cambia seguido, como mariscos.",
+  yield:
+    "El porcentaje que realmente puedes vender después de limpiar o cortar. Ej: compras 10 kg pero vendes 8 kg → 80%. Sube tu costo real por unidad.",
+  margin:
+    "Tu ganancia como porcentaje del precio de venta. Un margen de 25% significa que 25% de lo que paga el cliente es ganancia.",
+  markup:
+    "Tu ganancia como porcentaje del costo. Un markup de 25% significa que agregas 25% encima de lo que te costó.",
+  basis:
+    "Sobre qué número se calcula tu precio: el costo de compra, el costo promedio, o el valor de mercado.",
+  level:
+    "Un grupo de precios para un tipo de cliente (ej. Restaurantes, Mayoreo). Defines la regla una vez y se aplica a muchos productos.",
+  band:
+    "El rango permitido de ganancia. El objetivo es el normal; el mínimo y máximo son los límites que un vendedor puede ajustar al confirmar un pedido.",
+  override:
+    "Este producto usará su propia regla en lugar de la del nivel. Úsalo solo para productos especiales.",
+  recalculate:
+    "Vuelve a calcular todos los precios de este nivel con los costos y reglas actuales. Hazlo cuando cambien tus costos.",
+  customerLevel:
+    "El nivel de precio determina qué regla de margen o sobreprecio se aplica a este cliente en sus pedidos.",
+  targetRate: "La ganancia objetivo (margen o sobreprecio) que quieres lograr con este nivel.",
+  bandMin: "El margen o sobreprecio mínimo permitido al confirmar un pedido.",
+  bandMax: "El margen o sobreprecio máximo permitido al confirmar un pedido.",
+  method:
+    "Margen: ganancia sobre el precio de venta. Sobreprecio: ganancia sobre el costo. Elige el que uses en tu negocio.",
+} as const;

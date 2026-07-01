@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CustomerPriceLevelField } from "@/components/workspace/customer-price-level-field";
 import {
   CustomerDraftField,
   CustomerDraftReadonly,
@@ -113,6 +114,10 @@ export function CustomerDetailSidebar({
           placeholder="Código"
           value={draft.clientCode}
           onChange={(clientCode) => onDraftChange({ clientCode })}
+        />
+        <CustomerPriceLevelField
+          value={draft.priceLevelId}
+          onChange={(priceLevelId) => onDraftChange({ priceLevelId })}
         />
         {labelsSlot}
         </div>

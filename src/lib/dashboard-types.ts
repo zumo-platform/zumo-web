@@ -97,6 +97,9 @@ export type SupplierSettings = {
     chatbotEnabled: boolean;
     draftExpirationHours: 24 | 48 | 72 | 168;
   };
+  pricing: {
+    engineEnabled: boolean;
+  };
 };
 
 export type WhatsappTokenType = "system_user" | "temporary" | "none" | "unknown";

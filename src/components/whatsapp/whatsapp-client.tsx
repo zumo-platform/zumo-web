@@ -20,7 +20,10 @@ import {
 } from "@/components/whatsapp/whatsapp-helpers";
 import { ErrorAlert } from "@/components/workspace/error-alert";
 import type { Conversation, Message, Order } from "@/lib/dashboard-types";
+import { loadOrdersCatalog } from "@/lib/orders-catalog-cache";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
+
+const WHATSAPP_POLL_MS = 15_000;
 
 function PanelHeading({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -53,15 +56,14 @@ export function WhatsappClient() {
   filtersRef.current = filters;
   const userTouchedFiltersRef = useRef(false);
 
-  const refreshOrders = useCallback(async () => {
+  const refreshOrders = useCallback(async (opts?: { force?: boolean }) => {
     try {
-      const [draftRes, pendingRes] = await Promise.all([
-        backendGet<{ orders?: Order[] }>("dashboard/orders?status=draft"),
-        backendGet<{ orders?: Order[] }>("dashboard/orders?status=pending"),
-      ]);
-      const merged = [...(draftRes.orders ?? []), ...(pendingRes.orders ?? [])];
+      const result = await loadOrdersCatalog(["draft", "pending"], opts);
+      if (!result.ok) return;
       const byKey = new Map<string, Order>();
-      for (const o of merged) byKey.set(o.orderId, o);
+      for (const order of result.orders) {
+        byKey.set(order.orderId, order as unknown as Order);
+      }
       setOrders([...byKey.values()]);
     } catch {
       /* non-fatal */
@@ -159,12 +161,30 @@ export function WhatsappClient() {
   }, [selectedId, fetchMessages]);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      void fetchConversations();
-      void refreshOrders();
-      if (selectedId) void fetchMessages(selectedId, { silent: true });
-    }, 8000);
-    return () => window.clearInterval(id);
+    let inFlight = false;
+
+    const tick = () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      void Promise.all([
+        fetchConversations(),
+        refreshOrders({ force: true }),
+        selectedId ? fetchMessages(selectedId, { silent: true }) : Promise.resolve(),
+      ]).finally(() => {
+        inFlight = false;
+      });
+    };
+
+    const id = window.setInterval(tick, WHATSAPP_POLL_MS);
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchConversations, fetchMessages, refreshOrders, selectedId]);
 
   useEffect(() => {
