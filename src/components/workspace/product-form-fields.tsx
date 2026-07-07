@@ -367,26 +367,30 @@ export function ProductFormFields({
         </div>
       ) : null}
 
-      <Separator />
+      {mode === "create" ? (
+        <>
+          <Separator />
 
-      <div className={`${row2} items-end`}>
-        <div className="space-y-2">
-          <Label htmlFor="price">
-            Precio de lista
-            <RequiredMark />
-          </Label>
-          <Input disabled={disabled} id="price" inputMode="decimal" {...register("price")} />
-          {errors.price ? <p className="text-destructive text-xs">{errors.price.message}</p> : null}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="cost">
-            Costo del producto
-            <RequiredMark />
-          </Label>
-          <Input disabled={disabled} id="cost" inputMode="decimal" {...register("cost")} />
-          {errors.cost ? <p className="text-destructive text-xs">{errors.cost.message}</p> : null}
-        </div>
-      </div>
+          <div className={`${row2} items-end`}>
+            <div className="space-y-2">
+              <Label htmlFor="price">
+                Precio de lista
+                <RequiredMark />
+              </Label>
+              <Input disabled={disabled} id="price" inputMode="decimal" {...register("price")} />
+              {errors.price ? <p className="text-destructive text-xs">{errors.price.message}</p> : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cost">
+                Costo del producto
+                <RequiredMark />
+              </Label>
+              <Input disabled={disabled} id="cost" inputMode="decimal" {...register("cost")} />
+              {errors.cost ? <p className="text-destructive text-xs">{errors.cost.message}</p> : null}
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {mode === "create" ? (
         <>

@@ -99,6 +99,7 @@ export type SupplierSettings = {
   };
   pricing: {
     engineEnabled: boolean;
+    defaultCurrency: "USD" | "CRC";
   };
 };
 

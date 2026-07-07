@@ -120,7 +120,11 @@ async function parseJson(res: Response): Promise<unknown> {
 
 export async function patchProductPricingInputsViaProxy(
   productId: number,
-  input: Readonly<{ marketVal?: string | null; yieldPercent?: string | null }>,
+  input: Readonly<{
+    avgCost?: string | null;
+    marketVal?: string | null;
+    yieldPercent?: string | null;
+  }>,
 ): Promise<ProductPricingDetail | null> {
   const res = await fetch(backendPath(`/dashboard/products/${String(productId)}/pricing`), {
     method: "PATCH",
@@ -179,15 +183,17 @@ export async function deleteProductPriceOverrideViaProxy(
   return parsePricing(data.pricing);
 }
 
-export function formatMoney(value: string | null | undefined): string {
-  if (value == null || value.trim() === "") return "—";
-  const n = Number(value);
-  if (!Number.isFinite(n)) return value;
-  return new Intl.NumberFormat("es", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(n);
+import {
+  DEFAULT_WORKSPACE_CURRENCY,
+  formatWorkspaceMoney,
+  type WorkspaceCurrency,
+} from "@/lib/workspace-currency";
+
+export function formatMoney(
+  value: string | null | undefined,
+  currency: WorkspaceCurrency = DEFAULT_WORKSPACE_CURRENCY,
+): string {
+  return formatWorkspaceMoney(value, currency);
 }
 
 export function formatRatePct(value: string | null | undefined): string {

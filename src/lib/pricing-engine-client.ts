@@ -78,8 +78,8 @@ export function ratePctFromPrice(
 
 export function marginRateLabel(method: PriceLevelMethod, kind: "min" | "default" | "max"): string {
   const noun = method === "margin" ? "Margen" : "Sobreprecio";
-  if (kind === "min") return `${noun} mín`;
-  if (kind === "max") return `${noun} máx`;
+  if (kind === "min") return `${noun} mínimo`;
+  if (kind === "max") return `${noun} máximo`;
   return method === "margin" ? "Margen objetivo" : "Sobreprecio objetivo";
 }
 

@@ -30,7 +30,7 @@ import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import { ProductFormFields } from "@/components/workspace/product-form-fields";
 import { ProductInventoryTab } from "@/components/workspace/product-inventory-tab";
 import { ProductOrdersTab } from "@/components/workspace/product-orders-tab";
-import { ProductPricingCard } from "@/components/workspace/product-pricing-card";
+import { ProductPricingTab } from "@/components/workspace/product-pricing-card";
 import { ProductSidebar } from "@/components/workspace/product-sidebar";
 import { WorkspaceComingSoon } from "@/components/workspace/workspace-coming-soon";
 import { ProductDetailSkeleton } from "@/components/workspace/workspace-skeletons";
@@ -166,6 +166,7 @@ export function ProductDetailExperience({
   const [detail, setDetail] = useState<DashboardProductDetail | null>(null);
   const [batchSettings, setBatchSettings] = useState<BatchSettings | null>(null);
   const [pricingEngineEnabled, setPricingEngineEnabled] = useState(false);
+  const [defaultCurrency, setDefaultCurrency] = useState<"USD" | "CRC">("CRC");
   const [categories, setCategories] = useState<DashboardCategoryOption[]>([]);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
@@ -207,6 +208,7 @@ export function ProductDetailExperience({
         ]);
         setBatchSettings(batch);
         setPricingEngineEnabled(settings?.pricing.engineEnabled ?? false);
+        setDefaultCurrency(settings?.pricing.defaultCurrency ?? "CRC");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "No se pudo cargar configuración de lotes.");
       }
@@ -303,6 +305,7 @@ export function ProductDetailExperience({
           <Tabs defaultValue="detalles" className="min-w-0">
             <TabsList className="flex h-auto w-full flex-wrap justify-start">
               <TabsTrigger value="detalles">Detalles</TabsTrigger>
+              <TabsTrigger value="precio">Precio</TabsTrigger>
               <TabsTrigger value="inventario">Inventario</TabsTrigger>
               <TabsTrigger value="ventas">Ventas</TabsTrigger>
               <TabsTrigger value="pedidos">Pedidos</TabsTrigger>
@@ -316,6 +319,17 @@ export function ProductDetailExperience({
                 categories={categories}
                 categoriesLoadError={categoriesError}
                 readOnly={!canEdit}
+              />
+            </TabsContent>
+            <TabsContent value="precio" className="mt-4">
+              <ProductPricingTab
+                canEditProductFields={canEdit}
+                currency={defaultCurrency}
+                engineEnabled={pricingEngineEnabled}
+                productCost={detail.product.cost}
+                productId={productId}
+                productListPrice={detail.product.price}
+                readOnly={!canEditPricing}
               />
             </TabsContent>
             <TabsContent value="inventario" className="mt-4">
@@ -340,16 +354,7 @@ export function ProductDetailExperience({
             </TabsContent>
           </Tabs>
 
-          <div className="space-y-4">
-            <ProductPricingCard
-              cost={detail.product.cost}
-              engineEnabled={pricingEngineEnabled}
-              listPrice={detail.product.price}
-              productId={productId}
-              readOnly={!canEditPricing}
-            />
-            <ProductSidebar detail={detail} batchSettings={batchSettings} readOnly={!canEdit} />
-          </div>
+          <ProductSidebar detail={detail} batchSettings={batchSettings} readOnly={!canEdit} />
         </div>
       </ProductFormEditor>
       <OrderDetailSheet

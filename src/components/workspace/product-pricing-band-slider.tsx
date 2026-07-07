@@ -1,7 +1,9 @@
 "use client";
 
+import type { CSSProperties, ReactNode } from "react";
+
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { InfoTip } from "@/components/workspace/info-tip";
 import type { PriceLevelMethod } from "@/lib/dashboard-price-levels";
 import {
   marginRateLabel,
@@ -11,11 +13,192 @@ import {
 } from "@/lib/pricing-engine-client";
 import { formatMoney } from "@/lib/product-pricing";
 import { cn } from "@/lib/utils";
+import { currencySymbol, type WorkspaceCurrency } from "@/lib/workspace-currency";
 
 const SLIDER_MAX: Record<PriceLevelMethod, number> = {
   margin: 95,
   markup: 100,
 };
+
+function sliderFillStyle(value: number, max: number): CSSProperties {
+  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+  return {
+    background: `linear-gradient(to right, rgb(251 191 36) 0%, rgb(251 191 36) ${pct}%, rgb(229 231 235) ${pct}%, rgb(229 231 235) 100%)`,
+  };
+}
+
+function formatRatePct(ratePct: number): string {
+  return ratePct % 1 === 0 ? ratePct.toFixed(0) : ratePct.toFixed(1);
+}
+
+function PricingSliderRow({
+  label,
+  labelTip,
+  sliderId,
+  min,
+  max,
+  step,
+  value,
+  disabled,
+  rightInput,
+  onChange,
+}: Readonly<{
+  label: string;
+  labelTip?: string;
+  sliderId: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  disabled?: boolean;
+  rightInput: ReactNode;
+  onChange: (value: number) => void;
+}>) {
+  const clamped = Math.min(max, Math.max(min, value));
+  const thumbLeft =
+    max > min ? Math.min(96, Math.max(4, ((clamped - min) / (max - min)) * 100)) : 0;
+
+  return (
+    <div className="grid grid-cols-[8.5rem_1fr_7rem] items-center gap-x-4 gap-y-1 py-3">
+      <span className="flex items-center gap-1 text-sm">
+        {label}
+        {labelTip ? <InfoTip label={label} text={labelTip} /> : null}
+      </span>
+      <div className="relative min-w-0 px-0.5 pt-7 pb-1">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute top-0 z-20 -translate-x-1/2 rounded-md border border-border bg-background px-2.5 py-1 font-semibold text-foreground text-xs shadow-md tabular-nums"
+          style={{ left: `${thumbLeft}%` }}
+        >
+          {formatRatePct(clamped)}%
+        </span>
+        <input
+          aria-label={label}
+          aria-valuetext={`${formatRatePct(clamped)}%`}
+          className={cn(
+            "relative z-10 block h-2.5 w-full cursor-pointer appearance-none rounded-full",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "[&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none",
+            "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2",
+            "[&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-amber-400",
+            "[&::-webkit-slider-thumb]:shadow-md",
+            "[&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full",
+            "[&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white",
+            "[&::-moz-range-thumb]:bg-amber-400 [&::-moz-range-thumb]:shadow-md",
+          )}
+          disabled={disabled}
+          id={sliderId}
+          max={max}
+          min={min}
+          step={step}
+          style={sliderFillStyle(clamped - min, max - min)}
+          type="range"
+          value={clamped}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+      </div>
+      {rightInput}
+    </div>
+  );
+}
+
+function MoneyInput({
+  value,
+  disabled,
+  currency,
+  onChange,
+}: Readonly<{
+  value: number | null;
+  disabled?: boolean;
+  currency: WorkspaceCurrency;
+  onChange: (raw: string) => void;
+}>) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground text-xs">
+        {currencySymbol(currency)}
+      </span>
+      <Input
+        className="h-9 bg-muted/40 pl-6 text-right tabular-nums text-sm"
+        disabled={disabled}
+        inputMode="decimal"
+        value={value != null ? value.toFixed(2) : ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+function PercentInput({
+  value,
+  disabled,
+  onChange,
+}: Readonly<{
+  value: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}>) {
+  return (
+    <div className="relative">
+      <Input
+        className="h-9 bg-muted/40 pr-7 text-right tabular-nums text-sm"
+        disabled={disabled}
+        inputMode="decimal"
+        value={String(value)}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n)) onChange(n);
+        }}
+      />
+      <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground text-xs">
+        %
+      </span>
+    </div>
+  );
+}
+
+export function ProductPricingPercentSlider({
+  label,
+  labelTip,
+  sliderId,
+  min = 0,
+  max,
+  step = 1,
+  value,
+  disabled,
+  onChange,
+}: Readonly<{
+  label: string;
+  labelTip?: string;
+  sliderId: string;
+  min?: number;
+  max: number;
+  step?: number;
+  value: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}>) {
+  return (
+    <PricingSliderRow
+      disabled={disabled}
+      label={label}
+      labelTip={labelTip}
+      max={max}
+      min={min}
+      rightInput={
+        <PercentInput
+          disabled={disabled}
+          value={value}
+          onChange={(n) => onChange(Math.min(max, Math.max(min, n)))}
+        />
+      }
+      sliderId={sliderId}
+      step={step}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
 
 export function ProductPricingBandSlider({
   kind,
@@ -23,6 +206,8 @@ export function ProductPricingBandSlider({
   ratePct,
   effectiveCost,
   disabled,
+  currency,
+  labelTip,
   onRateChange,
 }: Readonly<{
   kind: "min" | "default" | "max";
@@ -30,6 +215,8 @@ export function ProductPricingBandSlider({
   ratePct: number;
   effectiveCost: number | null;
   disabled?: boolean;
+  currency: WorkspaceCurrency;
+  labelTip?: string;
   onRateChange: (ratePct: number) => void;
 }>) {
   const max = SLIDER_MAX[method];
@@ -46,119 +233,106 @@ export function ProductPricingBandSlider({
   }
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-muted-foreground text-xs" htmlFor={sliderId}>
-          {marginRateLabel(method, kind)}
-        </Label>
-        <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-[11px] tabular-nums">
-          {ratePct % 1 === 0 ? ratePct.toFixed(0) : ratePct.toFixed(1)}%
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <input
-          aria-label={marginRateLabel(method, kind)}
-          className={cn(
-            "h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-muted",
-            "accent-amber-400 disabled:cursor-not-allowed disabled:opacity-50",
-            "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
-            "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400",
-            "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0",
-            "[&::-moz-range-thumb]:bg-amber-400",
-          )}
+    <PricingSliderRow
+      disabled={disabled || effectiveCost == null}
+      label={marginRateLabel(method, kind)}
+      labelTip={labelTip}
+      max={max}
+      min={0}
+      sliderId={sliderId}
+      step={1}
+      value={Math.min(max, Math.max(0, ratePct))}
+      rightInput={
+        <MoneyInput
+          currency={currency}
           disabled={disabled || effectiveCost == null}
-          id={sliderId}
-          max={max}
-          min={0}
-          step={1}
-          type="range"
-          value={Math.min(max, Math.max(0, ratePct))}
-          onChange={(e) => onRateChange(Number(e.target.value))}
+          value={price}
+          onChange={handlePriceInput}
         />
-        <div className="relative w-22 shrink-0">
-          <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground text-xs">
-            $
-          </span>
-          <Input
-            className="h-8 pl-5 text-right tabular-nums text-xs"
-            disabled={disabled || effectiveCost == null}
-            inputMode="decimal"
-            value={price != null ? price.toFixed(2) : ""}
-            onChange={(e) => handlePriceInput(e.target.value)}
-          />
-        </div>
-      </div>
-    </div>
+      }
+      onChange={onRateChange}
+    />
   );
 }
 
 export function ProductPricingYieldSlider({
   yieldPct,
   disabled,
+  labelTip,
   onChange,
 }: Readonly<{
   yieldPct: number;
   disabled?: boolean;
+  labelTip?: string;
   onChange: (value: number) => void;
 }>) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-muted-foreground text-xs" htmlFor="product-yield-pct">
-          Rendimiento
-        </Label>
-        <span className="rounded bg-muted px-1.5 py-0.5 font-medium text-[11px] tabular-nums">
-          {yieldPct % 1 === 0 ? yieldPct.toFixed(0) : yieldPct.toFixed(1)}%
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <input
-          aria-label="Rendimiento"
-          className={cn(
-            "h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-muted",
-            "accent-amber-400 disabled:cursor-not-allowed disabled:opacity-50",
-            "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
-            "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400",
-            "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0",
-            "[&::-moz-range-thumb]:bg-amber-400",
-          )}
+    <PricingSliderRow
+      disabled={disabled}
+      label="Rendimiento"
+      labelTip={labelTip}
+      max={100}
+      min={1}
+      sliderId="product-yield-pct"
+      step={1}
+      value={Math.min(100, Math.max(1, yieldPct))}
+      rightInput={
+        <PercentInput
           disabled={disabled}
-          id="product-yield-pct"
-          max={100}
-          min={1}
-          step={1}
-          type="range"
-          value={Math.min(100, Math.max(1, yieldPct))}
-          onChange={(e) => onChange(Number(e.target.value))}
+          value={yieldPct}
+          onChange={(n) => onChange(Math.min(100, Math.max(1, n)))}
         />
-        <div className="relative w-22 shrink-0">
-          <Input
-            className="h-8 text-right tabular-nums text-xs"
-            disabled={disabled}
-            inputMode="decimal"
-            value={String(yieldPct)}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              if (Number.isFinite(n)) onChange(Math.min(100, Math.max(1, n)));
-            }}
-          />
-          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground text-xs">
-            %
-          </span>
-        </div>
-      </div>
+      }
+      onChange={onChange}
+    />
+  );
+}
+
+export function ProductPricingStaticRow({
+  label,
+  value,
+  currency,
+}: Readonly<{ label: string; value: string | null; currency: WorkspaceCurrency }>) {
+  return (
+    <div className="grid grid-cols-[7.5rem_1fr] items-center gap-4 py-2">
+      <span className="text-sm">{label}</span>
+      <span className="font-semibold text-sm tabular-nums">{formatMoney(value, currency)}</span>
     </div>
   );
 }
 
-export function ProductPricingListRow({
+export function ProductPricingMoneyField({
   label,
   value,
-}: Readonly<{ label: string; value: string | null }>) {
+  disabled,
+  readOnly,
+  currency,
+  onChange,
+}: Readonly<{
+  label: string;
+  value: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  currency: WorkspaceCurrency;
+  onChange?: (value: string) => void;
+}>) {
   return (
-    <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium tabular-nums">{formatMoney(value)}</span>
+    <div className="grid grid-cols-[7.5rem_1fr] items-center gap-4 py-2">
+      <span className="text-sm">{label}</span>
+      <div className="relative max-w-xs">
+        <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground text-xs">
+          {currencySymbol(currency)}
+        </span>
+        <Input
+          className="h-9 bg-muted/40 pl-6 tabular-nums text-sm"
+          disabled={disabled}
+          inputMode="decimal"
+          readOnly={readOnly}
+          value={value}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          onBlur={onChange ? undefined : undefined}
+        />
+      </div>
     </div>
   );
 }

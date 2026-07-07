@@ -2,6 +2,7 @@ import { joinApiGatewayPath } from "@/lib/api";
 import type { SupplierSettings } from "@/lib/dashboard-types";
 import { DEFAULT_SUPPLIER_TIMEZONE } from "@/lib/supplier-timezone";
 import { parseWorkspaceLocale, setWorkspaceLocaleCookie } from "@/lib/workspace-locale";
+import { parseWorkspaceCurrency } from "@/lib/workspace-currency";
 
 function uniqBearerCandidates(idToken?: string | null, accessToken?: string | null): string[] {
   return [
@@ -96,6 +97,7 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
     },
     pricing: {
       engineEnabled: pricingRaw?.engineEnabled === true,
+      defaultCurrency: parseWorkspaceCurrency(pricingRaw?.defaultCurrency),
     },
   };
 }
@@ -205,6 +207,7 @@ export type PatchSupplierSettingsInput = Readonly<{
   draftExpirationHours?: DraftExpirationHours;
   defaultLocale?: "es" | "en";
   pricingEngineEnabled?: boolean;
+  defaultCurrency?: "USD" | "CRC";
 }>;
 
 export type PatchSupplierSettingsResult = Readonly<{
@@ -284,6 +287,7 @@ export async function patchDashboardSettingsViaProxy(
   if (pricingRaw) {
     result.pricing = {
       engineEnabled: pricingRaw.engineEnabled === true,
+      defaultCurrency: parseWorkspaceCurrency(pricingRaw.defaultCurrency),
     };
   }
 

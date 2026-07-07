@@ -1,39 +1,45 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Loader2, RotateCcw } from "lucide-react";
+import { useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { InfoTip } from "@/components/workspace/info-tip";
+import { ProductPricingBaseFields } from "@/components/workspace/product-pricing-base-fields";
 import {
   ProductPricingBandSlider,
-  ProductPricingListRow,
   ProductPricingYieldSlider,
 } from "@/components/workspace/product-pricing-band-slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PRICE_BASIS_LABEL, PRICE_METHOD_LABEL } from "@/lib/dashboard-price-levels";
+import type { PriceLevelBasis } from "@/lib/dashboard-price-levels";
 import { PRICING_TOOLTIPS } from "@/lib/pricing-copy";
 import {
   acquirePriceLabel,
   basisAcquirePrice,
   effectiveCost,
   parsePricingNumber,
-  priceFromRatePct,
 } from "@/lib/pricing-engine-client";
 import {
   deleteProductPriceOverrideViaProxy,
   fetchProductPricingViaProxy,
-  formatMoney,
   patchProductPricingInputsViaProxy,
   upsertProductPriceOverrideViaProxy,
   type ProductLevelPriceRow,
   type ProductPricingDetail,
 } from "@/lib/product-pricing";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
+import { currencySymbol, type WorkspaceCurrency } from "@/lib/workspace-currency";
 
 function effectiveRatePct(
   override: string | null | undefined,
@@ -58,13 +64,74 @@ function ratesMatchLevel(row: ProductLevelPriceRow, min: number, def: number, ma
   return minOk && defOk && maxOk;
 }
 
-function LevelPricingPanel({
+function RequiredMark() {
+  return (
+    <abbr className="ml-0.5 cursor-help text-destructive no-underline" title="Obligatorio">
+      *
+    </abbr>
+  );
+}
+
+function PricingMoneyInput({
+  currency,
+  disabled,
+  id,
+  label,
+  labelTip,
+  required,
+  value,
+  onBlur,
+  onChange,
+}: Readonly<{
+  currency: WorkspaceCurrency;
+  disabled?: boolean;
+  id: string;
+  label: string;
+  labelTip?: string;
+  required?: boolean;
+  value: string;
+  onBlur?: () => void;
+  onChange: (value: string) => void;
+}>) {
+  return (
+    <div className="grid grid-cols-[8.5rem_1fr] items-center gap-4">
+      <span className="flex items-center gap-1 text-sm">
+        {label}
+        {required ? <RequiredMark /> : null}
+        {labelTip ? <InfoTip label={label} text={labelTip} /> : null}
+      </span>
+      <div className="relative max-w-xs">
+        <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground text-xs">
+          {currencySymbol(currency)}
+        </span>
+        <input
+          className="flex h-9 w-full rounded-md border border-input bg-background px-3 pl-6 text-sm tabular-nums shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled}
+          id={id}
+          inputMode="decimal"
+          value={value}
+          onBlur={onBlur}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function marginTip(method: "margin" | "markup", kind: "min" | "default" | "max"): string {
+  if (kind === "min") return PRICING_TOOLTIPS.bandMin;
+  if (kind === "max") return PRICING_TOOLTIPS.bandMax;
+  return method === "margin" ? PRICING_TOOLTIPS.targetRate : PRICING_TOOLTIPS.markup;
+}
+
+function LevelPricingSection({
   productId,
   row,
   pricing,
   yieldPct,
   marketVal,
   canEdit,
+  currency,
   onUpdated,
 }: Readonly<{
   productId: number;
@@ -73,6 +140,7 @@ function LevelPricingPanel({
   yieldPct: number;
   marketVal: string;
   canEdit: boolean;
+  currency: WorkspaceCurrency;
   onUpdated: (detail: ProductPricingDetail) => void;
 }>) {
   const inputs = useMemo(
@@ -111,12 +179,9 @@ function LevelPricingPanel({
     dirtyRef.current = false;
   }, [row]);
 
-  const derivedDefault =
-    eff != null ? priceFromRatePct(eff, row.method, defaultRate) : parsePricingNumber(row.derivedPrice);
-
   async function saveOverride() {
     if (!canEdit || eff == null) {
-      toast.error("Completá el costo base antes de guardar.");
+      toast.error(`Completá ${acquirePriceLabel(row.basis).toLowerCase()} para guardar.`);
       return;
     }
     if (minRate > defaultRate) {
@@ -154,12 +219,13 @@ function LevelPricingPanel({
   }
 
   async function revertToLevel() {
-    if (!canEdit || !row.hasOverride) return;
+    if (!canEdit || (!row.hasOverride && !dirtyRef.current)) return;
     setSaving(true);
     try {
       const detail = await deleteProductPriceOverrideViaProxy(productId, row.priceLevelId);
       if (detail) onUpdated(detail);
       toast.success("Volvió a heredar del nivel.");
+      dirtyRef.current = false;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo revertir.");
     } finally {
@@ -172,74 +238,68 @@ function LevelPricingPanel({
   }
 
   const maxRateValue = maxRate ?? defaultRate;
+  const slidersDisabled = !canEdit || saving || eff == null;
 
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="font-medium text-sm">{row.levelName}</p>
-          <p className="text-muted-foreground text-xs">
-            {PRICE_METHOD_LABEL[row.method]} sobre {PRICE_BASIS_LABEL[row.basis].toLowerCase()}
-          </p>
-        </div>
-        {derivedDefault != null ? (
-          <p className="font-semibold text-sm tabular-nums">{formatMoney(String(derivedDefault))}</p>
-        ) : (
-          <p className="text-muted-foreground text-xs">Sin costo base</p>
-        )}
+    <div className="space-y-1 border-t pt-4">
+      <div className="mb-3">
+        <p className="font-medium text-sm">{row.levelName}</p>
+        <p className="text-muted-foreground text-xs">
+          {PRICE_METHOD_LABEL[row.method]} sobre {PRICE_BASIS_LABEL[row.basis].toLowerCase()}
+          {row.hasOverride || dirtyRef.current ? " · Ajuste manual" : ""}
+        </p>
       </div>
 
-      <ProductPricingListRow label={acquirePriceLabel(row.basis)} value={acquire != null ? String(acquire) : null} />
-
       {eff == null ? (
-        <p className="text-amber-700 text-xs dark:text-amber-300">
-          Agregá {PRICE_BASIS_LABEL[row.basis].toLowerCase()} para calcular este nivel.
+        <p className="pb-2 text-amber-700 text-sm dark:text-amber-300">
+          Agregá {PRICE_BASIS_LABEL[row.basis].toLowerCase()} para calcular márgenes en este nivel.
         </p>
-      ) : (
-        <div className="space-y-3">
-          <ProductPricingBandSlider
-            disabled={!canEdit || saving}
-            effectiveCost={eff}
-            kind="min"
-            method={row.method}
-            ratePct={minRate}
-            onRateChange={(v) => {
-              markDirty();
-              setMinRate(Math.min(v, defaultRate));
-            }}
-          />
-          <ProductPricingBandSlider
-            disabled={!canEdit || saving}
-            effectiveCost={eff}
-            kind="default"
-            method={row.method}
-            ratePct={defaultRate}
-            onRateChange={(v) => {
-              markDirty();
-              setDefaultRate(Math.max(minRate, maxRateValue != null ? Math.min(v, maxRateValue) : v));
-            }}
-          />
-          <ProductPricingBandSlider
-            disabled={!canEdit || saving}
-            effectiveCost={eff}
-            kind="max"
-            method={row.method}
-            ratePct={maxRateValue}
-            onRateChange={(v) => {
-              markDirty();
-              const next = Math.max(defaultRate, v);
-              setMaxRate(next);
-            }}
-          />
-        </div>
-      )}
+      ) : null}
+
+      <div className="divide-y">
+        <ProductPricingBandSlider
+          currency={currency}
+          disabled={slidersDisabled}
+          effectiveCost={eff}
+          kind="min"
+          labelTip={marginTip(row.method, "min")}
+          method={row.method}
+          ratePct={minRate}
+          onRateChange={(v) => {
+            markDirty();
+            setMinRate(Math.min(v, defaultRate));
+          }}
+        />
+        <ProductPricingBandSlider
+          currency={currency}
+          disabled={slidersDisabled}
+          effectiveCost={eff}
+          kind="default"
+          labelTip={marginTip(row.method, "default")}
+          method={row.method}
+          ratePct={defaultRate}
+          onRateChange={(v) => {
+            markDirty();
+            setDefaultRate(Math.max(minRate, maxRateValue != null ? Math.min(v, maxRateValue) : v));
+          }}
+        />
+        <ProductPricingBandSlider
+          currency={currency}
+          disabled={slidersDisabled}
+          effectiveCost={eff}
+          kind="max"
+          labelTip={marginTip(row.method, "max")}
+          method={row.method}
+          ratePct={maxRateValue}
+          onRateChange={(v) => {
+            markDirty();
+            setMaxRate(Math.max(defaultRate, v));
+          }}
+        />
+      </div>
 
       {canEdit ? (
-        <div className="flex flex-wrap gap-2 border-t pt-2">
-          <Button disabled={saving || eff == null} size="sm" type="button" onClick={() => void saveOverride()}>
-            {saving ? <Loader2 aria-hidden className="size-3.5 animate-spin" /> : null}
-            Guardar
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-4">
           {row.hasOverride || dirtyRef.current ? (
             <Button
               disabled={saving}
@@ -252,32 +312,44 @@ function LevelPricingPanel({
               Heredar del nivel
             </Button>
           ) : null}
+          <Button disabled={saving || eff == null} size="sm" type="button" onClick={() => void saveOverride()}>
+            {saving ? <Loader2 aria-hidden className="size-3.5 animate-spin" /> : null}
+            Guardar
+          </Button>
         </div>
       ) : null}
     </div>
   );
 }
 
-export function ProductPricingCard({
+export function ProductPricingTab({
   productId,
   engineEnabled,
-  listPrice,
-  cost,
   readOnly,
+  canEditProductFields = false,
+  productCost,
+  productListPrice,
+  currency,
 }: Readonly<{
   productId: number;
   engineEnabled: boolean;
-  listPrice: string | null;
-  cost: string | null;
   readOnly?: boolean;
+  canEditProductFields?: boolean;
+  productCost?: string | null;
+  productListPrice?: string | null;
+  currency: WorkspaceCurrency;
 }>) {
   const { can } = useWorkspacePermissions();
   const canEdit = !readOnly && can("pricing.edit_own");
+  const watchedCost = useWatch({ name: "cost" }) as string | undefined;
+  const watchedPrice = useWatch({ name: "price" }) as string | undefined;
 
   const [pricing, setPricing] = useState<ProductPricingDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [avgCost, setAvgCost] = useState("");
   const [marketVal, setMarketVal] = useState("");
   const [yieldPct, setYieldPct] = useState(100);
+  const [selectedLevelId, setSelectedLevelId] = useState<string>("");
   const [savingInputs, setSavingInputs] = useState(false);
   const yieldSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -287,9 +359,16 @@ export function ProductPricingCard({
     try {
       const detail = await fetchProductPricingViaProxy(productId);
       setPricing(detail);
+      setAvgCost(detail?.avgCost ?? "");
       setMarketVal(detail?.marketVal ?? "");
       const y = parsePricingNumber(detail?.yieldPercent);
       setYieldPct(y ?? 100);
+      if (detail?.levels.length) {
+        setSelectedLevelId((prev) => {
+          if (prev && detail.levels.some((l) => String(l.priceLevelId) === prev)) return prev;
+          return String(detail.levels[0]!.priceLevelId);
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo cargar precios.");
     } finally {
@@ -299,17 +378,39 @@ export function ProductPricingCard({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, productCost, productListPrice]);
+
+  const pricingForLevels = useMemo(() => {
+    if (!pricing) return null;
+    const cost = watchedCost?.trim() || productCost || pricing.cost;
+    const listPrice = watchedPrice?.trim() || productListPrice || pricing.listPrice;
+    return {
+      ...pricing,
+      cost,
+      avgCost: avgCost.trim() || pricing.avgCost,
+      marketVal: marketVal.trim() || pricing.marketVal,
+      listPrice,
+    };
+  }, [avgCost, marketVal, pricing, productCost, productListPrice, watchedCost, watchedPrice]);
+
+  const selectedLevel = pricingForLevels?.levels.find((l) => String(l.priceLevelId) === selectedLevelId);
+  const requiredBasisField: PriceLevelBasis | null = selectedLevel?.basis ?? null;
 
   const persistInputs = useCallback(
-    async (nextYield: number, nextMarketVal: string) => {
+    async (next: Readonly<{ avgCost?: string; marketVal?: string; yieldPercent?: number }>) => {
       setSavingInputs(true);
       try {
         const detail = await patchProductPricingInputsViaProxy(productId, {
-          marketVal: nextMarketVal.trim() || null,
-          yieldPercent: String(nextYield),
+          avgCost: next.avgCost !== undefined ? next.avgCost.trim() || null : undefined,
+          marketVal: next.marketVal !== undefined ? next.marketVal.trim() || null : undefined,
+          yieldPercent:
+            next.yieldPercent !== undefined ? String(next.yieldPercent) : undefined,
         });
-        if (detail) setPricing(detail);
+        if (detail) {
+          setPricing(detail);
+          if (detail.avgCost != null) setAvgCost(detail.avgCost);
+          if (detail.marketVal != null) setMarketVal(detail.marketVal);
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
       } finally {
@@ -319,11 +420,16 @@ export function ProductPricingCard({
     [productId],
   );
 
+  function persistPricingFields() {
+    if (!canEdit) return;
+    void persistInputs({ avgCost, marketVal, yieldPercent: yieldPct });
+  }
+
   function scheduleYieldSave(nextYield: number) {
     if (!canEdit) return;
     if (yieldSaveTimer.current) clearTimeout(yieldSaveTimer.current);
     yieldSaveTimer.current = setTimeout(() => {
-      void persistInputs(nextYield, marketVal);
+      void persistInputs({ yieldPercent: nextYield, avgCost, marketVal });
     }, 600);
   }
 
@@ -336,84 +442,118 @@ export function ProductPricingCard({
 
   if (!engineEnabled) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Precio</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <ProductPricingListRow label="Precio de lista" value={listPrice} />
-          {cost ? <ProductPricingListRow label="Costo" value={cost} /> : null}
-          <p className="text-muted-foreground text-xs">
-            Activá el motor de precios en Opciones → Precios para usar niveles y márgenes automáticos.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="max-w-2xl space-y-6">
+        <h2 className="font-semibold text-lg">Precio</h2>
+        <ProductPricingBaseFields currency={currency} disabled={!canEditProductFields} />
+        <p className="text-muted-foreground text-sm">
+          Activá el motor de precios en{" "}
+          <Link className="underline underline-offset-2 hover:text-foreground" href="/settings/pricing">
+            Opciones → Precios
+          </Link>{" "}
+          para usar niveles y márgenes automáticos.
+        </p>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Precio</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        {loading && !pricing ? (
-          <p className="text-muted-foreground text-xs">Cargando precios…</p>
-        ) : null}
+    <div className="max-w-2xl space-y-4">
+      <h2 className="font-semibold text-lg">Precio</h2>
 
-        <ProductPricingListRow label="Precio de lista" value={pricing?.listPrice ?? listPrice} />
-        <ProductPricingListRow label="Costo de adquisición" value={pricing?.cost ?? cost} />
+      <ProductPricingBaseFields
+        costRequired={requiredBasisField === "cost"}
+        currency={currency}
+        disabled={!canEditProductFields}
+      />
 
-        <div className="space-y-1">
-          <Label className="flex items-center gap-1 text-muted-foreground text-xs">
-            Valor de mercado
-            <InfoTip label="Valor de mercado" text={PRICING_TOOLTIPS.marketVal} />
-          </Label>
-          <Input
-            disabled={!canEdit || savingInputs}
-            inputMode="decimal"
-            value={marketVal}
-            onBlur={() => {
-              if (canEdit) void persistInputs(yieldPct, marketVal);
-            }}
-            onChange={(e) => setMarketVal(e.target.value)}
-          />
+      {loading && !pricing ? (
+        <p className="text-muted-foreground text-sm">Cargando precios…</p>
+      ) : null}
+
+      {pricingForLevels && pricingForLevels.levels.length > 1 ? (
+        <div className="grid grid-cols-[8.5rem_1fr] items-center gap-4">
+          <span className="flex items-center gap-1 text-sm">
+            Nivel de precio
+            <InfoTip label="Niveles" text={PRICING_TOOLTIPS.level} />
+          </span>
+          <Select value={selectedLevelId} onValueChange={setSelectedLevelId}>
+            <SelectTrigger className="max-w-xs">
+              <SelectValue placeholder="Elegí un nivel" />
+            </SelectTrigger>
+            <SelectContent>
+              {pricingForLevels.levels.map((row) => (
+                <SelectItem key={row.priceLevelId} value={String(row.priceLevelId)}>
+                  {row.levelName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+      ) : null}
 
+      <PricingMoneyInput
+        currency={currency}
+        disabled={!canEdit || savingInputs}
+        id="price-tab-avg-cost"
+        label="Costo promedio"
+        labelTip={PRICING_TOOLTIPS.avgCost}
+        required={requiredBasisField === "avg_cost"}
+        value={avgCost}
+        onBlur={persistPricingFields}
+        onChange={setAvgCost}
+      />
+
+      <PricingMoneyInput
+        currency={currency}
+        disabled={!canEdit || savingInputs}
+        id="price-tab-market-val"
+        label="Valor de mercado"
+        labelTip={PRICING_TOOLTIPS.marketVal}
+        required={requiredBasisField === "market_val"}
+        value={marketVal}
+        onBlur={persistPricingFields}
+        onChange={setMarketVal}
+      />
+
+      <div className="divide-y border-t pt-2">
         <ProductPricingYieldSlider
           disabled={!canEdit || savingInputs}
+          labelTip={PRICING_TOOLTIPS.yield}
           yieldPct={yieldPct}
           onChange={(v) => {
             setYieldPct(v);
             scheduleYieldSave(v);
           }}
         />
+      </div>
 
-        {pricing && pricing.levels.length > 0 ? (
-          <div className="space-y-3 border-t pt-3">
-            <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-              Por nivel
-              <InfoTip label="Niveles" text={PRICING_TOOLTIPS.level} />
-            </p>
-            {pricing.levels.map((row) => (
-              <LevelPricingPanel
-                key={row.priceLevelId}
-                canEdit={canEdit}
-                marketVal={marketVal}
-                pricing={pricing}
-                productId={productId}
-                row={row}
-                yieldPct={yieldPct}
-                onUpdated={setPricing}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-xs">
-            Creá niveles de precio en Opciones → Niveles de precio.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {pricingForLevels && pricingForLevels.levels.length > 0 ? (
+        <>
+          {selectedLevel && pricingForLevels ? (
+            <LevelPricingSection
+              canEdit={canEdit}
+              currency={currency}
+              marketVal={marketVal}
+              pricing={pricingForLevels}
+              productId={productId}
+              row={selectedLevel}
+              yieldPct={yieldPct}
+              onUpdated={setPricing}
+            />
+          ) : null}
+        </>
+      ) : (
+        <p className="pt-4 text-muted-foreground text-sm">
+          Creá niveles de precio en{" "}
+          <Link className="underline underline-offset-2 hover:text-foreground" href="/settings/price-levels">
+            Opciones → Niveles de precio
+          </Link>
+          .
+        </p>
+      )}
+    </div>
   );
 }
+
+/** @deprecated Use ProductPricingTab */
+export const ProductPricingCard = ProductPricingTab;
