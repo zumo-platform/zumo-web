@@ -74,7 +74,11 @@ export function DiscountListDetailDialog({
             </dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Caducidad</dt>
+            <dt className="text-muted-foreground">Inicio</dt>
+            <dd>{list.startsAt ? formatDiscountListDate(list.startsAt) : "De inmediato"}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Fin</dt>
             <dd>{list.expiresAt ? formatDiscountListDate(list.expiresAt) : "Sin caducidad"}</dd>
           </div>
           <div className="flex justify-between gap-4">

@@ -2,19 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { Loader2, Search } from "lucide-react";
+import { CalendarIcon, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,8 +26,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  TooltipProvider,
-} from "@/components/ui/tooltip";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { InfoTip } from "@/components/workspace/info-tip";
 import { fetchCustomersViaProxy, fetchSellersViaProxy } from "@/lib/dashboard-customers";
 import {
@@ -53,6 +50,7 @@ import { fetchDeliveryZonesViaProxy } from "@/lib/delivery";
 import { activeProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import { loadProductCategoryMap } from "@/lib/products-catalog-cache";
 import { DISCOUNT_TOOLTIPS } from "@/lib/pricing-copy";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 8;
 
@@ -66,6 +64,7 @@ type WizardState = {
   generalDiscountPct: string;
   coverage: CoverageKind;
   listKind: ListKind;
+  startsAtLocal: string;
   expiresAtLocal: string;
   categoryIds: Set<number>;
   selectedProducts: Map<number, string>;
@@ -80,6 +79,7 @@ function emptyWizard(): WizardState {
     generalDiscountPct: "3",
     coverage: "manual",
     listKind: "regular",
+    startsAtLocal: "",
     expiresAtLocal: "",
     categoryIds: new Set(),
     selectedProducts: new Map(),
@@ -103,6 +103,7 @@ function wizardFromDetail(detail: DiscountListDetail): WizardState {
       detail.generalDiscountPct != null ? String(Number(detail.generalDiscountPct)) : "3",
     coverage: detail.wholeCatalog ? "whole" : "manual",
     listKind: detail.appliesToAll || detail.isDefault ? "default" : "regular",
+    startsAtLocal: detail.startsAt ? toLocalDatetimeValue(detail.startsAt) : "",
     expiresAtLocal: detail.expiresAt ? toLocalDatetimeValue(detail.expiresAt) : "",
     categoryIds: new Set(detail.categoryIds),
     selectedProducts,
@@ -122,6 +123,14 @@ function toIsoFromLocal(value: string): string | null {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+function scheduleRangeValid(startsAtLocal: string, expiresAtLocal: string): boolean {
+  if (!startsAtLocal.trim() || !expiresAtLocal.trim()) return true;
+  const start = new Date(startsAtLocal);
+  const end = new Date(expiresAtLocal);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+  return start.getTime() <= end.getTime();
 }
 
 function buildPayload(state: WizardState): CreateDiscountListPayload {
@@ -149,26 +158,136 @@ function buildPayload(state: WizardState): CreateDiscountListPayload {
     categoryIds: state.coverage === "manual" ? [...state.categoryIds] : [],
     items,
     customerIds: appliesToAll ? [] : [...state.selectedCustomerIds],
+    startsAt: toIsoFromLocal(state.startsAtLocal),
     expiresAt: toIsoFromLocal(state.expiresAtLocal),
   };
 }
 
-function FieldLegend({
+function FieldHeading({
   label,
   tooltip,
-  children,
+  optional,
 }: Readonly<{
   label: string;
-  tooltip: string;
-  children: ReactNode;
+  tooltip?: string;
+  optional?: boolean;
+}>) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Label className="font-semibold text-sm">
+        {label}
+        {optional ? (
+          <span className="font-normal text-muted-foreground"> (Opcional)</span>
+        ) : null}
+      </Label>
+      {tooltip ? <InfoTip label={label} text={tooltip} /> : null}
+    </div>
+  );
+}
+
+function OptionTile({
+  selected,
+  title,
+  description,
+  onSelect,
+  trailing,
+}: Readonly<{
+  selected: boolean;
+  title: string;
+  description?: string;
+  onSelect: () => void;
+  trailing?: ReactNode;
+}>) {
+  return (
+    <button
+      aria-pressed={selected}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors",
+        selected
+          ? "border-primary bg-primary/5 ring-1 ring-primary/15"
+          : "border-border hover:border-muted-foreground/25 hover:bg-muted/40",
+      )}
+      type="button"
+      onClick={onSelect}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2",
+          selected ? "border-primary" : "border-muted-foreground/35",
+        )}
+      >
+        {selected ? <span className="size-2 rounded-full bg-primary" /> : null}
+      </span>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="font-medium text-sm leading-snug">{title}</div>
+        {description ? (
+          <p className="text-muted-foreground text-xs leading-relaxed">{description}</p>
+        ) : null}
+      </div>
+      {trailing ? <div className="shrink-0 self-center">{trailing}</div> : null}
+    </button>
+  );
+}
+
+function DatetimeField({
+  id,
+  label,
+  value,
+  onChange,
+}: Readonly<{
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
 }>) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Label>{label}</Label>
-        <InfoTip label={label} text={tooltip} />
+      <Label className="text-muted-foreground text-xs" htmlFor={id}>
+        {label}
+      </Label>
+      <div className="relative">
+        <CalendarIcon
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          className="pl-9"
+          id={id}
+          type="datetime-local"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
       </div>
-      {children}
+    </div>
+  );
+}
+
+function StepProgress({
+  step,
+  maxStep,
+}: Readonly<{
+  step: number;
+  maxStep: number;
+}>) {
+  return (
+    <div aria-hidden className="flex items-center gap-2 pt-1">
+      {Array.from({ length: maxStep }, (_, i) => {
+        const n = i + 1;
+        const active = n === step;
+        const done = n < step;
+        return (
+          <span
+            key={n}
+            className={cn(
+              "h-1.5 flex-1 rounded-full transition-colors",
+              active || done ? "bg-primary" : "bg-muted",
+              active && "opacity-100",
+              done && "opacity-60",
+            )}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -306,7 +425,8 @@ export function DiscountListCreateDialog({
 
   const step1Valid =
     state.name.trim().length > 0 &&
-    (state.mode !== "general" || Number(state.generalDiscountPct) >= 0);
+    (state.mode !== "general" || Number(state.generalDiscountPct) >= 0) &&
+    scheduleRangeValid(state.startsAtLocal, state.expiresAtLocal);
 
   const step2Valid =
     state.coverage === "whole" ||
@@ -317,6 +437,10 @@ export function DiscountListCreateDialog({
     state.listKind === "default" || state.selectedCustomerIds.size > 0;
 
   async function handleSubmit() {
+    if (!scheduleRangeValid(state.startsAtLocal, state.expiresAtLocal)) {
+      toast.error("La fecha de inicio debe ser anterior o igual a la de fin.");
+      return;
+    }
     const payload = buildPayload(state);
     setBusy(true);
     try {
@@ -390,212 +514,247 @@ export function DiscountListCreateDialog({
     });
   }
 
-  const stepTitle =
-    step === 1 ? "Crear lista" : step === 2 ? "Selección de productos" : "Seleccionar clientes";
+  const sheetTitle =
+    step === 1
+      ? isEdit
+        ? "Editar lista"
+        : "Crear lista"
+      : step === 2
+        ? "Selección de productos"
+        : "Seleccionar clientes";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+    <Sheet onOpenChange={onOpenChange} open={open}>
+      <SheetContent className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-lg">
         <TooltipProvider delayDuration={200}>
-          <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle>{isEdit ? "Editar lista" : stepTitle}</DialogTitle>
-            <DialogDescription>
+          <SheetHeader className="shrink-0 space-y-3 border-b px-6 py-5 pr-12 text-left">
+            <SheetTitle className="text-left text-xl">{sheetTitle}</SheetTitle>
+            <SheetDescription className="text-left">
               Paso {step} de {maxStep} · {DISCOUNT_TOOLTIPS.bestDiscount}
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+            <StepProgress maxStep={maxStep} step={step} />
+          </SheetHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {step === 1 ? (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="list-name">Nombre de la lista *</Label>
+                  <Label className="font-semibold text-sm" htmlFor="list-name">
+                    Nombre de la lista *
+                  </Label>
                   <Input
                     id="list-name"
                     maxLength={120}
+                    placeholder="Ej: Descuento mayoristas"
                     value={state.name}
                     onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="list-desc">Descripción (60 caracteres)</Label>
+                  <Label className="font-semibold text-sm" htmlFor="list-desc">
+                    Descripción (60 caracteres)
+                  </Label>
                   <Input
                     id="list-desc"
                     maxLength={60}
+                    placeholder="Breve descripción de la lista"
                     value={state.description}
                     onChange={(e) => setState((s) => ({ ...s, description: e.target.value }))}
                   />
                 </div>
 
-                <FieldLegend label="Aplicar descuento" tooltip={DISCOUNT_TOOLTIPS.discountGeneral}>
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    {(["general", "manual"] as const).map((mode) => (
-                      <label key={mode} className="flex cursor-pointer items-center gap-2">
-                        <input
-                          checked={state.mode === mode}
-                          type="radio"
-                          onChange={() => setState((s) => ({ ...s, mode }))}
-                        />
-                        {mode === "general" ? "General" : "Manual"}
-                        <InfoTip
-                          label={mode === "general" ? "General" : "Manual"}
-                          text={
-                            mode === "general"
-                              ? DISCOUNT_TOOLTIPS.discountGeneral
-                              : DISCOUNT_TOOLTIPS.discountManual
-                          }
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  {state.mode === "general" ? (
-                    <Input
-                      className="mt-2 max-w-[8rem]"
-                      inputMode="decimal"
-                      min={0}
-                      max={100}
-                      placeholder="%"
-                      type="number"
-                      value={state.generalDiscountPct}
-                      onChange={(e) =>
-                        setState((s) => ({ ...s, generalDiscountPct: e.target.value }))
+                <div className="space-y-3">
+                  <FieldHeading label="Aplicar descuento" tooltip={DISCOUNT_TOOLTIPS.discountGeneral} />
+                  <div className="space-y-2">
+                    <OptionTile
+                      description={DISCOUNT_TOOLTIPS.discountGeneral}
+                      selected={state.mode === "general"}
+                      title="Aplicar descuento General"
+                      trailing={
+                        state.mode === "general" ? (
+                          <Input
+                            aria-label="Porcentaje de descuento general"
+                            className="w-22 text-center"
+                            inputMode="decimal"
+                            max={100}
+                            min={0}
+                            placeholder="Ej: 5%"
+                            type="number"
+                            value={state.generalDiscountPct}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              setState((s) => ({ ...s, generalDiscountPct: e.target.value }))
+                            }
+                          />
+                        ) : null
                       }
+                      onSelect={() => setState((s) => ({ ...s, mode: "general" }))}
                     />
-                  ) : null}
-                </FieldLegend>
-
-                <FieldLegend
-                  label="Asignación de productos"
-                  tooltip={DISCOUNT_TOOLTIPS.assignmentManual}
-                >
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        checked={state.coverage === "whole"}
-                        type="radio"
-                        onChange={() => setState((s) => ({ ...s, coverage: "whole" }))}
-                      />
-                      Importar catálogo completo
-                      <InfoTip label="Catálogo completo" text={DISCOUNT_TOOLTIPS.assignmentAll} />
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        checked={state.coverage === "manual"}
-                        type="radio"
-                        onChange={() => setState((s) => ({ ...s, coverage: "manual" }))}
-                      />
-                      Aplicar de forma manual
-                      <InfoTip label="Manual" text={DISCOUNT_TOOLTIPS.assignmentManual} />
-                    </label>
+                    <OptionTile
+                      description={DISCOUNT_TOOLTIPS.discountManual}
+                      selected={state.mode === "manual"}
+                      title="Aplicar descuento Manual"
+                      onSelect={() => setState((s) => ({ ...s, mode: "manual" }))}
+                    />
                   </div>
-                </FieldLegend>
+                </div>
 
-                <FieldLegend label="Tipo de lista" tooltip={DISCOUNT_TOOLTIPS.listRegular}>
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        checked={state.listKind === "default"}
-                        type="radio"
-                        onChange={() => setState((s) => ({ ...s, listKind: "default" }))}
-                      />
-                      Predeterminada
-                      <InfoTip label="Predeterminada" text={DISCOUNT_TOOLTIPS.listDefault} />
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        checked={state.listKind === "regular"}
-                        type="radio"
-                        onChange={() => setState((s) => ({ ...s, listKind: "regular" }))}
-                      />
-                      Regular
-                      <InfoTip label="Regular" text={DISCOUNT_TOOLTIPS.listRegular} />
-                    </label>
-                  </div>
-                </FieldLegend>
-
-                <FieldLegend label="Calendarizar (opcional)" tooltip={DISCOUNT_TOOLTIPS.schedule}>
-                  <Input
-                    type="datetime-local"
-                    value={state.expiresAtLocal}
-                    onChange={(e) =>
-                      setState((s) => ({ ...s, expiresAtLocal: e.target.value }))
-                    }
+                <div className="space-y-3">
+                  <FieldHeading
+                    label="Asignación de productos"
+                    tooltip={DISCOUNT_TOOLTIPS.assignmentManual}
                   />
-                </FieldLegend>
+                  <div className="space-y-2">
+                    <OptionTile
+                      description={DISCOUNT_TOOLTIPS.assignmentAll}
+                      selected={state.coverage === "whole"}
+                      title="Importar catálogo completo"
+                      onSelect={() => setState((s) => ({ ...s, coverage: "whole" }))}
+                    />
+                    <OptionTile
+                      description={DISCOUNT_TOOLTIPS.assignmentManual}
+                      selected={state.coverage === "manual"}
+                      title="Aplicar de forma manual a cada producto"
+                      onSelect={() => setState((s) => ({ ...s, coverage: "manual" }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <FieldHeading label="Tipo de lista" tooltip={DISCOUNT_TOOLTIPS.listRegular} />
+                  <div className="space-y-2">
+                    <OptionTile
+                      description={DISCOUNT_TOOLTIPS.listDefault}
+                      selected={state.listKind === "default"}
+                      title="Lista Predeterminada"
+                      onSelect={() => setState((s) => ({ ...s, listKind: "default" }))}
+                    />
+                    <OptionTile
+                      description={DISCOUNT_TOOLTIPS.listRegular}
+                      selected={state.listKind === "regular"}
+                      title="Lista Regular"
+                      onSelect={() => setState((s) => ({ ...s, listKind: "regular" }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <FieldHeading
+                    label="¿Quieres calendarizar la lista?"
+                    optional
+                    tooltip={DISCOUNT_TOOLTIPS.schedule}
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <DatetimeField
+                      id="discount-list-starts-at"
+                      label="Inicio"
+                      value={state.startsAtLocal}
+                      onChange={(value) => setState((s) => ({ ...s, startsAtLocal: value }))}
+                    />
+                    <DatetimeField
+                      id="discount-list-expires-at"
+                      label="Fin"
+                      value={state.expiresAtLocal}
+                      onChange={(value) => setState((s) => ({ ...s, expiresAtLocal: value }))}
+                    />
+                  </div>
+                  {!scheduleRangeValid(state.startsAtLocal, state.expiresAtLocal) ? (
+                    <p className="text-destructive text-xs">
+                      La fecha de inicio debe ser anterior o igual a la de fin.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
             {step === 2 ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {state.coverage === "whole" ? (
-                  <p className="text-muted-foreground text-sm">
-                    Todo tu catálogo activo ({catalog.length.toLocaleString("es")} productos)
-                    quedará cubierto por esta lista.
-                  </p>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+                    <p className="font-medium">Catálogo completo</p>
+                    <p className="mt-1 text-muted-foreground">
+                      Todo tu catálogo activo ({catalog.length.toLocaleString("es")} productos)
+                      quedará cubierto por esta lista.
+                    </p>
+                  </div>
                 ) : (
                   <>
-                    <div className="space-y-2">
-                      <Label>Categorías</Label>
+                    <div className="space-y-3">
+                      <FieldHeading label="Categorías" />
                       <div className="grid gap-2 sm:grid-cols-2">
-                        {[...categoryMap.entries()].map(([categoryId, name]) => (
-                          <label
-                            key={categoryId}
-                            className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
-                          >
-                            <Checkbox
-                              checked={state.categoryIds.has(categoryId)}
-                              onCheckedChange={(checked) =>
-                                toggleCategory(categoryId, checked === true)
-                              }
-                            />
-                            {name}
-                          </label>
-                        ))}
+                        {[...categoryMap.entries()].map(([categoryId, name]) => {
+                          const checked = state.categoryIds.has(categoryId);
+                          return (
+                            <label
+                              key={categoryId}
+                              className={cn(
+                                "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors",
+                                checked
+                                  ? "border-primary/30 bg-primary/5"
+                                  : "hover:bg-muted/40",
+                              )}
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(v) =>
+                                  toggleCategory(categoryId, v === true)
+                                }
+                              />
+                              {name}
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-end gap-2">
-                      <div className="min-w-[12rem] flex-1 space-y-1">
-                        <Label>Buscar producto</Label>
-                        <div className="relative">
-                          <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
-                          <Input
-                            className="pl-8"
-                            value={productQuery}
-                            onChange={(e) => {
-                              setProductQuery(e.target.value);
+                    <div className="space-y-3">
+                      <FieldHeading label="Productos" />
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <Label className="text-muted-foreground text-xs">Buscar producto</Label>
+                          <div className="relative">
+                            <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                            <Input
+                              className="pl-8"
+                              placeholder="Nombre o SKU"
+                              value={productQuery}
+                              onChange={(e) => {
+                                setProductQuery(e.target.value);
+                                setProductPage(0);
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="min-w-40 space-y-2">
+                          <Label className="text-muted-foreground text-xs">Categoría</Label>
+                          <Select
+                            value={productCategoryFilter}
+                            onValueChange={(value) => {
+                              setProductCategoryFilter(value);
                               setProductPage(0);
                             }}
-                          />
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Todas" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todas</SelectItem>
+                              {[...categoryMap.entries()].map(([id, name]) => (
+                                <SelectItem key={id} value={String(id)}>
+                                  {name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
+                        <Button type="button" variant="outline" onClick={addAllFilteredProducts}>
+                          Agregar {filteredProducts.length}
+                        </Button>
                       </div>
-                      <div className="min-w-[10rem] space-y-1">
-                        <Label>Categoría</Label>
-                        <Select
-                          value={productCategoryFilter}
-                          onValueChange={(value) => {
-                            setProductCategoryFilter(value);
-                            setProductPage(0);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Todas" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Todas</SelectItem>
-                            {[...categoryMap.entries()].map(([id, name]) => (
-                              <SelectItem key={id} value={String(id)}>
-                                {name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button type="button" variant="outline" onClick={addAllFilteredProducts}>
-                        Agregar los {filteredProducts.length} resultados
-                      </Button>
                     </div>
 
-                    <div className="rounded-md border">
+                    <div className="overflow-hidden rounded-lg border">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -688,99 +847,105 @@ export function DiscountListCreateDialog({
             ) : null}
 
             {step === 3 ? (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1">
-                      <Label>Etiqueta</Label>
-                      <InfoTip label="Etiqueta" text={DISCOUNT_TOOLTIPS.tagFilter} />
+              <div className="space-y-5">
+                <div className="space-y-3">
+                  <FieldHeading label="Filtrar clientes" tooltip={DISCOUNT_TOOLTIPS.tagFilter} />
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs">Etiqueta</Label>
+                      <Select
+                        value={filterLabel || "__none__"}
+                        onValueChange={(value) => {
+                          setFilterLabel(value === "__none__" ? "" : value);
+                          setFilterSellerId("");
+                          setFilterZoneId("");
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Todas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Ninguna</SelectItem>
+                          {labelOptions.map((label) => (
+                            <SelectItem key={label} value={label}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select
-                      value={filterLabel || "__none__"}
-                      onValueChange={(value) => {
-                        setFilterLabel(value === "__none__" ? "" : value);
-                        setFilterSellerId("");
-                        setFilterZoneId("");
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Ninguna</SelectItem>
-                        {labelOptions.map((label) => (
-                          <SelectItem key={label} value={label}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Vendedor</Label>
-                    <Select
-                      value={filterSellerId || "__none__"}
-                      onValueChange={(value) => {
-                        setFilterSellerId(value === "__none__" ? "" : value);
-                        setFilterLabel("");
-                        setFilterZoneId("");
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Todos</SelectItem>
-                        {sellerOptions.map((seller) => (
-                          <SelectItem key={seller.sellerId} value={String(seller.sellerId)}>
-                            {seller.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Zona</Label>
-                    <Select
-                      value={filterZoneId || "__none__"}
-                      onValueChange={(value) => {
-                        setFilterZoneId(value === "__none__" ? "" : value);
-                        setFilterLabel("");
-                        setFilterSellerId("");
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Todas</SelectItem>
-                        {zoneOptions.map((zone) => (
-                          <SelectItem key={zone.zoneId} value={String(zone.zoneId)}>
-                            {zone.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs">Vendedor</Label>
+                      <Select
+                        value={filterSellerId || "__none__"}
+                        onValueChange={(value) => {
+                          setFilterSellerId(value === "__none__" ? "" : value);
+                          setFilterLabel("");
+                          setFilterZoneId("");
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Todos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Todos</SelectItem>
+                          {sellerOptions.map((seller) => (
+                            <SelectItem key={seller.sellerId} value={String(seller.sellerId)}>
+                              {seller.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs">Zona</Label>
+                      <Select
+                        value={filterZoneId || "__none__"}
+                        onValueChange={(value) => {
+                          setFilterZoneId(value === "__none__" ? "" : value);
+                          setFilterLabel("");
+                          setFilterSellerId("");
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Todas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Todas</SelectItem>
+                          {zoneOptions.map((zone) => (
+                            <SelectItem key={zone.zoneId} value={String(zone.zoneId)}>
+                              {zone.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-[12rem] flex-1 space-y-1">
-                    <Label>Buscar cliente</Label>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label className="text-muted-foreground text-xs">Buscar cliente</Label>
                     <Input
+                      placeholder="Nombre o correo"
                       value={customerQuery}
                       onChange={(e) => setCustomerQuery(e.target.value)}
                     />
                   </div>
-                  <Button disabled={filterLoading} type="button" variant="outline" onClick={() => void runCustomerFilter()}>
+                  <Button
+                    disabled={filterLoading}
+                    type="button"
+                    variant="outline"
+                    onClick={() => void runCustomerFilter()}
+                  >
                     {filterLoading ? <Loader2 className="size-4 animate-spin" /> : "Aplicar filtro"}
                   </Button>
                   <Button type="button" variant="outline" onClick={addAllFilteredCustomers}>
-                    Agregar los {visibleCustomers.length} resultados
+                    Agregar {visibleCustomers.length}
                   </Button>
                 </div>
 
-                <div className="rounded-md border">
+                <div className="overflow-hidden rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -817,7 +982,7 @@ export function DiscountListCreateDialog({
             ) : null}
           </div>
 
-          <DialogFooter className="border-t px-6 py-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t px-6 py-4">
             <Button
               disabled={busy}
               type="button"
@@ -847,12 +1012,18 @@ export function DiscountListCreateDialog({
                 type="button"
                 onClick={() => void handleSubmit()}
               >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : isEdit ? "Guardar" : "Crear lista"}
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : isEdit ? (
+                  "Guardar"
+                ) : (
+                  "Crear lista"
+                )}
               </Button>
             )}
-          </DialogFooter>
+          </div>
         </TooltipProvider>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

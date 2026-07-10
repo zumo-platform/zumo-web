@@ -20,6 +20,7 @@ export type PurchaseOrderListRow = Readonly<{
   expectedAt: string | null;
   itemCount: number;
   receivedPct: number;
+  productNames: string[];
   total: number | null;
   createdAt: string;
 }>;
@@ -96,6 +97,18 @@ export type RawCreateLine = Readonly<{
   qtyOrdered: number;
   unitCost: number;
 }>;
+
+const PO_PRODUCTS_PREVIEW_MAX = 45;
+const PO_PRODUCTS_PREVIEW_ELLIPSIS = "...";
+
+/** Comma-separated PO product names, max 45 chars with trailing ellipsis when trimmed. */
+export function formatPoProductsPreview(productNames: readonly string[]): string {
+  if (productNames.length === 0) return "—";
+  const text = productNames.join(", ");
+  if (text.length <= PO_PRODUCTS_PREVIEW_MAX) return text;
+  const cut = PO_PRODUCTS_PREVIEW_MAX - PO_PRODUCTS_PREVIEW_ELLIPSIS.length;
+  return `${text.slice(0, cut).trimEnd()}${PO_PRODUCTS_PREVIEW_ELLIPSIS}`;
+}
 
 /**
  * Products whose tracked on-hand is below their configured minimum.
@@ -294,6 +307,11 @@ function parsePurchaseOrderListRow(raw: unknown): PurchaseOrderListRow | null {
     return null;
   }
   const total = parseNumber(o.total);
+  const productNamesRaw = Array.isArray(o.productNames) ? o.productNames : [];
+  const productNames: string[] = [];
+  for (const name of productNamesRaw) {
+    if (typeof name === "string" && name.trim()) productNames.push(name.trim());
+  }
   return {
     poId,
     displayCode,
@@ -305,6 +323,7 @@ function parsePurchaseOrderListRow(raw: unknown): PurchaseOrderListRow | null {
       typeof o.expectedAt === "string" && o.expectedAt.trim() ? o.expectedAt.trim() : null,
     itemCount,
     receivedPct,
+    productNames,
     total,
     createdAt,
   };

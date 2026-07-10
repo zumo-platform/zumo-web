@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatQty } from "@/lib/inventory-format";
+import { INVENTORY_TOOLTIPS } from "@/lib/pricing-copy";
 import type { BatchSettings, TrackBatchesMode } from "@/lib/lot-nomenclature";
 import type { DashboardProductDetail } from "@/lib/product-detail";
 import { resolveEffectiveTrackBatchesMode, type ProductFormValues } from "@/lib/product-form";
@@ -24,10 +25,29 @@ function StockRow({
   label,
   value,
   strong = false,
-}: Readonly<{ label: string; value: string; strong?: boolean }>) {
+  tip,
+}: Readonly<{ label: string; value: string; strong?: boolean; tip?: string }>) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1 text-muted-foreground">
+        {label}
+        {tip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                aria-label={`Ayuda: ${label}`}
+                className="inline-flex rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                type="button"
+              >
+                <CircleHelp aria-hidden className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-sm">
+              <p>{tip}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </span>
       <span className={strong ? "font-semibold tabular-nums" : "tabular-nums"}>{value}</span>
     </div>
   );
@@ -203,7 +223,7 @@ export function ProductSidebar({
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <StockRow label="Físico" value={formatQty(stock.physical)} />
-          <StockRow label="Reservado" value={formatQty(stock.reserved)} />
+          <StockRow label="Reservado" tip={INVENTORY_TOOLTIPS.reserved} value={formatQty(stock.reserved)} />
           <StockRow label="Disponible" value={formatQty(stock.sellableAvailable)} strong />
           {stock.committed > 0 ? (
             <StockRow label="Comprometido" value={formatQty(stock.committed)} />

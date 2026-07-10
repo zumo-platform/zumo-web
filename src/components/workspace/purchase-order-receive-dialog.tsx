@@ -25,7 +25,6 @@ import {
 import {
   fetchBatchSettingsViaProxy,
   fetchLotNomenclatureViaProxy,
-  fetchNextLotCodeViaProxy,
   renderLotCode,
   type BatchSettings,
   type LotNomenclature,
@@ -48,6 +47,34 @@ type Row = {
   batchError: string | null;
   qtyError: string | null;
 };
+
+function buildBatchRowSeqOffsets(rows: readonly Row[]): ReadonlyMap<string, number> {
+  const map = new Map<string, number>();
+  let offset = 0;
+  for (const row of rows) {
+    if (row.trackBatches) {
+      map.set(row.poItemId, offset);
+      offset += 1;
+    }
+  }
+  return map;
+}
+
+function clientLotSuggestion(
+  lotSettings: LotNomenclature | null,
+  vendorName: string,
+  row: Row,
+  seqOffset: number,
+): string | null {
+  if (!lotSettings?.enabled) return null;
+  return renderLotCode(lotSettings.pattern, {
+    date: new Date(),
+    vendorName,
+    sku: row.sku,
+    seq: lotSettings.nextSeq + seqOffset,
+    seqPadding: lotSettings.seqPadding,
+  });
+}
 
 function buildInitialRows(items: readonly PurchaseOrderItem[]): Row[] {
   return items
@@ -94,17 +121,21 @@ export function PurchaseOrderReceiveDialog({
   const lotGuide = useMemo(() => {
     if (!lotSettings?.enabled) return null;
     const sampleRow = rows.find((r) => r.trackBatches);
+    const offsets = buildBatchRowSeqOffsets(rows);
+    const sampleOffset = sampleRow ? (offsets.get(sampleRow.poItemId) ?? 0) : 0;
     return {
       pattern: lotSettings.pattern,
       example: renderLotCode(lotSettings.pattern, {
         date: new Date(),
         vendorName,
         sku: sampleRow?.sku ?? null,
-        seq: lotSettings.nextSeq,
+        seq: lotSettings.nextSeq + sampleOffset,
         seqPadding: lotSettings.seqPadding,
       }),
     };
   }, [lotSettings, rows, vendorName]);
+
+  const batchSeqOffsets = useMemo(() => buildBatchRowSeqOffsets(rows), [rows]);
 
   useEffect(() => {
     if (!open) return;
@@ -121,33 +152,30 @@ export function PurchaseOrderReceiveDialog({
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "No se pudo cargar configuración de lotes.");
       });
+  }, [open, items]);
 
-    const batchRows = baseRows.filter((r) => r.trackBatches);
-    if (batchRows.length === 0) return;
+  function lotPlaceholder(row: Row): string {
+    const suggestion = clientLotSuggestion(
+      lotSettings,
+      vendorName,
+      row,
+      batchSeqOffsets.get(row.poItemId) ?? 0,
+    );
+    if (suggestion) return suggestion;
+    return batchSettings?.requireLotOnReceipt ? "N.º de lote" : "N.º de lote (opcional)";
+  }
 
-    let cancelled = false;
-    void (async () => {
-      const codes = await Promise.all(
-        batchRows.map((r) =>
-          fetchNextLotCodeViaProxy(vendorName, r.sku, r.productId),
-        ),
-      );
-      if (cancelled) return;
-      const byPoItemId = new Map(
-        batchRows.map((r, i) => [r.poItemId, codes[i] ?? null]),
-      );
-      setRows((rs) =>
-        rs.map((r) => {
-          const code = byPoItemId.get(r.poItemId);
-          return code ? { ...r, batchNumber: code } : r;
-        }),
-      );
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, items, vendorName]);
+  function acceptLotSuggestion(idx: number, row: Row) {
+    if (!row.trackBatches || row.batchNumber.trim()) return;
+    const filled = clientLotSuggestion(
+      lotSettings,
+      vendorName,
+      row,
+      batchSeqOffsets.get(row.poItemId) ?? 0,
+    );
+    if (!filled) return;
+    setRow(idx, { batchNumber: filled, batchError: null });
+  }
 
   function setRow(idx: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -301,10 +329,7 @@ export function PurchaseOrderReceiveDialog({
                         <div className="space-y-1">
                           <Input
                             className="w-120 font-mono"
-                            placeholder={
-                              lotGuide?.example ??
-                              (batchSettings?.requireLotOnReceipt ? "N.º de lote" : "N.º de lote (opcional)")
-                            }
+                            placeholder={lotPlaceholder(r)}
                             value={r.batchNumber}
                             onChange={(e) =>
                               setRow(idx, {
@@ -312,7 +337,28 @@ export function PurchaseOrderReceiveDialog({
                                 batchError: null,
                               })
                             }
+                            onKeyDown={(e) => {
+                              if (e.key !== "Tab" || e.shiftKey || r.batchNumber.trim()) return;
+                              const suggestion = clientLotSuggestion(
+                                lotSettings,
+                                vendorName,
+                                r,
+                                batchSeqOffsets.get(r.poItemId) ?? 0,
+                              );
+                              if (!suggestion) return;
+                              e.preventDefault();
+                              acceptLotSuggestion(idx, r);
+                            }}
                           />
+                          {!r.batchNumber.trim() &&
+                          clientLotSuggestion(
+                            lotSettings,
+                            vendorName,
+                            r,
+                            batchSeqOffsets.get(r.poItemId) ?? 0,
+                          ) ? (
+                            <p className="text-muted-foreground text-xs">Tab para usar la sugerencia</p>
+                          ) : null}
                           {r.batchError ? (
                             <p className="text-destructive text-xs">{r.batchError}</p>
                           ) : null}

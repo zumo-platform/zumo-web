@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import {
   fetchPurchaseOrdersViaProxy,
+  formatPoProductsPreview,
   type PurchaseOrderListRow,
   type PurchaseOrderStatus,
 } from "@/lib/purchase-orders";
@@ -236,6 +237,7 @@ export function PurchaseOrdersListView() {
               <TableRow>
                 <TableHead>Código</TableHead>
                 <TableHead>Proveedor</TableHead>
+                <TableHead>Productos</TableHead>
                 <TableHead>Bodega</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Progreso</TableHead>
@@ -255,6 +257,14 @@ export function PurchaseOrdersListView() {
                     </Link>
                   </TableCell>
                   <TableCell>{row.vendorName}</TableCell>
+                  <TableCell
+                    className="max-w-[16rem] text-muted-foreground text-sm"
+                    title={
+                      row.productNames.length > 0 ? row.productNames.join(", ") : undefined
+                    }
+                  >
+                    {formatPoProductsPreview(row.productNames)}
+                  </TableCell>
                   <TableCell>{row.warehouseName}</TableCell>
                   <TableCell>
                     <Badge variant={poStatusVariant(row.status)}>

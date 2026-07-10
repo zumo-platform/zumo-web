@@ -245,6 +245,7 @@ export function CustomerDetailExperience({
         <CustomerDetailSidebar
           createdAt={detail.createdAt}
           customerId={customerId}
+          discountLists={detail.discountLists}
           draft={draft}
           labelsSlot={
             <CustomerLabelsSection
@@ -283,6 +284,7 @@ export function CustomerDetailExperience({
               <TabsContent className="mt-0" value="products">
                 <CustomerProductsTab
                   catalogById={catalogById}
+                  productDiscounts={detail.productDiscounts}
                   productFirstOrderedAt={detail.productFirstOrderedAt}
                   productIds={draft.productIds}
                   onAddProducts={() => setPickerOpen(true)}

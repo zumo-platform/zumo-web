@@ -200,6 +200,22 @@ export type DashboardCustomerOrder = Readonly<{
   lines: DashboardCustomerOrderLine[];
 }>;
 
+export type CustomerDiscountListSummary = Readonly<{
+  discountListId: string;
+  name: string;
+  appliesToAll: boolean;
+  startsAt: string | null;
+  expiresAt: string | null;
+  scheduleStatus: "active" | "scheduled" | "expired";
+}>;
+
+export type CustomerProductDiscount = Readonly<{
+  discountPct: number | null;
+  discountListName: string | null;
+  pendingDiscountPct: number | null;
+  pendingDiscountListName: string | null;
+}>;
+
 export type DashboardCustomerFullDetail = Readonly<{
   customerId: number;
   name: string;
@@ -226,6 +242,8 @@ export type DashboardCustomerFullDetail = Readonly<{
   /** ISO timestamp of the customer's earliest order containing each product. */
   productFirstOrderedAt: Readonly<Record<number, string>>;
   priceLevelId: number | null;
+  discountLists: readonly CustomerDiscountListSummary[];
+  productDiscounts: Readonly<Record<number, CustomerProductDiscount>>;
 }>;
 
 export type CustomerDraftState = Readonly<{
@@ -416,12 +434,74 @@ function parseProductFirstOrderedAt(raw: unknown): Record<number, string> {
   return map;
 }
 
+function parseDiscountLists(raw: unknown): CustomerDiscountListSummary[] {
+  if (!Array.isArray(raw)) return [];
+  const rows: CustomerDiscountListSummary[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const discountListId = typeof o.discountListId === "string" ? o.discountListId : "";
+    const name = typeof o.name === "string" ? o.name.trim() : "";
+    if (!discountListId || !name) continue;
+    rows.push({
+      discountListId,
+      name,
+      appliesToAll: o.appliesToAll === true,
+      startsAt: typeof o.startsAt === "string" ? o.startsAt : null,
+      expiresAt: typeof o.expiresAt === "string" ? o.expiresAt : null,
+      scheduleStatus:
+        o.scheduleStatus === "scheduled" || o.scheduleStatus === "expired"
+          ? o.scheduleStatus
+          : "active",
+    });
+  }
+  return rows;
+}
+
+function parseProductDiscounts(raw: unknown): Record<number, CustomerProductDiscount> {
+  const map: Record<number, CustomerProductDiscount> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return map;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const productId = Number(key);
+    if (!Number.isInteger(productId) || productId <= 0) continue;
+    if (!value || typeof value !== "object") continue;
+    const o = value as Record<string, unknown>;
+    const pctRaw = o.discountPct;
+    const discountPct =
+      pctRaw === null || pctRaw === undefined
+        ? null
+        : typeof pctRaw === "number"
+          ? pctRaw
+          : Number(pctRaw);
+    map[productId] = {
+      discountPct: Number.isFinite(discountPct) && discountPct > 0 ? discountPct : null,
+      discountListName:
+        typeof o.discountListName === "string" && o.discountListName.trim()
+          ? o.discountListName.trim()
+          : null,
+      pendingDiscountPct: (() => {
+        const raw = o.pendingDiscountPct;
+        if (raw === null || raw === undefined) return null;
+        const n = typeof raw === "number" ? raw : Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      })(),
+      pendingDiscountListName:
+        typeof o.pendingDiscountListName === "string" && o.pendingDiscountListName.trim()
+          ? o.pendingDiscountListName.trim()
+          : null,
+    };
+  }
+  return map;
+}
+
 function parseCustomerFullDetail(
   customerRaw: unknown,
   contactsRaw: unknown,
   ordersRaw: unknown,
   productIdsRaw: unknown,
   productFirstOrderedAtRaw?: unknown,
+  discountListsRaw?: unknown,
+  productDiscountsRaw?: unknown,
 ): DashboardCustomerFullDetail | null {
   const base = parseCustomerDetail(customerRaw);
   if (!base) return null;
@@ -495,6 +575,8 @@ function parseCustomerFullDetail(
       ...buildProductFirstOrderedAtFromOrders(orders),
       ...parseProductFirstOrderedAt(productFirstOrderedAtRaw),
     },
+    discountLists: parseDiscountLists(discountListsRaw),
+    productDiscounts: parseProductDiscounts(productDiscountsRaw),
   };
 }
 
@@ -634,6 +716,8 @@ export async function fetchCustomerFullDetailViaProxy(
     body.orders,
     body.productIds,
     body.productFirstOrderedAt,
+    body.discountLists,
+    body.productDiscounts,
   );
 }
 

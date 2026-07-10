@@ -85,7 +85,9 @@ export function DiscountListCard({
                 ? "default"
                 : schedule === "expired"
                   ? "destructive"
-                  : "secondary"
+                  : schedule === "scheduled"
+                    ? "outline"
+                    : "secondary"
             }
           >
             {DISCOUNT_LIST_STATUS_LABEL[schedule]}

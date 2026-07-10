@@ -243,7 +243,10 @@ function LevelPricingSection({
   return (
     <div className="space-y-1 border-t pt-4">
       <div className="mb-3">
-        <p className="font-medium text-sm">{row.levelName}</p>
+        <p className="flex items-center gap-1 font-medium text-sm">
+          {row.levelName}
+          <InfoTip label={row.levelName} text={PRICING_TOOLTIPS.level} />
+        </p>
         <p className="text-muted-foreground text-xs">
           {PRICE_METHOD_LABEL[row.method]} sobre {PRICE_BASIS_LABEL[row.basis].toLowerCase()}
           {row.hasOverride || dirtyRef.current ? " · Ajuste manual" : ""}

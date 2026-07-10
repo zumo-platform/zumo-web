@@ -10,10 +10,12 @@ export const DISCOUNT_TOOLTIPS = {
   listRegular:
     "Eliges a qué clientes aplica esta lista. Puedes filtrar por etiqueta, vendedor o zona para agregarlos en grupo.",
   schedule:
-    "La lista deja de aplicar automáticamente en la fecha que elijas. Déjalo vacío si no expira.",
+    "Define cuándo empieza y termina la vigencia de la lista. Dejá vacío el inicio para que aplique de inmediato, o el fin si no expira.",
   tagFilter:
     "Filtra tus clientes por etiqueta para agregarlos en grupo. Ej: 'Pizzerías' muestra los clientes con esa etiqueta. Se agregan los que están hoy; los nuevos no entran solos.",
   bestDiscount: "Si varias listas aplican, el cliente recibe el descuento más alto.",
+  discountList:
+    "Una lista de precios agrupa descuentos para clientes y productos. Las listas asignadas a este cliente pueden reducir el precio en sus pedidos.",
 } as const;
 
 export const DISCOUNT_MODE_LABEL = {
@@ -52,10 +54,15 @@ export function formatDiscountListDate(iso: string | null | undefined): string {
 
 export function discountListScheduleStatus(list: {
   active: boolean;
+  startsAt: string | null;
   expiresAt: string | null;
-}): "active" | "expired" | "inactive" {
+}): "active" | "expired" | "scheduled" | "inactive" {
   if (!list.active) return "inactive";
-  if (list.expiresAt && new Date(list.expiresAt).getTime() <= Date.now()) {
+  const now = Date.now();
+  if (list.startsAt && new Date(list.startsAt).getTime() > now) {
+    return "scheduled";
+  }
+  if (list.expiresAt && new Date(list.expiresAt).getTime() <= now) {
     return "expired";
   }
   return "active";
@@ -64,10 +71,13 @@ export function discountListScheduleStatus(list: {
 export const DISCOUNT_LIST_STATUS_LABEL = {
   active: "Activa",
   expired: "Vencida",
+  scheduled: "Programada",
   inactive: "Inactiva",
 } as const;
 
 export const PRICING_TOOLTIPS = {
+  listPrice:
+    "El precio habitual de venta de este producto, antes de descuentos o reglas por cliente. Es la referencia cuando no aplica un nivel de precio.",
   cost: "Lo que te cuesta comprar una unidad de este producto. Es la base para calcular tu precio de venta.",
   avgCost:
     "El promedio de lo que has pagado por este producto en tus últimas compras. Útil cuando el precio de compra varía.",
@@ -96,4 +106,9 @@ export const PRICING_TOOLTIPS = {
   bandMax: "El margen o sobreprecio máximo permitido al confirmar un pedido.",
   method:
     "Margen: ganancia sobre el precio de venta. Sobreprecio: ganancia sobre el costo. Elige el que uses en tu negocio.",
+} as const;
+
+export const INVENTORY_TOOLTIPS = {
+  reserved:
+    "Cantidad apartada para pedidos confirmados que aún no se han entregado. Sigue en inventario físico pero ya no está disponible para vender.",
 } as const;

@@ -13,8 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { CustomerProductDiscount } from "@/lib/dashboard-customers";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
 import { formatUnitAbbreviation } from "@/lib/product-unit";
+import { formatDiscountPct } from "@/lib/pricing-copy";
 import { formatOrderMoney } from "@/lib/order-product-search";
 import { useSupplierTimeFormatters } from "@/lib/workspace-preferences-context";
 import { cn } from "@/lib/utils";
@@ -27,12 +29,14 @@ function isProductAvailable(product: DashboardProductRow | undefined): boolean {
 export function CustomerProductsTab({
   productIds,
   productFirstOrderedAt,
+  productDiscounts,
   catalogById,
   onAddProducts,
   onRemoveProduct,
 }: Readonly<{
   productIds: readonly number[];
   productFirstOrderedAt: Readonly<Record<number, string>>;
+  productDiscounts: Readonly<Record<number, CustomerProductDiscount>>;
   catalogById: ReadonlyMap<number, DashboardProductRow>;
   onAddProducts: () => void;
   onRemoveProduct: (productId: number) => void;
@@ -80,6 +84,7 @@ export function CustomerProductsTab({
               <TableHead>Unidad</TableHead>
               <TableHead>Presentación</TableHead>
               <TableHead>Primer pedido</TableHead>
+              <TableHead className="text-right">Descuento</TableHead>
               <TableHead className="text-right">Precio</TableHead>
               <TableHead className="w-24" />
             </TableRow>
@@ -87,6 +92,7 @@ export function CustomerProductsTab({
           <TableBody>
             {rows.map(({ productId, product }) => {
               const available = isProductAvailable(product);
+              const discount = productDiscounts[productId];
               return (
                 <TableRow
                   className={cn(!available && "bg-muted/40 text-muted-foreground")}
@@ -100,6 +106,27 @@ export function CustomerProductsTab({
                     {productFirstOrderedAt[productId]
                       ? formatInstantDate(productFirstOrderedAt[productId])
                       : "—"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {discount?.discountPct != null ? (
+                      <span title={discount.discountListName ?? undefined}>
+                        {formatDiscountPct(String(discount.discountPct))}
+                      </span>
+                    ) : discount?.pendingDiscountPct != null ? (
+                      <span
+                        className="text-muted-foreground"
+                        title={
+                          discount.pendingDiscountListName
+                            ? `${discount.pendingDiscountListName} (programada)`
+                            : "Programada"
+                        }
+                      >
+                        {formatDiscountPct(String(discount.pendingDiscountPct))}
+                        <span className="ml-1 text-xs">prog.</span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {product?.price != null ? formatOrderMoney(Number(product.price)) : "—"}
