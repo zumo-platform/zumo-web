@@ -105,6 +105,17 @@ async function readApiError(res: Response): Promise<string> {
   return readApiErrorBody(body, res.status);
 }
 
+/** Distinguish navigation/unmount abort from client-side timeout abort. */
+function rethrowFetchAbort(err: unknown, parentSignal?: AbortSignal): never {
+  if (err instanceof DOMException && err.name === "AbortError" && parentSignal?.aborted) {
+    throw err;
+  }
+  if (err instanceof DOMException && err.name === "AbortError") {
+    throw new Error("La carga tardó demasiado. Revisá tu conexión e intentá de nuevo.");
+  }
+  throw err;
+}
+
 function parseWarehouse(raw: unknown): DashboardWarehouseRow | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -545,6 +556,160 @@ export async function fetchBackordersViaProxy(): Promise<BackorderWorklistRow[]>
     if (row) rows.push(row);
   }
   return rows;
+}
+
+export type AgingBatchRow = Readonly<{
+  productId: number;
+  productName: string;
+  sku: string | null;
+  batchId: string;
+  batchNumber: string;
+  expiryDate: string;
+  daysUntilExpiry: number;
+  onHand: number;
+  reserved: number;
+  available: number;
+  unitCost: number | null;
+  valueAtRisk: number | null;
+  vendorId: number | null;
+  vendorName: string | null;
+}>;
+
+function parseAgingRow(raw: unknown): AgingBatchRow | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.batchId !== "string" || typeof r.productId !== "number") return null;
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const numOrNull = (v: unknown): number | null =>
+    v == null ? null : typeof v === "number" && Number.isFinite(v) ? v : null;
+  return {
+    productId: r.productId,
+    productName: typeof r.productName === "string" ? r.productName : "—",
+    sku: typeof r.sku === "string" ? r.sku : null,
+    batchId: r.batchId,
+    batchNumber: typeof r.batchNumber === "string" ? r.batchNumber : "—",
+    expiryDate: typeof r.expiryDate === "string" ? r.expiryDate : "",
+    daysUntilExpiry: num(r.daysUntilExpiry),
+    onHand: num(r.onHand),
+    reserved: num(r.reserved),
+    available: num(r.available),
+    unitCost: numOrNull(r.unitCost),
+    valueAtRisk: numOrNull(r.valueAtRisk),
+    vendorId: typeof r.vendorId === "number" ? r.vendorId : null,
+    vendorName: typeof r.vendorName === "string" ? r.vendorName : null,
+  };
+}
+
+export async function fetchAgingReportViaProxy(
+  days = 14,
+  opts?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<AgingBatchRow[]> {
+  const timeoutMs = opts?.timeoutMs ?? 15_000;
+  const ctrl = new AbortController();
+  if (opts?.signal) {
+    if (opts.signal.aborted) ctrl.abort();
+    else opts.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(
+      `/api/backend/dashboard/inventory/batches/aging?days=${encodeURIComponent(String(days))}`,
+      { cache: "no-store", credentials: "include", signal: ctrl.signal },
+    );
+    const data = (await res.json().catch(() => ({}))) as { batches?: unknown[]; error?: string };
+    if (!res.ok) {
+      throw new Error(typeof data.error === "string" ? data.error : `Error ${res.status}`);
+    }
+    if (!Array.isArray(data.batches)) return [];
+    const rows: AgingBatchRow[] = [];
+    for (const item of data.batches) {
+      const row = parseAgingRow(item);
+      if (row) rows.push(row);
+    }
+    return rows;
+  } catch (err) {
+    rethrowFetchAbort(err, opts?.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export type ReorderSuggestionRow = Readonly<{
+  productId: number;
+  productName: string;
+  sku: string | null;
+  minimum: number;
+  available: number;
+  incoming: number;
+  deficit: number;
+  suggestedQty: number;
+  vendorId: number | null;
+  vendorName: string | null;
+  unitCost: number | null;
+  leadTimeDays: number | null;
+  projectedCost: number | null;
+}>;
+
+function parseReorderRow(raw: unknown): ReorderSuggestionRow | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.productId !== "number") return null;
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const numOrNull = (v: unknown): number | null =>
+    v == null ? null : typeof v === "number" && Number.isFinite(v) ? v : null;
+  return {
+    productId: r.productId,
+    productName: typeof r.productName === "string" ? r.productName : "—",
+    sku: typeof r.sku === "string" ? r.sku : null,
+    minimum: num(r.minimum),
+    available: num(r.available),
+    incoming: num(r.incoming),
+    deficit: num(r.deficit),
+    suggestedQty: num(r.suggestedQty),
+    vendorId: typeof r.vendorId === "number" ? r.vendorId : null,
+    vendorName: typeof r.vendorName === "string" ? r.vendorName : null,
+    unitCost: numOrNull(r.unitCost),
+    leadTimeDays: numOrNull(r.leadTimeDays),
+    projectedCost: numOrNull(r.projectedCost),
+  };
+}
+
+export async function fetchReorderSuggestionsViaProxy(opts?: {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}): Promise<ReorderSuggestionRow[]> {
+  const timeoutMs = opts?.timeoutMs ?? 30_000;
+  const ctrl = new AbortController();
+  if (opts?.signal) {
+    if (opts.signal.aborted) ctrl.abort();
+    else opts.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch("/api/backend/dashboard/inventory/reorder-suggestions", {
+      cache: "no-store",
+      credentials: "include",
+      signal: ctrl.signal,
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      suggestions?: unknown[];
+      error?: string;
+    };
+    if (!res.ok) {
+      throw new Error(typeof data.error === "string" ? data.error : `Error ${res.status}`);
+    }
+    if (!Array.isArray(data.suggestions)) return [];
+    const rows: ReorderSuggestionRow[] = [];
+    for (const item of data.suggestions) {
+      const row = parseReorderRow(item);
+      if (row) rows.push(row);
+    }
+    return rows;
+  } catch (err) {
+    rethrowFetchAbort(err, opts?.signal);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function fulfilBackorderViaProxy(args: {

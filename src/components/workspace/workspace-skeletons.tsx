@@ -382,6 +382,46 @@ export function BackordersTableSkeleton() {
   );
 }
 
+export function AgingTableSkeleton() {
+  return (
+    <SkeletonTable
+      ariaLabel="Cargando lotes por vencer"
+      rows={6}
+      columns={[
+        { w: "w-36" },
+        { w: "w-20" },
+        { w: "w-24" },
+        { w: "w-12", align: "right" },
+        { w: "w-16", align: "right" },
+        { w: "w-20", align: "right" },
+        { w: "w-24", align: "right" },
+        { w: "w-28" },
+      ]}
+    />
+  );
+}
+
+export function ReorderSuggestionsTableSkeleton() {
+  return (
+    <SkeletonTable
+      ariaLabel="Cargando sugerencias de compra"
+      rows={5}
+      columns={[
+        { w: "w-4" },
+        { w: "w-36" },
+        { w: "w-14", align: "right" },
+        { w: "w-14", align: "right" },
+        { w: "w-14", align: "right" },
+        { w: "w-14", align: "right" },
+        { w: "w-16", align: "right" },
+        { w: "w-20", align: "right" },
+        { w: "w-24", align: "right" },
+        { w: "w-16", align: "right" },
+      ]}
+    />
+  );
+}
+
 export function WarehousesTableSkeleton() {
   return (
     <SkeletonTable

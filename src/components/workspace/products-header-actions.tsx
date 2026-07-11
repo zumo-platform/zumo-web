@@ -56,6 +56,12 @@ export function ProductsHeaderActions({
             <Button asChild size="sm" variant="outline">
               <Link href="/products/backorders">Faltantes</Link>
             </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/products/aging">Por vencer</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/products/reorder">Sugerencias de compra</Link>
+            </Button>
             <Button
               variant="outline"
               size="sm"
