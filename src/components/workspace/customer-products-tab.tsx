@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Package, Plus } from "lucide-react";
 
@@ -13,13 +13,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CustomerPriceLookup } from "@/components/workspace/customer-price-lookup";
+import {
+  fetchCustomerProductPricingViaProxy,
+  type CustomerProductPricingRow,
+} from "@/lib/customer-product-pricing";
 import type { CustomerProductDiscount } from "@/lib/dashboard-customers";
 import type { DashboardProductRow } from "@/lib/dashboard-products";
-import { formatUnitAbbreviation } from "@/lib/product-unit";
-import { formatDiscountPct } from "@/lib/pricing-copy";
 import { formatOrderMoney } from "@/lib/order-product-search";
-import { useSupplierTimeFormatters } from "@/lib/workspace-preferences-context";
+import { formatDiscountPct } from "@/lib/pricing-copy";
+import { formatUnitAbbreviation } from "@/lib/product-unit";
 import { cn } from "@/lib/utils";
+import { useSupplierTimeFormatters } from "@/lib/workspace-preferences-context";
 
 function isProductAvailable(product: DashboardProductRow | undefined): boolean {
   if (!product) return false;
@@ -27,6 +32,7 @@ function isProductAvailable(product: DashboardProductRow | undefined): boolean {
 }
 
 export function CustomerProductsTab({
+  customerId,
   productIds,
   productFirstOrderedAt,
   productDiscounts,
@@ -34,6 +40,7 @@ export function CustomerProductsTab({
   onAddProducts,
   onRemoveProduct,
 }: Readonly<{
+  customerId: number;
   productIds: readonly number[];
   productFirstOrderedAt: Readonly<Record<number, string>>;
   productDiscounts: Readonly<Record<number, CustomerProductDiscount>>;
@@ -42,6 +49,24 @@ export function CustomerProductsTab({
   onRemoveProduct: (productId: number) => void;
 }>) {
   const { formatInstantDate } = useSupplierTimeFormatters();
+  const [resolvedById, setResolvedById] = useState<ReadonlyMap<number, CustomerProductPricingRow>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    if (productIds.length === 0) return;
+    const ctrl = new AbortController();
+    void fetchCustomerProductPricingViaProxy(customerId, {
+      productIds,
+      signal: ctrl.signal,
+    })
+      .then((rows) => {
+        setResolvedById(new Map(rows.map((row) => [row.productId, row])));
+      })
+      .catch(() => setResolvedById(new Map()));
+    return () => ctrl.abort();
+  }, [customerId, productIds]);
+
   const rows = useMemo(() => {
     return productIds
       .map((id) => ({ productId: id, product: catalogById.get(id) }))
@@ -50,7 +75,9 @@ export function CustomerProductsTab({
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+      <div className="space-y-4">
+        <CustomerPriceLookup customerId={customerId} />
+        <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
         <Package aria-hidden className="size-10 text-muted-foreground" />
         <div className="space-y-1">
           <p className="font-medium text-sm">Todavía no hay productos</p>
@@ -63,12 +90,14 @@ export function CustomerProductsTab({
           <Plus className="size-4" />
           Agregar productos
         </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <CustomerPriceLookup customerId={customerId} />
       <div className="flex justify-end">
         <Button className="gap-1.5" size="sm" type="button" onClick={onAddProducts}>
           <Plus className="size-4" />
@@ -93,6 +122,15 @@ export function CustomerProductsTab({
             {rows.map(({ productId, product }) => {
               const available = isProductAvailable(product);
               const discount = productDiscounts[productId];
+              const resolved = resolvedById.get(productId);
+              const displayPrice = resolved?.unitPrice ?? null;
+              const basePrice = resolved?.basePrice ?? null;
+              const showStrike =
+                displayPrice != null &&
+                basePrice != null &&
+                resolved != null &&
+                resolved.discountPct > 0 &&
+                basePrice !== displayPrice;
               return (
                 <TableRow
                   className={cn(!available && "bg-muted/40 text-muted-foreground")}
@@ -129,7 +167,18 @@ export function CustomerProductsTab({
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {product?.price != null ? formatOrderMoney(Number(product.price)) : "—"}
+                    {displayPrice != null ? (
+                      <div className="space-y-0.5">
+                        <div>{formatOrderMoney(displayPrice)}</div>
+                        {showStrike ? (
+                          <div className="text-muted-foreground text-xs line-through">
+                            {formatOrderMoney(basePrice!)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

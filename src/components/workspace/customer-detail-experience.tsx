@@ -283,6 +283,7 @@ export function CustomerDetailExperience({
               </TabsContent>
               <TabsContent className="mt-0" value="products">
                 <CustomerProductsTab
+                  customerId={customerId}
                   catalogById={catalogById}
                   productDiscounts={detail.productDiscounts}
                   productFirstOrderedAt={detail.productFirstOrderedAt}

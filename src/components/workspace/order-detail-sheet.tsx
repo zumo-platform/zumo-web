@@ -117,6 +117,8 @@ type OrderDetailLine = Readonly<{
   unit: string;
   unitPrice: number | null;
   lineSubtotal: number | null;
+  resolvedUnitPrice: number | null;
+  resolvedLineSubtotal: number | null;
 }>;
 
 type OrderDetail = Readonly<{
@@ -187,13 +189,21 @@ function csvField(v: string | number | null): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function effectiveUnitPrice(line: OrderDetailLine): number | null {
+  return line.unitPrice ?? line.resolvedUnitPrice ?? null;
+}
+
 function lineUnitPriceTotal(line: OrderDetailLine): number | null {
-  if (line.unitPrice === null) return null;
-  return line.quantity * line.unitPrice;
+  const unitPrice = effectiveUnitPrice(line);
+  if (unitPrice === null) return null;
+  return line.quantity * unitPrice;
 }
 
 function lineSubtotalValue(line: OrderDetailLine): number | null {
   if (line.lineSubtotal !== null) return line.lineSubtotal;
+  if (line.unitPrice === null && line.resolvedLineSubtotal !== null) {
+    return line.resolvedLineSubtotal;
+  }
   return lineUnitPriceTotal(line);
 }
 
@@ -234,6 +244,8 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
       unit,
       unitPrice: asNumberOrNull(line.unitPrice),
       lineSubtotal: asNumberOrNull(line.lineSubtotal),
+      resolvedUnitPrice: asNumberOrNull(line.resolvedUnitPrice),
+      resolvedLineSubtotal: asNumberOrNull(line.resolvedLineSubtotal),
     });
   }
 
@@ -675,7 +687,7 @@ export function OrderDetailSheet({
         csvField(product?.presentation ?? ""),
         csvField(line.unit),
         csvField(line.quantity),
-        csvField(line.unitPrice),
+        csvField(effectiveUnitPrice(line)),
         csvField(sub),
       ].join(",");
     });
@@ -1112,7 +1124,7 @@ export function OrderDetailSheet({
                               ) : null}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {formatMoney(line.unitPrice)}
+                              {formatMoney(effectiveUnitPrice(line))}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {formatMoney(lineUnitPriceTotal(line))}

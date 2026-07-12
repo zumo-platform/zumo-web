@@ -87,7 +87,7 @@ export const MOVEMENT_REASON_LABEL: Record<string, string> = {
   adjustment: "Ajuste",
   transfer_in: "Transferencia (entrada)",
   transfer_out: "Transferencia (salida)",
-  count_correction: "Corrección de conteo",
+  count_correction: "Ajuste por conteo",
   receipt: "Recepción de compra",
   receipt_reversal: "Reverso de recepción",
 };

@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CustomerPriceLookup } from "@/components/workspace/customer-price-lookup";
 import { markDashboardOrderSeenViaProxy } from "@/lib/dashboard-orders";
 import type { Conversation, Order } from "@/lib/dashboard-types";
 
@@ -108,7 +109,16 @@ export function InformationPanel({
           {unknown ? (
             <UnknownCustomerBanner phone={conversation.customerPhone.trim() || ""} />
           ) : (
-            <CustomerCard conversation={conversation} orders={orders} />
+            <>
+              <CustomerCard conversation={conversation} orders={orders} />
+              {conversation.customerId != null ? (
+                <CustomerPriceLookup
+                  customerId={conversation.customerId}
+                  description="Si el cliente pregunta por un producto (ej. cebollas), buscá aquí el precio para él."
+                  title="Precio para este cliente"
+                />
+              ) : null}
+            </>
           )}
         </div>
 

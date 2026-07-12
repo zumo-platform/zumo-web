@@ -690,6 +690,7 @@ export type DashboardOrderDetailLine = Readonly<{
   bandMin: number | null;
   bandMax: number | null;
   resolvedUnitPrice: number | null;
+  resolvedLineSubtotal: number | null;
 }>;
 
 export type DashboardOrderDetail = Readonly<{
@@ -778,6 +779,7 @@ export function parseDashboardOrderDetail(
       bandMin: asNumberOrNull(line.bandMin),
       bandMax: asNumberOrNull(line.bandMax),
       resolvedUnitPrice: asNumberOrNull(line.resolvedUnitPrice),
+      resolvedLineSubtotal: asNumberOrNull(line.resolvedLineSubtotal),
     });
   }
 

@@ -62,6 +62,9 @@ export function ProductsHeaderActions({
             <Button asChild size="sm" variant="outline">
               <Link href="/products/reorder">Sugerencias de compra</Link>
             </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/products/stock-counts">Conteos de inventario</Link>
+            </Button>
             <Button
               variant="outline"
               size="sm"

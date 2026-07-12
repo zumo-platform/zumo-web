@@ -32,6 +32,7 @@ import { ProductInventoryTab } from "@/components/workspace/product-inventory-ta
 import { ProductOrdersTab } from "@/components/workspace/product-orders-tab";
 import { ProductPricingTab } from "@/components/workspace/product-pricing-card";
 import { ProductSidebar } from "@/components/workspace/product-sidebar";
+import { ProductVendorsTab } from "@/components/workspace/product-vendors-tab";
 import { WorkspaceComingSoon } from "@/components/workspace/workspace-coming-soon";
 import { ProductDetailSkeleton } from "@/components/workspace/workspace-skeletons";
 import { fetchDashboardSettingsViaProxy } from "@/lib/dashboard-settings";
@@ -307,6 +308,7 @@ export function ProductDetailExperience({
               <TabsTrigger value="detalles">Detalles</TabsTrigger>
               <TabsTrigger value="precio">Precio</TabsTrigger>
               <TabsTrigger value="inventario">Inventario</TabsTrigger>
+              <TabsTrigger value="proveedores">Proveedores</TabsTrigger>
               <TabsTrigger value="ventas">Ventas</TabsTrigger>
               <TabsTrigger value="pedidos">Pedidos</TabsTrigger>
               <TabsTrigger value="clientes">Clientes</TabsTrigger>
@@ -338,6 +340,13 @@ export function ProductDetailExperience({
                 batchSettings={batchSettings}
                 canEditInventory={canEdit}
                 onRefresh={() => void loadDetail()}
+              />
+            </TabsContent>
+            <TabsContent value="proveedores" className="mt-4">
+              <ProductVendorsTab
+                productId={productId}
+                canEdit={canEdit}
+                defaultCurrency={defaultCurrency}
               />
             </TabsContent>
             <TabsContent value="ventas" className="mt-4">
