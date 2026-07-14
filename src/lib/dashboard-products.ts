@@ -30,6 +30,7 @@ export type DashboardProductRow = Readonly<{
   deletedAt: string | null;
   stockQuantity: string;
   price: string | null;
+  cost: string | null;
   imageUrl: string | null;
   categoryId: number | null;
 
@@ -88,6 +89,17 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
           ? String(o.price)
           : null;
 
+  const cost =
+    o.cost === null || o.cost === undefined
+      ? null
+      : typeof o.cost === "string"
+        ? o.cost.trim().length
+          ? o.cost.trim()
+          : null
+        : typeof o.cost === "number" && Number.isFinite(o.cost)
+          ? String(o.cost)
+          : null;
+
   const imageUrl =
     o.imageUrl === null || o.imageUrl === undefined
       ? null
@@ -126,6 +138,7 @@ function parseProduct(raw: unknown): DashboardProductRow | null {
     deletedAt,
     stockQuantity,
     price,
+    cost,
     imageUrl,
     categoryId,
     trackStock,

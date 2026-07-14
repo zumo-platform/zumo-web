@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
+  ChevronRight,
   HelpCircle,
   Inbox,
   Loader2,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   Store,
   Tag,
+  TrendingUp,
   Truck,
   Users,
 } from "lucide-react";
@@ -31,8 +33,12 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
@@ -64,12 +70,36 @@ type NavItem =
       tooltip: string;
       icon: typeof Inbox;
       label: string;
-    };
+    }
+  | { type: "ventas" };
+
+const SALES_SUB_NAV: ReadonlyArray<{ href: string; label: string }> = [
+  { href: "/sales/pipeline", label: "Flujo" },
+  { href: "/sales/opportunities", label: "Oportunidades" },
+  { href: "/quotes", label: "Cotizaciones" },
+];
+
+function isVentasNavItem(item: NavItem): item is { type: "ventas" } {
+  return "type" in item && item.type === "ventas";
+}
+
+function isDisabledNavItem(
+  item: NavItem,
+): item is Extract<NavItem, { disabled: true }> {
+  return "disabled" in item;
+}
+
+function isLinkNavItem(
+  item: NavItem,
+): item is Extract<NavItem, { href: string }> {
+  return "href" in item;
+}
 
 const baseMainNav: NavItem[] = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/whatsapp", icon: MessageSquare, label: "WhatsApp" },
   { href: "/orders", icon: ShoppingCart, label: "Pedidos" },
+  { type: "ventas" },
   { href: "/products", icon: Package, label: "Inventario" },
   { href: "/matches", icon: Sparkles, label: "Matches" },
   { href: "/clients", icon: Store, label: "Clientes" },
@@ -119,9 +149,12 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNav.map((item) => {
-                const Icon = item.icon;
+                if (isVentasNavItem(item)) {
+                  return <VentasNavItem key="ventas" pathname={pathname} router={router} />;
+                }
 
-                if ("disabled" in item) {
+                if (isDisabledNavItem(item)) {
+                  const Icon = item.icon;
                   return (
                     <SidebarMenuItem key={item.label}>
                       <SidebarMenuButton
@@ -136,6 +169,9 @@ export function AppSidebar({
                   );
                 }
 
+                if (!isLinkNavItem(item)) return null;
+
+                const Icon = item.icon;
                 const active =
                   pathname === item.href ||
                   (item.href !== "/" && pathname.startsWith(`${item.href}/`));
@@ -231,6 +267,74 @@ export function AppSidebar({
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
+  );
+}
+
+function VentasNavItem({
+  pathname,
+  router,
+}: Readonly<{
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+}>) {
+  const isSalesActive =
+    pathname.startsWith("/sales/") || pathname.startsWith("/quotes");
+  const [open, setOpen] = useState(isSalesActive);
+
+  useEffect(() => {
+    if (isSalesActive) setOpen(true);
+  }, [isSalesActive]);
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isSalesActive}
+        data-state={open ? "open" : "closed"}
+        tooltip="Ventas"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={cn(
+          isSalesActive &&
+            "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
+        )}
+      >
+        <TrendingUp />
+        <span>Ventas</span>
+      </SidebarMenuButton>
+      <SidebarMenuAction
+        aria-label={open ? "Contraer ventas" : "Expandir ventas"}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+      >
+        <ChevronRight className={cn("transition-transform", open && "rotate-90")} />
+      </SidebarMenuAction>
+      {open ? (
+        <SidebarMenuSub>
+          {SALES_SUB_NAV.map((subItem) => {
+            const subActive =
+              pathname === subItem.href || pathname.startsWith(`${subItem.href}/`);
+
+            return (
+              <SidebarMenuSubItem key={subItem.href}>
+                <SidebarMenuSubButton asChild isActive={subActive}>
+                  <Link
+                    href={subItem.href}
+                    prefetch
+                    onMouseEnter={() => router.prefetch(subItem.href)}
+                    onFocus={() => router.prefetch(subItem.href)}
+                  >
+                    <span>{subItem.label}</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            );
+          })}
+        </SidebarMenuSub>
+      ) : null}
+    </SidebarMenuItem>
   );
 }
 

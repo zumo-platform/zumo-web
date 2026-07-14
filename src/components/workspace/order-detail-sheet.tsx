@@ -762,6 +762,8 @@ export function OrderDetailSheet({
           unit: l.unit,
           unitPrice: l.unitPrice,
           lineSubtotal: l.lineSubtotal,
+          resolvedUnitPrice: l.resolvedUnitPrice,
+          resolvedLineSubtotal: l.resolvedLineSubtotal,
         })),
         matchCoverage: detail.matchCoverage,
         isTouchless: detail.isTouchless,

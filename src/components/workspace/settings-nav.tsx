@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Building, Layers, MessageCircle, Package, Shield, Sparkles, Tag, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
+import { Building, Layers, MessageCircle, Package, Shield, Sparkles, Store, Tag, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -23,6 +23,8 @@ const SETTINGS_NAV: ReadonlyArray<{
   { href: "/settings/price-levels", label: "Niveles de precio", icon: Layers },
   { href: "/settings/permissions", label: "Permisos del equipo", icon: Shield },
   { href: "/settings/order-flow", label: "Flujo de pedidos", icon: Workflow },
+  { href: "/settings/pipeline-stages", label: "Etapas del pipeline", icon: Workflow },
+  { href: "/settings/business-types", label: "Tipos de negocio", icon: Store },
 ];
 
 export function SettingsNav() {

@@ -474,7 +474,10 @@ function parseProductDiscounts(raw: unknown): Record<number, CustomerProductDisc
           ? pctRaw
           : Number(pctRaw);
     map[productId] = {
-      discountPct: Number.isFinite(discountPct) && discountPct > 0 ? discountPct : null,
+      discountPct:
+        discountPct != null && Number.isFinite(discountPct) && discountPct > 0
+          ? discountPct
+          : null,
       discountListName:
         typeof o.discountListName === "string" && o.discountListName.trim()
           ? o.discountListName.trim()

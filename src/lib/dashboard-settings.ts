@@ -94,6 +94,8 @@ export function parseSupplierSettings(data: unknown): SupplierSettings | null {
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,
       chatbotEnabled: aiRaw.chatbotEnabled !== false,
       draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
+      quotesEnabled: aiRaw.quotesEnabled === true,
+      quotesAutoSendEnabled: aiRaw.quotesAutoSendEnabled === true,
     },
     pricing: {
       engineEnabled: pricingRaw?.engineEnabled === true,
@@ -204,6 +206,8 @@ export async function fetchSellersDashboard(
 export type PatchSupplierSettingsInput = Readonly<{
   aiAutoCommitEnabled?: boolean;
   aiChatbotEnabled?: boolean;
+  aiQuotesEnabled?: boolean;
+  aiQuotesAutoSendEnabled?: boolean;
   draftExpirationHours?: DraftExpirationHours;
   defaultLocale?: "es" | "en";
   pricingEngineEnabled?: boolean;
@@ -275,6 +279,8 @@ export async function patchDashboardSettingsViaProxy(
       autoCommitEnabled: aiRaw.autoCommitEnabled === true,
       chatbotEnabled: aiRaw.chatbotEnabled !== false,
       draftExpirationHours: parseExpirationHours(aiRaw.draftExpirationHours),
+      quotesEnabled: aiRaw.quotesEnabled === true,
+      quotesAutoSendEnabled: aiRaw.quotesAutoSendEnabled === true,
     };
   }
 

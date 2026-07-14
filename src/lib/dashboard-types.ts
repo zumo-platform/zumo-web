@@ -96,6 +96,8 @@ export type SupplierSettings = {
     autoCommitEnabled: boolean;
     chatbotEnabled: boolean;
     draftExpirationHours: 24 | 48 | 72 | 168;
+    quotesEnabled: boolean;
+    quotesAutoSendEnabled: boolean;
   };
   pricing: {
     engineEnabled: boolean;

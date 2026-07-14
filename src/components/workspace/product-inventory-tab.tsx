@@ -120,6 +120,7 @@ export function ProductInventoryTab({
     deletedAt: detail.product.deletedAt,
     stockQuantity: detail.product.stockQuantity,
     price: detail.product.price,
+    cost: detail.product.cost,
     imageUrl: detail.product.imageUrl,
     categoryId: detail.product.categoryId,
     trackStock: detail.product.trackStock,

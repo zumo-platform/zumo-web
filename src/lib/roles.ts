@@ -26,6 +26,7 @@ export const PERMISSION_KEYS = [
   "cart.manage_own",
   "proposals.create_own",
   "pricing.edit_own",
+  "pricing.override_band",
   "marketing.access",
   "marketing.manage",
 ] as const;
@@ -61,6 +62,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, ReadonlySet<PermissionKey>> 
     "customers.edit_own",
     "proposals.create_own",
     "pricing.edit_own",
+    "pricing.override_band",
   ]),
   marketing: new Set(["marketing.manage", "marketing.access"]),
 };
@@ -198,7 +200,13 @@ export const PERMISSION_GROUPS: ReadonlyArray<{
   },
   {
     label: "Tareas y propuestas",
-    keys: ["tasks.manage_own", "cart.manage_own", "proposals.create_own", "pricing.edit_own"],
+    keys: [
+      "tasks.manage_own",
+      "cart.manage_own",
+      "proposals.create_own",
+      "pricing.edit_own",
+      "pricing.override_band",
+    ],
   },
   {
     label: "Marketing",
@@ -248,6 +256,8 @@ export function permissionLabel(key: PermissionKey): string {
       return "Crear propuestas propias";
     case "pricing.edit_own":
       return "Editar precios propios";
+    case "pricing.override_band":
+      return "Anular banda de precio en pedidos";
     case "marketing.access":
       return "Acceder a marketing";
     case "marketing.manage":

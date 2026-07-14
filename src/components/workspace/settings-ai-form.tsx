@@ -42,6 +42,16 @@ const COPY = {
   autoCommitDetail:
     "Cuando est\u00e1 activada: los pedidos perfectos pasan directo a confirmados sin tu intervenci\u00f3n. Cuando est\u00e1 desactivada (recomendado al inicio): vos confirm\u00e1s cada pedido manualmente.",
   autoCommitLabel: "Confirmaci\u00f3n autom\u00e1tica",
+  quotesTitle: "Cotizaciones con AI",
+  quotesLead:
+    "Permit\u00ed que Zumo detecte solicitudes de cotizaci\u00f3n en WhatsApp y prepare un borrador de cotizaci\u00f3n para tu revisi\u00f3n.",
+  quotesDetail:
+    "Activado: cuando un cliente pide precios o una cotizaci\u00f3n, Zumo arma un borrador con productos y precios sugeridos. Desactivado: no se generan cotizaciones autom\u00e1ticas.",
+  quotesAutoSendTitle: "Env\u00edo autom\u00e1tico de cotizaciones",
+  quotesAutoSendLead:
+    "Cuando el borrador de cotizaci\u00f3n tiene confianza alta, env\u00edalo autom\u00e1ticamente al cliente por WhatsApp.",
+  quotesAutoSendDetail:
+    "Solo aplica si \u201cCotizaciones con AI\u201d est\u00e1 activado. Recomendado dejarlo desactivado al inicio para revisar cada cotizaci\u00f3n antes de enviarla.",
   draftExpiryTitle: "Caducidad de borradores",
   draftExpiryLead:
     "Cu\u00e1nto tiempo guardamos un borrador antes de cancelarlo autom\u00e1ticamente si nadie lo revis\u00f3.",
@@ -65,6 +75,12 @@ export function SettingsAiForm({
   );
   const [savingChatbot, setSavingChatbot] = useState(false);
   const [savingAutoCommit, setSavingAutoCommit] = useState(false);
+  const [quotesEnabled, setQuotesEnabled] = useState(initialAi.quotesEnabled);
+  const [quotesAutoSendEnabled, setQuotesAutoSendEnabled] = useState(
+    initialAi.quotesAutoSendEnabled,
+  );
+  const [savingQuotes, setSavingQuotes] = useState(false);
+  const [savingQuotesAutoSend, setSavingQuotesAutoSend] = useState(false);
   const [savingExpiration, setSavingExpiration] = useState(false);
 
   async function saveChatbot(next: boolean) {
@@ -115,6 +131,53 @@ export function SettingsAiForm({
     }
   }
 
+  async function saveQuotes(next: boolean) {
+    if (!canEdit || savingQuotes) return;
+    const prev = quotesEnabled;
+    setQuotesEnabled(next);
+    setSavingQuotes(true);
+    try {
+      const result = await patchDashboardSettingsViaProxy({ aiQuotesEnabled: next });
+      const ai = result.ai;
+      if (!ai) throw new Error("Respuesta de configuraci\u00f3n inv\u00e1lida.");
+      setQuotesEnabled(ai.quotesEnabled);
+      setQuotesAutoSendEnabled(ai.quotesAutoSendEnabled);
+      toast.success(
+        ai.quotesEnabled ? "Cotizaciones con AI activadas" : "Cotizaciones con AI desactivadas",
+      );
+      router.refresh();
+    } catch (err) {
+      setQuotesEnabled(prev);
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
+    } finally {
+      setSavingQuotes(false);
+    }
+  }
+
+  async function saveQuotesAutoSend(next: boolean) {
+    if (!canEdit || savingQuotesAutoSend) return;
+    const prev = quotesAutoSendEnabled;
+    setQuotesAutoSendEnabled(next);
+    setSavingQuotesAutoSend(true);
+    try {
+      const result = await patchDashboardSettingsViaProxy({ aiQuotesAutoSendEnabled: next });
+      const ai = result.ai;
+      if (!ai) throw new Error("Respuesta de configuraci\u00f3n inv\u00e1lida.");
+      setQuotesAutoSendEnabled(ai.quotesAutoSendEnabled);
+      toast.success(
+        ai.quotesAutoSendEnabled
+          ? "Env\u00edo autom\u00e1tico de cotizaciones activado"
+          : "Env\u00edo autom\u00e1tico de cotizaciones desactivado",
+      );
+      router.refresh();
+    } catch (err) {
+      setQuotesAutoSendEnabled(prev);
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
+    } finally {
+      setSavingQuotesAutoSend(false);
+    }
+  }
+
   async function saveExpiration(next: DraftExpirationHours) {
     if (!canEdit || savingExpiration || next === draftExpirationHours) return;
     const prev = draftExpirationHours;
@@ -136,7 +199,12 @@ export function SettingsAiForm({
   }
 
   const controlsDisabled =
-    !canEdit || savingChatbot || savingAutoCommit || savingExpiration;
+    !canEdit ||
+    savingChatbot ||
+    savingAutoCommit ||
+    savingExpiration ||
+    savingQuotes ||
+    savingQuotesAutoSend;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -191,6 +259,64 @@ export function SettingsAiForm({
                   />
                   <Label className="sr-only" htmlFor="auto-commit">
                     {COPY.autoCommitLabel}
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              {!canEdit ? <TooltipContent side="left">{READONLY_TOOLTIP}</TooltipContent> : null}
+            </Tooltip>
+          </div>
+        </section>
+
+        <section className="rounded-lg border bg-card p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-2">
+              <h2 className="font-semibold text-base">{COPY.quotesTitle}</h2>
+              <p className="text-muted-foreground text-sm leading-relaxed">{COPY.quotesLead}</p>
+              <p className="text-muted-foreground text-sm leading-relaxed">{COPY.quotesDetail}</p>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex shrink-0 items-center gap-2 pt-1">
+                  {savingQuotes ? (
+                    <Loader2 aria-hidden className="size-4 animate-spin text-muted-foreground" />
+                  ) : null}
+                  <Switch
+                    checked={quotesEnabled}
+                    disabled={controlsDisabled}
+                    id="ai-quotes"
+                    onCheckedChange={(checked) => void saveQuotes(checked)}
+                  />
+                  <Label className="sr-only" htmlFor="ai-quotes">
+                    {COPY.quotesTitle}
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              {!canEdit ? <TooltipContent side="left">{READONLY_TOOLTIP}</TooltipContent> : null}
+            </Tooltip>
+          </div>
+        </section>
+
+        <section className="rounded-lg border bg-card p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-2">
+              <h2 className="font-semibold text-base">{COPY.quotesAutoSendTitle}</h2>
+              <p className="text-muted-foreground text-sm leading-relaxed">{COPY.quotesAutoSendLead}</p>
+              <p className="text-muted-foreground text-sm leading-relaxed">{COPY.quotesAutoSendDetail}</p>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex shrink-0 items-center gap-2 pt-1">
+                  {savingQuotesAutoSend ? (
+                    <Loader2 aria-hidden className="size-4 animate-spin text-muted-foreground" />
+                  ) : null}
+                  <Switch
+                    checked={quotesAutoSendEnabled}
+                    disabled={controlsDisabled || !quotesEnabled}
+                    id="ai-quotes-auto-send"
+                    onCheckedChange={(checked) => void saveQuotesAutoSend(checked)}
+                  />
+                  <Label className="sr-only" htmlFor="ai-quotes-auto-send">
+                    {COPY.quotesAutoSendTitle}
                   </Label>
                 </div>
               </TooltipTrigger>
