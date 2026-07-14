@@ -257,8 +257,10 @@ export async function deleteQuoteViaProxy(quoteId: string): Promise<void> {
 export type LeadRow = Readonly<{
   leadId: number;
   name: string;
+  legalName: string | null;
   email: string | null;
   phone: string | null;
+  city: string | null;
 }>;
 
 export async function fetchLeadsViaProxy(): Promise<LeadRow[]> {
@@ -275,8 +277,10 @@ export async function fetchLeadsViaProxy(): Promise<LeadRow[]> {
       return {
         leadId: Number(o.leadId),
         name: typeof o.name === "string" ? o.name : "",
+        legalName: optStr(o.legalName),
         email: optStr(o.email),
         phone: optStr(o.phone),
+        city: optStr(o.city),
       } satisfies LeadRow;
     })
     .filter((l): l is LeadRow => l != null);
@@ -284,8 +288,11 @@ export async function fetchLeadsViaProxy(): Promise<LeadRow[]> {
 
 export async function createLeadViaProxy(input: {
   name: string;
+  legalName?: string | null;
   email?: string | null;
   phone?: string | null;
+  city?: string | null;
+  source?: string | null;
 }): Promise<number> {
   const res = await fetch(`/api/backend/dashboard/leads`, {
     method: "POST",
@@ -293,9 +300,9 @@ export async function createLeadViaProxy(input: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const body = (await res.json().catch(() => ({}))) as { leadId?: number; error?: string };
+  const body = (await res.json().catch(() => ({}))) as { leadId?: number; error?: string; message?: string };
   if (!res.ok || typeof body.leadId !== "number") {
-    throw new Error(body.error ?? "No se pudo crear el prospecto.");
+    throw new Error(apiErrorMessage(body, "No se pudo crear el prospecto."));
   }
   return body.leadId;
 }

@@ -120,13 +120,24 @@ const BoardCard = memo(function BoardCard({
 
       <dl className="mt-2 space-y-1 text-muted-foreground text-xs">
         <div className="flex gap-1">
-          <dt className="shrink-0">Recurrente/mes:</dt>
-          <dd>{formatMoney(opp.monthlyRecurringValue, opp.currency)}</dd>
+          <dt className="shrink-0">Total/mes:</dt>
+          <dd>
+            {formatMoney(opp.monthlyRecurringValue, opp.currency)}
+            {opp.ordersPerMonth > 1 ? (
+              <span className="text-muted-foreground/80"> ({opp.ordersPerMonth} pedidos)</span>
+            ) : null}
+          </dd>
         </div>
         {opp.location ? (
           <div className="flex gap-1">
             <dt className="shrink-0">Ubicación:</dt>
             <dd className="truncate">{opp.location}</dd>
+          </div>
+        ) : null}
+        {opp.assignedSellerName ? (
+          <div className="flex gap-1">
+            <dt className="shrink-0">Vendedor:</dt>
+            <dd className="truncate">{opp.assignedSellerName}</dd>
           </div>
         ) : null}
       </dl>

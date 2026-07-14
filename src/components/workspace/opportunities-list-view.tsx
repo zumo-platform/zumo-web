@@ -110,7 +110,7 @@ export function OpportunitiesListView({
                 <TableHead>Estado</TableHead>
                 <TableHead>Tipo de negocio</TableHead>
                 <TableHead>Ubicación</TableHead>
-                <TableHead className="text-right">Recurrente/mes</TableHead>
+                <TableHead className="text-right">Total/mes</TableHead>
                 <TableHead>Creado</TableHead>
               </TableRow>
             </TableHeader>
@@ -139,6 +139,11 @@ export function OpportunitiesListView({
                   <TableCell>{o.location ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     {formatMoney(o.monthlyRecurringValue, o.currency)}
+                    {o.ordersPerMonth > 1 ? (
+                      <span className="block text-muted-foreground text-xs">
+                        {o.ordersPerMonth} pedidos/mes
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell>{formatDate(o.createdAt)}</TableCell>
                 </TableRow>

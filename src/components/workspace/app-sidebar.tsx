@@ -4,14 +4,10 @@ import { useEffect, useState } from "react";
 
 import {
   ChevronRight,
-  HelpCircle,
   Inbox,
-  Loader2,
-  LogOut,
   Megaphone,
   MessageSquare,
   Package,
-  Settings,
   ShoppingCart,
   Sparkles,
   Store,
@@ -22,9 +18,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { toast } from "sonner";
 
-import { ZumoWordmark } from "@/components/branding/zumo-logos";
+import { SupplierWorkspaceMenu } from "@/components/workspace/supplier-workspace-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -40,8 +35,6 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
-  SidebarSeparator,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import type { SellerMe } from "@/lib/dashboard-types";
 import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
@@ -133,15 +126,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-sidebar-border border-b px-3 py-3 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-2">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
-          <Link
-            className="flex min-w-0 items-center gap-1 text-sidebar-foreground group-data-[collapsible=icon]:hidden"
-            href="/whatsapp"
-          >
-            <ZumoWordmark className="max-h-7 max-w-[min(100%,6.5rem)] md:max-h-8" />
-          </Link>
-          <SidebarTrigger className="text-sidebar-foreground" />
-        </div>
+        <SupplierWorkspaceMenu businessName={businessName} />
       </SidebarHeader>
 
       <SidebarContent>
@@ -216,15 +201,6 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter className="border-sidebar-border border-t">
-        <div className="flex items-center gap-2 rounded-md px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent font-bold text-sidebar-accent-foreground text-xs shadow-sm">
-            {businessName.slice(0, 2).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <p className="truncate font-semibold text-sm">{businessName}</p>
-          </div>
-        </div>
-
         <div className="flex items-center gap-2 px-2 py-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold">
             {initials(seller.name || seller.email || "?")}
@@ -234,32 +210,6 @@ export function AppSidebar({
             <p className="truncate text-muted-foreground text-xs">{seller.email}</p>
           </div>
         </div>
-
-        <SidebarSeparator className="my-1 group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:w-8" />
-
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="Soporte"
-              type="button"
-              onClick={() => toast.message("Soporte — próximamente")}
-            >
-              <HelpCircle />
-              <span>Soporte</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")} tooltip="Opciones">
-              <Link href="/settings">
-                <Settings />
-                <span>Opciones</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <LogoutMenuButton />
-          </SidebarMenuItem>
-        </SidebarMenu>
 
         <p className="px-2 pt-2 text-center text-muted-foreground text-[10px] group-data-[collapsible=icon]:hidden">
           Versión {appVersion}
@@ -335,31 +285,5 @@ function VentasNavItem({
         </SidebarMenuSub>
       ) : null}
     </SidebarMenuItem>
-  );
-}
-
-function LogoutMenuButton() {
-  const router = useRouter();
-  const [pending, setPending] = useState(false);
-
-  async function logout() {
-    setPending(true);
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      router.push("/login");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <SidebarMenuButton disabled={pending} tooltip="Cerrar sesión" type="button" onClick={logout}>
-      {pending ? (
-        <Loader2 className="size-4 animate-spin" />
-      ) : (
-        <LogOut />
-      )}
-      <span>Cerrar sesión</span>
-    </SidebarMenuButton>
   );
 }
