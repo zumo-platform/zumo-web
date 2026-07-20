@@ -16,6 +16,7 @@ import { MessageThread } from "@/components/whatsapp/message-thread";
 import {
   backendGet,
   backendPost,
+  isEmailChannel,
   isUnknownConversationCustomer,
 } from "@/components/whatsapp/whatsapp-helpers";
 import { ErrorAlert } from "@/components/workspace/error-alert";
@@ -227,16 +228,28 @@ export function WhatsappClient() {
     );
   }, [filters, canViewAll]);
 
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.conversationId === selectedId) ?? null,
-    [conversations, selectedId],
-  );
+  // Email threads belong in Inbox — never select them in the WhatsApp tab.
+  const selectedConversation = useMemo(() => {
+    const found = conversations.find((c) => c.conversationId === selectedId) ?? null;
+    if (found && isEmailChannel(found)) return null;
+    return found;
+  }, [conversations, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const found = conversations.find((c) => c.conversationId === selectedId);
+    if (found && isEmailChannel(found)) {
+      setSelectedId(null);
+    }
+  }, [conversations, selectedId]);
 
   const threadTitle = !selectedConversation
     ? "Conversación"
-    : isUnknownConversationCustomer(selectedConversation)
-      ? selectedConversation.customerPhone.trim() || "Conversación"
-      : selectedConversation.customerName.trim() || "Conversación";
+    : isEmailChannel(selectedConversation) && selectedConversation.subject?.trim()
+      ? selectedConversation.subject.trim()
+      : isUnknownConversationCustomer(selectedConversation)
+        ? selectedConversation.customerPhone.trim() || "Conversación"
+        : selectedConversation.customerName.trim() || "Conversación";
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">

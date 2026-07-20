@@ -164,6 +164,8 @@ export type PatchDashboardCustomerInput = Readonly<{
   primaryContactPhone?: string;
   cartProductIds?: readonly number[];
   priceLevelId?: number | null;
+  emailOrderingEnabled?: boolean;
+  orderingEmail?: string | null;
   newContacts?: ReadonlyArray<{
     name: string;
     email: string;
@@ -244,6 +246,8 @@ export type DashboardCustomerFullDetail = Readonly<{
   priceLevelId: number | null;
   discountLists: readonly CustomerDiscountListSummary[];
   productDiscounts: Readonly<Record<number, CustomerProductDiscount>>;
+  emailOrderingEnabled: boolean;
+  orderingEmail: string | null;
 }>;
 
 export type CustomerDraftState = Readonly<{
@@ -272,6 +276,7 @@ export type CustomerDraftState = Readonly<{
     phone: string;
   }>;
   priceLevelId: number | null;
+  orderingEmail: string;
 }>;
 
 function parseCustomerDetail(raw: unknown): DashboardCustomerDetail | null {
@@ -580,6 +585,8 @@ function parseCustomerFullDetail(
     },
     discountLists: parseDiscountLists(discountListsRaw),
     productDiscounts: parseProductDiscounts(productDiscountsRaw),
+    emailOrderingEnabled: o.emailOrderingEnabled === true,
+    orderingEmail: strOrNull("orderingEmail"),
   };
 }
 
@@ -607,6 +614,7 @@ export function customerDetailToDraft(detail: DashboardCustomerFullDetail): Cust
     productIds: [...detail.productIds],
     pendingContacts: [],
     priceLevelId: detail.priceLevelId,
+    orderingEmail: detail.orderingEmail ?? "",
   };
 }
 
@@ -631,6 +639,7 @@ export function draftToSavePayload(draft: CustomerDraftState): PatchDashboardCus
     primaryContactPhone: draft.primaryContactPhone.trim(),
     cartProductIds: draft.productIds,
     priceLevelId: draft.priceLevelId,
+    orderingEmail: draft.orderingEmail.trim() || null,
     newContacts:
       draft.pendingContacts.length > 0
         ? draft.pendingContacts.map((c) => ({

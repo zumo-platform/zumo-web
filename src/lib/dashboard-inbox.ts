@@ -17,6 +17,10 @@ export type ClassifiedIntent =
   | "onboarding"
   | "unknown";
 
+export type InboxChannel = "whatsapp" | "email";
+
+export type SenderTrust = "official" | "known_contact" | "unknown";
+
 export type InboxCard = Readonly<{
   cardId?: string;
   errorId?: string | null;
@@ -43,7 +47,66 @@ export type InboxCard = Readonly<{
   productNames: string[];
   productSkus: string[];
   hasAiFailure: boolean;
+  channel: InboxChannel;
+  subject: string | null;
+  senderEmail: string | null;
+  senderTrust: SenderTrust | null;
 }>;
+
+export const SENDER_TRUST_LABELS: Record<SenderTrust, string> = {
+  official: "Correo oficial de pedidos",
+  known_contact: "Contacto conocido",
+  unknown: "Remitente no reconocido",
+};
+
+export type EmailThreadMessage = Readonly<{
+  role: "customer" | "assistant" | "seller" | "system";
+  content: string;
+  createdAt: string | null;
+  externalId: string | null;
+}>;
+
+export type EmailConversationDetail = Readonly<{
+  conversationId: string;
+  channel: InboxChannel;
+  subject: string | null;
+  senderEmail: string | null;
+  senderTrust: SenderTrust | null;
+  customerName: string;
+  contactName: string;
+  messages: EmailThreadMessage[];
+}>;
+
+function parseSenderTrust(value: unknown): SenderTrust | null {
+  if (value === "official" || value === "known_contact" || value === "unknown") return value;
+  return null;
+}
+
+function looksLikeEmailAddress(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  return v.includes("@") && !v.startsWith("+");
+}
+
+function normalizeInboxCard(raw: InboxCard): InboxCard {
+  // Prefer API channel; fall back when older Lambdas omit it but contactPhone holds the sender email.
+  const channel: InboxChannel =
+    raw.channel === "email" ||
+    looksLikeEmailAddress(raw.senderEmail) ||
+    looksLikeEmailAddress(raw.customerPhone)
+      ? "email"
+      : "whatsapp";
+  const senderEmail =
+    raw.senderEmail ?? (channel === "email" && looksLikeEmailAddress(raw.customerPhone)
+      ? raw.customerPhone.trim()
+      : null);
+  return {
+    ...raw,
+    channel,
+    subject: raw.subject ?? null,
+    senderEmail,
+    senderTrust: channel === "email" ? (parseSenderTrust(raw.senderTrust) ?? "unknown") : null,
+  };
+}
 
 export type InboxBoard = Readonly<{
   columns: Record<InboxColumnKey, InboxCard[]>;
@@ -161,9 +224,9 @@ export async function fetchInboxBoardViaProxy(): Promise<InboxBoard> {
     const body = (await res.json()) as Partial<InboxBoard>;
     return {
       columns: {
-        orders: body.columns?.orders ?? [],
-        not_orders: body.columns?.not_orders ?? [],
-        errors: body.columns?.errors ?? [],
+        orders: (body.columns?.orders ?? []).map(normalizeInboxCard),
+        not_orders: (body.columns?.not_orders ?? []).map(normalizeInboxCard),
+        errors: (body.columns?.errors ?? []).map(normalizeInboxCard),
       },
       counts: {
         orders: body.counts?.orders ?? 0,
@@ -187,9 +250,68 @@ export async function searchInboxViaProxy(query: string): Promise<InboxCard[]> {
     );
     if (!res.ok) return [];
     const body = (await res.json()) as { cards?: InboxCard[] };
-    return body.cards ?? [];
+    return (body.cards ?? []).map(normalizeInboxCard);
   } catch {
     return [];
+  }
+}
+
+/** Browser: GET conversation messages + email meta for the inbox email sheet. */
+export async function fetchEmailConversation(
+  conversationId: string,
+  fallback?: Pick<InboxCard, "customerName" | "contactName" | "subject" | "senderEmail" | "senderTrust">,
+): Promise<EmailConversationDetail | null> {
+  try {
+    const res = await fetch(
+      `/api/backend/dashboard/conversations/${encodeURIComponent(conversationId)}/messages`,
+      { credentials: "same-origin", cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      conversation?: {
+        conversationId?: string;
+        channel?: string;
+        subject?: string | null;
+        senderEmail?: string | null;
+        senderTrust?: string | null;
+        customerName?: string | null;
+        contactName?: string | null;
+      };
+      messages?: Array<{
+        role?: string;
+        content?: string;
+        createdAt?: string | null;
+        waMessageId?: string | null;
+      }>;
+    };
+    const conv = body.conversation;
+    const messages: EmailThreadMessage[] = (body.messages ?? []).map((m) => ({
+      role:
+        m.role === "assistant" || m.role === "seller" || m.role === "system"
+          ? m.role
+          : "customer",
+      content: typeof m.content === "string" ? m.content : "",
+      createdAt: typeof m.createdAt === "string" ? m.createdAt : null,
+      externalId: typeof m.waMessageId === "string" ? m.waMessageId : null,
+    }));
+    return {
+      conversationId: conv?.conversationId ?? conversationId,
+      channel: conv?.channel === "email" ? "email" : "whatsapp",
+      subject: conv?.subject ?? fallback?.subject ?? null,
+      senderEmail: conv?.senderEmail ?? fallback?.senderEmail ?? null,
+      senderTrust: parseSenderTrust(conv?.senderTrust) ?? fallback?.senderTrust ?? null,
+      customerName:
+        (typeof conv?.customerName === "string" && conv.customerName.trim()) ||
+        fallback?.customerName ||
+        "",
+      contactName:
+        (typeof conv?.contactName === "string" && conv.contactName.trim()) ||
+        fallback?.contactName ||
+        "",
+      messages,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -264,11 +386,37 @@ export async function fetchSellerOptionsViaProxy(): Promise<InboxSellerOption[]>
   return (body.sellers ?? []).filter((seller) => seller.active);
 }
 
+/** Keep email metadata when draft-order cards overlay inbox API cards. */
+export function mergeDraftInboxCardWithApiCard(
+  draft: InboxCard,
+  api?: InboxCard | null,
+): InboxCard {
+  if (!api) return draft;
+  if (api.channel === "email" || draft.channel === "email") {
+    return {
+      ...draft,
+      channel: "email",
+      subject: api.subject ?? draft.subject,
+      senderEmail: api.senderEmail ?? draft.senderEmail,
+      senderTrust: api.senderTrust ?? draft.senderTrust,
+      conversationId: api.conversationId || draft.conversationId,
+    };
+  }
+  return {
+    ...draft,
+    channel: api.channel ?? draft.channel,
+    subject: api.subject ?? draft.subject,
+    senderEmail: api.senderEmail ?? draft.senderEmail,
+    senderTrust: api.senderTrust ?? draft.senderTrust,
+  };
+}
+
 export function draftOrderToInboxCard(
   order: DashboardOrderListRow,
   customer: DashboardCustomerRow | undefined,
 ): InboxCard {
   const customerName = customer?.name?.trim() || `Cliente #${order.customerId}`;
+  const channel: InboxChannel = order.sourceChannel === "email" ? "email" : "whatsapp";
   return {
     cardId: `order:${order.orderId}`,
     conversationId: order.conversationId ?? `order:${order.orderId}`,
@@ -289,6 +437,10 @@ export function draftOrderToInboxCard(
     productNames: order.productNames,
     productSkus: order.productSkus,
     hasAiFailure: false,
+    channel,
+    subject: null,
+    senderEmail: channel === "email" ? null : null,
+    senderTrust: channel === "email" ? "unknown" : null,
   };
 }
 
@@ -303,6 +455,8 @@ export function inboxCardMatchesQuery(card: InboxCard, query: string): boolean {
     card.customerName,
     card.contactName,
     card.customerPhone,
+    card.subject ?? "",
+    card.senderEmail ?? "",
     card.orderDisplayCode ?? "",
     card.orderId ?? "",
     ...card.productNames,

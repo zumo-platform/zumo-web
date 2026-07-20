@@ -1,5 +1,36 @@
 import { getServerApiBaseUrl, joinApiGatewayPath } from "@/lib/api";
-import type { WhatsappStatusResult } from "@/lib/dashboard-types";
+import type { EmailSettings, WhatsappStatusResult } from "@/lib/dashboard-types";
+import { parseEmailSettings } from "@/lib/dashboard-settings";
+
+export async function fetchEmailSettings(
+  idToken?: string | null,
+  accessToken?: string | null,
+): Promise<EmailSettings | null> {
+  const baseUrl = getServerApiBaseUrl();
+  if (!baseUrl) return null;
+
+  const bearerCandidates = [
+    ...new Set(
+      [idToken, accessToken].filter((t): t is string => typeof t === "string" && t.length > 0),
+    ),
+  ];
+  if (bearerCandidates.length === 0) return null;
+
+  try {
+    for (const bearer of bearerCandidates) {
+      const res = await fetch(joinApiGatewayPath(baseUrl, "dashboard/settings"), {
+        headers: { Authorization: `Bearer ${bearer}` },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const body = (await res.json()) as unknown;
+      return parseEmailSettings(body);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchWhatsappStatus(
   bearerToken: string,

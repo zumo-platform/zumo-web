@@ -1,5 +1,5 @@
 import { joinApiGatewayPath } from "@/lib/api";
-import type { SupplierSettings } from "@/lib/dashboard-types";
+import type { EmailSettings, SupplierSettings } from "@/lib/dashboard-types";
 import { DEFAULT_SUPPLIER_TIMEZONE } from "@/lib/supplier-timezone";
 import { parseWorkspaceLocale, setWorkspaceLocaleCookie } from "@/lib/workspace-locale";
 import { parseWorkspaceCurrency } from "@/lib/workspace-currency";
@@ -35,6 +35,31 @@ function parseExpirationHours(value: unknown): DraftExpirationHours {
   const n = typeof value === "number" ? value : Number(value);
   if (n === 24 || n === 48 || n === 72 || n === 168) return n;
   return 72;
+}
+
+export function parseEmailSettings(data: unknown): EmailSettings {
+  const defaults: EmailSettings = {
+    enabled: false,
+    address: null,
+    replyEnabled: false,
+  };
+  if (!data || typeof data !== "object") return defaults;
+  const emailRaw = (data as Record<string, unknown>).email;
+  if (!emailRaw || typeof emailRaw !== "object" || Array.isArray(emailRaw)) return defaults;
+  const email = emailRaw as Record<string, unknown>;
+
+  const address =
+    email.address === null || email.address === undefined
+      ? null
+      : typeof email.address === "string" && email.address.trim()
+        ? email.address.trim()
+        : null;
+
+  return {
+    enabled: email.enabled === true || Boolean(address),
+    address,
+    replyEnabled: email.replyEnabled === true,
+  };
 }
 
 export function parseSupplierSettings(data: unknown): SupplierSettings | null {
@@ -143,6 +168,36 @@ export function parseDashboardSellersEnvelope(data: unknown): DashboardSellerRow
   return rows;
 }
 
+export async function fetchEmailSettingsDashboard(
+  apiUrl: string,
+  idToken?: string | null,
+  accessToken?: string | null,
+): Promise<EmailSettings | null> {
+  const base = apiUrl.replace(/\/+$/, "");
+  if (!base) return null;
+
+  const bearerCandidates = uniqBearerCandidates(idToken, accessToken);
+  if (bearerCandidates.length === 0) return null;
+
+  const url = joinApiGatewayPath(base, "dashboard/settings");
+
+  for (const bearer of bearerCandidates) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${bearer}` },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const body = (await res.json()) as unknown;
+      return parseEmailSettings(body);
+    } catch {
+      /* try next bearer */
+    }
+  }
+
+  return null;
+}
+
 export async function fetchSettingsDashboard(
   apiUrl: string,
   idToken?: string | null,
@@ -203,6 +258,41 @@ export async function fetchSellersDashboard(
   return null;
 }
 
+export type PatchEmailSettingsInput = Readonly<{
+  enableEmailChannel?: true;
+  emailReplyEnabled?: boolean;
+}>;
+
+export type PatchEmailSettingsResult = Readonly<{
+  email: EmailSettings;
+}>;
+
+/** Browser: PATCH email channel settings via dashboard settings proxy. */
+export async function patchEmailSettingsViaProxy(
+  input: PatchEmailSettingsInput,
+): Promise<PatchEmailSettingsResult> {
+  const res = await fetch("/api/backend/dashboard/settings", {
+    method: "PATCH",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const msg =
+      typeof body.error === "string" && body.error.trim().length > 0
+        ? body.error.trim()
+        : "No se pudo guardar la configuración de correo.";
+    throw new Error(msg);
+  }
+
+  const email = parseEmailSettings(body);
+  return { email };
+}
+
 export type PatchSupplierSettingsInput = Readonly<{
   aiAutoCommitEnabled?: boolean;
   aiChatbotEnabled?: boolean;
@@ -229,6 +319,21 @@ export async function fetchDashboardSettingsViaProxy(): Promise<SupplierSettings
   const body = await res.json().catch(() => null);
   if (!res.ok) return null;
   return parseSupplierSettings(body);
+}
+
+/** Browser: GET email channel block from `/api/backend/dashboard/settings`. */
+export async function fetchEmailSettingsViaProxy(): Promise<EmailSettings | null> {
+  try {
+    const res = await fetch("/api/backend/dashboard/settings", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as unknown;
+    return parseEmailSettings(body);
+  } catch {
+    return null;
+  }
 }
 
 /** Browser / Route Handler: PATCH `/api/backend/dashboard/settings`. */

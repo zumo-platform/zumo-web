@@ -138,6 +138,8 @@ export type DashboardOrderListRow = Readonly<{
   backorderLineCount: number;
   hasBackorderRisk: boolean;
   backorderRiskLineCount: number;
+  /** Conversation channel when order came from Inbox (null = created in panel). */
+  sourceChannel: "email" | "whatsapp" | null;
 }>;
 
 export type DashboardOrderPatch = Partial<
@@ -203,6 +205,15 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
       ? null
       : typeof o.conversationId === "string" && o.conversationId.trim().length > 0
         ? o.conversationId.trim()
+        : null;
+
+  const rawSourceChannel =
+    readStringField(o, "sourceChannel") ?? readStringField(o, "source_channel");
+  const sourceChannel: DashboardOrderListRow["sourceChannel"] =
+    rawSourceChannel === "email"
+      ? "email"
+      : rawSourceChannel === "whatsapp"
+        ? "whatsapp"
         : null;
 
   const matchCoverage = parseMatchCoverage(o.matchCoverage);
@@ -282,6 +293,7 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     isExpired,
     lineCount,
     conversationId,
+    sourceChannel,
     matchCoverage,
     isTouchless,
     productNames,

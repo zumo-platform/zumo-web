@@ -4,11 +4,14 @@ import { cn } from "@/lib/utils";
 
 export function WorkspacePageHeader({
   title,
+  belowTitle,
   description,
   className,
   children,
 }: Readonly<{
   title: string;
+  /** Renders directly under the title (e.g. inbound email address). */
+  belowTitle?: ReactNode;
   description?: string;
   className?: string;
   children?: ReactNode;
@@ -22,6 +25,7 @@ export function WorkspacePageHeader({
     >
       <div className="min-w-0 space-y-1">
         <h1 className="truncate font-semibold text-lg tracking-tight">{title}</h1>
+        {belowTitle ? <div className="min-w-0">{belowTitle}</div> : null}
         {description ? (
           <p className="text-muted-foreground text-sm">{description}</p>
         ) : null}

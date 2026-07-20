@@ -274,3 +274,7 @@ export function isUnknownConversationCustomer(c: Conversation): boolean {
   if (c.isUnknownCustomer !== undefined) return Boolean(c.isUnknownCustomer);
   return c.customerName.trim() === "";
 }
+
+export function isEmailChannel(c: Conversation): boolean {
+  return (c.channel ?? "whatsapp").trim().toLowerCase() === "email";
+}

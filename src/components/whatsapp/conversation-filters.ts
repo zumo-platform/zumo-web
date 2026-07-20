@@ -4,7 +4,7 @@ import type {
   ConversationUiStatus,
 } from "@/lib/dashboard-types";
 
-import { isUnknownConversationCustomer } from "./whatsapp-helpers";
+import { isEmailChannel, isUnknownConversationCustomer } from "./whatsapp-helpers";
 
 export const ESTADO_OPTIONS: ReadonlyArray<{ value: ConversationUiStatus; label: string }> = [
   { value: "sin_responder", label: "Sin Responder" },
@@ -13,6 +13,14 @@ export const ESTADO_OPTIONS: ReadonlyArray<{ value: ConversationUiStatus; label:
 ];
 
 export type ConversationKind = "cliente" | "desconocido";
+
+/** WhatsApp tab is WhatsApp-only — email lives in Inbox. Kept for type compat. */
+export type ConversationChannelFilter = "whatsapp";
+
+export const CHANNEL_FILTER_OPTIONS: ReadonlyArray<{
+  value: ConversationChannelFilter;
+  label: string;
+}> = [{ value: "whatsapp", label: "WhatsApp" }];
 
 export const KIND_OPTIONS: ReadonlyArray<{ value: ConversationKind; label: string }> = [
   { value: "cliente", label: "Cliente" },
@@ -56,6 +64,8 @@ export const SORT_OPTIONS: ReadonlyArray<{ value: SortOption; label: string }> =
 export type ConversationFilterState = Readonly<{
   statuses: ConversationUiStatus[];
   kinds: ConversationKind[];
+  /** all = no channel constraint. */
+  channel: ConversationChannelFilter;
   /** Empty = Todos (no pedido constraint). */
   pedidoStates: ConversationOrderState[];
   assigned: AssignedFilter;
@@ -69,6 +79,7 @@ export function defaultConversationFilters(
   return {
     statuses: ["sin_responder", "abierto", "cerrado"],
     kinds: ["cliente", "desconocido"],
+    channel: "whatsapp",
     pedidoStates: [],
     assigned: canViewAll ? { mode: "all" } : { mode: "me" },
     sort: "recent",
@@ -123,6 +134,7 @@ export function conversationMatchesSearch(conv: Conversation, query: string): bo
     conv.customerName ?? "",
     conv.customerPhone ?? "",
     conv.assignedSellerName ?? "",
+    conv.subject ?? "",
   ];
   return haystacks.some((h) => normalize(h).includes(q));
 }
@@ -181,7 +193,9 @@ export function applyClientPipeline(
   list: readonly Conversation[],
   filters: ConversationFilterState,
 ): Conversation[] {
-  const searched = list.filter((c) => conversationMatchesSearch(c, filters.search));
+  // Email conversations belong in Inbox — never in the WhatsApp tab.
+  const whatsappOnly = list.filter((c) => !isEmailChannel(c));
+  const searched = whatsappOnly.filter((c) => conversationMatchesSearch(c, filters.search));
   return sortConversations(searched, filters.sort);
 }
 

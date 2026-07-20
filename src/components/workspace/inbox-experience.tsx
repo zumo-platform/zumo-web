@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Search } from "lucide-react";
+import { Copy, Mail, MessageCircle, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InboxCard } from "@/components/workspace/inbox-card";
+import { InboxEmailSheet } from "@/components/workspace/inbox-email-sheet";
 import { InboxErrorSheet } from "@/components/workspace/inbox-error-sheet";
 import { OrderDetailSheet } from "@/components/workspace/order-detail-sheet";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
@@ -15,17 +18,21 @@ import {
   INBOX_COLUMN_LABELS,
   INBOX_COLUMN_ORDER,
   draftOrderToInboxCard,
+  mergeDraftInboxCardWithApiCard,
   fetchInboxBoardViaProxy,
   inboxCardMatchesQuery,
   searchInboxViaProxy,
   type InboxBoard,
   type InboxCard as InboxCardData,
+  type InboxChannel,
   type InboxColumnKey,
   type InboxErrorDetail,
 } from "@/lib/dashboard-inbox";
 import type { DashboardOrderPatch } from "@/lib/dashboard-orders";
+import { fetchEmailSettingsViaProxy } from "@/lib/dashboard-settings";
 import { buildInboxColumns } from "@/lib/inbox-columns";
 import { loadCustomersList, loadOrdersCatalog } from "@/lib/orders-catalog-cache";
+import { cn } from "@/lib/utils";
 
 const EMPTY: InboxBoard = {
   columns: { orders: [], not_orders: [], errors: [] },
@@ -33,6 +40,14 @@ const EMPTY: InboxBoard = {
 };
 
 const MIN_COLUMN_WIDTH = 260;
+
+type ChannelFilter = "all" | InboxChannel;
+
+const CHANNEL_FILTERS: ReadonlyArray<{ value: ChannelFilter; label: string; icon?: typeof Mail }> = [
+  { value: "all", label: "Todos" },
+  { value: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { value: "email", label: "Correo", icon: Mail },
+];
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -48,11 +63,13 @@ function InboxColumn({
   cards,
   onOpenOrder,
   onOpenError,
+  onOpenEmail,
 }: Readonly<{
   column: InboxColumnKey;
   cards: InboxCardData[];
   onOpenOrder: (card: InboxCardData) => void;
   onOpenError: (card: InboxCardData) => void;
+  onOpenEmail: (card: InboxCardData) => void;
 }>) {
   const isError = column === "errors";
   return (
@@ -74,6 +91,7 @@ function InboxColumn({
             <InboxCard
               card={card}
               key={card.cardId ?? card.errorId ?? card.orderId ?? card.conversationId}
+              onOpenEmail={onOpenEmail}
               onOpenError={onOpenError}
               onOpenOrder={onOpenOrder}
             />
@@ -95,6 +113,10 @@ export function InboxExperience() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailErrorId, setDetailErrorId] = useState<string | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
+  const [emailCard, setEmailCard] = useState<InboxCardData | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
+  const [inboundEmailAddress, setInboundEmailAddress] = useState<string | null>(null);
 
   const refreshBoard = useCallback(async () => {
     const nextBoard = await fetchInboxBoardViaProxy();
@@ -118,9 +140,14 @@ export function InboxExperience() {
     let active = true;
     void (async () => {
       try {
-        const nextBoard = await fetchInboxBoardViaProxy();
+        const [nextBoard, emailSettings] = await Promise.all([
+          fetchInboxBoardViaProxy(),
+          fetchEmailSettingsViaProxy(),
+        ]);
         if (!active) return;
         setBoard(nextBoard);
+        const addr = emailSettings?.address?.trim() || null;
+        setInboundEmailAddress(addr);
       } finally {
         if (active) setReady(true);
       }
@@ -129,6 +156,17 @@ export function InboxExperience() {
       active = false;
     };
   }, []);
+
+  const handleCopyInboundEmail = useCallback(async () => {
+    const addr = inboundEmailAddress?.trim();
+    if (!addr) return;
+    try {
+      await navigator.clipboard.writeText(addr);
+      toast.success("Dirección copiada.");
+    } catch {
+      toast.error("No se pudo copiar la dirección.");
+    }
+  }, [inboundEmailAddress]);
 
   useEffect(() => {
     if (!ready) return;
@@ -194,10 +232,19 @@ export function InboxExperience() {
   const activeQuery = debouncedQuery.trim();
   const baseColumns = useMemo(() => {
     const draftIds = new Set(draftOrderCards.map((card) => card.orderId).filter(Boolean));
+    const apiOrderByOrderId = new Map(
+      board.columns.orders
+        .filter((card) => card.orderId)
+        .map((card) => [card.orderId!, card]),
+    );
     return {
       ...board.columns,
       orders: [
-        ...draftOrderCards,
+        ...draftOrderCards.map((draft) =>
+          draft.orderId
+            ? mergeDraftInboxCardWithApiCard(draft, apiOrderByOrderId.get(draft.orderId))
+            : draft,
+        ),
         ...board.columns.orders.filter(
           (card) => !card.orderId || !draftIds.has(card.orderId),
         ),
@@ -206,14 +253,30 @@ export function InboxExperience() {
   }, [board.columns, draftOrderCards]);
 
   const columns = useMemo(() => {
-    if (activeQuery.length === 0) return baseColumns;
-    const draftMatches = draftOrderCards.filter((card) => inboxCardMatchesQuery(card, activeQuery));
+    const matchesChannel = (card: InboxCardData) =>
+      channelFilter === "all" || card.channel === channelFilter;
+
+    if (activeQuery.length === 0) {
+      return {
+        orders: baseColumns.orders.filter(matchesChannel),
+        not_orders: baseColumns.not_orders.filter(matchesChannel),
+        errors: baseColumns.errors.filter(matchesChannel),
+      };
+    }
+    const draftMatches = draftOrderCards.filter(
+      (card) => inboxCardMatchesQuery(card, activeQuery) && matchesChannel(card),
+    );
     const draftIds = new Set(draftMatches.map((card) => card.orderId).filter(Boolean));
-    return buildInboxColumns([
-      ...draftMatches,
-      ...(searchResults ?? []).filter((card) => !card.orderId || !draftIds.has(card.orderId)),
-    ]);
-  }, [activeQuery, baseColumns, draftOrderCards, searchResults]);
+    return buildInboxColumns(
+      [
+        ...draftMatches,
+        ...(searchResults ?? []).filter(
+          (card) =>
+            matchesChannel(card) && (!card.orderId || !draftIds.has(card.orderId)),
+        ),
+      ],
+    );
+  }, [activeQuery, baseColumns, channelFilter, draftOrderCards, searchResults]);
 
   const handleOpenOrder = useCallback((card: InboxCardData) => {
     if (!card.orderId) return;
@@ -230,6 +293,11 @@ export function InboxExperience() {
     if (!card.errorId) return;
     setDetailErrorId(card.errorId);
     setErrorOpen(true);
+  }, []);
+
+  const handleOpenEmail = useCallback((card: InboxCardData) => {
+    setEmailCard(card);
+    setEmailOpen(true);
   }, []);
 
   const handleErrorResolved = useCallback((errorId: string) => {
@@ -323,25 +391,73 @@ export function InboxExperience() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <WorkspacePageHeader
-        description="Pedidos, mensajes y errores de WhatsApp en un solo lugar."
+        belowTitle={
+          inboundEmailAddress ? (
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Mail aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate font-mono text-muted-foreground text-sm">
+                {inboundEmailAddress}
+              </span>
+              <Button
+                aria-label="Copiar dirección de correo"
+                className="size-7 shrink-0"
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+                onClick={() => void handleCopyInboundEmail()}
+              >
+                <Copy aria-hidden className="size-3.5" />
+              </Button>
+            </div>
+          ) : null
+        }
+        description="Pedidos, mensajes y errores de WhatsApp y correo en un solo lugar."
         title="Inbox"
       >
-        <div className="relative w-full sm:w-80">
-          <Search
-            aria-hidden
-            className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="Buscar por cliente, contacto, producto o SKU"
-            className="pl-8"
-            onChange={(e) => {
-              const next = e.target.value;
-              setQuery(next);
-              if (!next.trim()) setSearchResults(null);
-            }}
-            placeholder="Buscar cliente, contacto, producto o SKU"
-            value={query}
-          />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div
+            aria-label="Filtrar por canal"
+            className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5"
+            role="group"
+          >
+            {CHANNEL_FILTERS.map((opt) => {
+              const Icon = opt.icon;
+              const active = channelFilter === opt.value;
+              return (
+                <button
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors",
+                    active
+                      ? "bg-background font-medium text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setChannelFilter(opt.value)}
+                >
+                  {Icon ? <Icon aria-hidden className="size-3" /> : null}
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="relative w-full sm:w-80">
+            <Search
+              aria-hidden
+              className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="Buscar por cliente, contacto, producto o SKU"
+              className="pl-8"
+              onChange={(e) => {
+                const next = e.target.value;
+                setQuery(next);
+                if (!next.trim()) setSearchResults(null);
+              }}
+              placeholder="Buscar cliente, contacto, producto o SKU"
+              value={query}
+            />
+          </div>
         </div>
       </WorkspacePageHeader>
 
@@ -354,6 +470,7 @@ export function InboxExperience() {
               cards={columns[column]}
               column={column}
               key={column}
+              onOpenEmail={handleOpenEmail}
               onOpenError={handleOpenError}
               onOpenOrder={handleOpenOrder}
             />
@@ -375,6 +492,12 @@ export function InboxExperience() {
         onOpenOrder={handleOpenOrderById}
         onResolved={handleErrorResolved}
         onUpdated={handleErrorUpdated}
+      />
+      <InboxEmailSheet
+        card={emailCard}
+        open={emailOpen}
+        onOpenChange={setEmailOpen}
+        onOpenOrder={handleOpenOrder}
       />
     </div>
   );

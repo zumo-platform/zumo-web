@@ -33,6 +33,8 @@ export interface Conversation {
   assignedSellerName?: string | null;
   /** Derived pedido state for the card pill + filter. */
   orderState?: ConversationOrderState;
+  /** Email subject (channel=email only). */
+  subject?: string | null;
 }
 
 export interface Message {
@@ -82,6 +84,12 @@ export interface Order {
   /** Permanent when AI auto-confirmed with zero seller edits. */
   isTouchless?: boolean;
 }
+
+export type EmailSettings = Readonly<{
+  enabled: boolean;
+  address: string | null;
+  replyEnabled: boolean;
+}>;
 
 export type SupplierSettings = {
   business: {

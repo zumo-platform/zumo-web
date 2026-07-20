@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/lib/dashboard-types";
 import { cn } from "@/lib/utils";
 import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
+import { Mail, MessageCircle } from "lucide-react";
 
 import { orderStatePill } from "./conversation-filters";
-import { conversationListTimeLabel, isUnknownConversationCustomer } from "./whatsapp-helpers";
+import {
+  conversationListTimeLabel,
+  isEmailChannel,
+  isUnknownConversationCustomer,
+} from "./whatsapp-helpers";
 
 const PILL_TONE_CLASS: Record<string, string> = {
   review: "border-transparent bg-amber-100 text-amber-800",
@@ -29,13 +34,26 @@ export function ConversationListItem({
   const conv = conversation;
   const timeLabel = conversationListTimeLabel(conv.lastMessageAt ?? conv.createdAt ?? null, timeZone);
   const unknown = isUnknownConversationCustomer(conv);
+  const emailChannel = isEmailChannel(conv);
+  const subject = conv.subject?.trim() ?? "";
   const phone = conv.customerPhone.trim();
-  const titlePrimary = unknown
-    ? phone.length > 0
-      ? phone
-      : "Sin número"
-    : conv.customerName.trim() ||
-      (conv.customerId != null ? `Cliente #${String(conv.customerId)}` : "Cliente");
+
+  const titlePrimary =
+    emailChannel && subject
+      ? subject
+      : unknown
+        ? phone.length > 0
+          ? phone
+          : "Sin número"
+        : conv.customerName.trim() ||
+          (conv.customerId != null ? `Cliente #${String(conv.customerId)}` : "Cliente");
+
+  const previewLine =
+    emailChannel && subject
+      ? unknown
+        ? phone || "Remitente desconocido"
+        : conv.customerName.trim() || phone
+      : null;
 
   const pill = orderStatePill(conv.orderState);
   const isUnread = (conv.uiStatus ?? "sin_responder") === "sin_responder";
@@ -68,12 +86,35 @@ export function ConversationListItem({
               >
                 {titlePrimary}
               </span>
+              {emailChannel ? (
+                <Badge
+                  className="shrink-0 gap-0.5 border-transparent bg-sky-100 font-normal text-[10px] text-sky-800"
+                  variant="secondary"
+                >
+                  <Mail aria-hidden className="size-3" />
+                  Correo
+                </Badge>
+              ) : (
+                <Badge
+                  className="shrink-0 gap-0.5 border-transparent bg-emerald-100 font-normal text-[10px] text-emerald-800"
+                  variant="secondary"
+                >
+                  <MessageCircle aria-hidden className="size-3" />
+                  WhatsApp
+                </Badge>
+              )}
               {unknown ? (
                 <Badge className="shrink-0 font-normal text-[10px] capitalize" variant="outline">
                   Sin registrar
                 </Badge>
               ) : null}
             </span>
+
+            {previewLine ? (
+              <span className="mt-0.5 block truncate text-muted-foreground text-xs" title={previewLine}>
+                {previewLine}
+              </span>
+            ) : null}
 
             {pill ? (
               <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1">

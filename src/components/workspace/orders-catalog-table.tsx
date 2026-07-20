@@ -18,6 +18,7 @@ import {
   ChevronsRight,
   Eye,
   Loader2,
+  Mail,
   MessageCircle,
   MoreHorizontal,
   Monitor,
@@ -376,11 +377,16 @@ export function OrdersCatalogTable({
         header: "Canal",
         cell: ({ row }) => {
           const o = row.original;
-          const hasWa = Boolean(o.conversationId);
+          const channel = o.sourceChannel ?? (o.conversationId ? "whatsapp" : null);
           const showTouchlessBolt = autoCommitEnabled && o.isTouchless;
           return (
             <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
-              {hasWa ? (
+              {channel === "email" ? (
+                <>
+                  <Mail aria-hidden className="size-3.5 shrink-0" />
+                  <span>Correo</span>
+                </>
+              ) : channel === "whatsapp" ? (
                 <>
                   <MessageCircle aria-hidden className="size-3.5 shrink-0" />
                   <span>WhatsApp</span>
@@ -429,12 +435,16 @@ export function OrdersCatalogTable({
                 <DropdownMenuItem asChild>
                   <Link href={`/orders/${encodeURIComponent(o.orderId)}`}>Abrir página</Link>
                 </DropdownMenuItem>
-                {o.conversationId ? (
+                {o.conversationId && o.sourceChannel === "email" ? (
+                  <DropdownMenuItem asChild>
+                    <Link href="/inbox">Abrir en Inbox</Link>
+                  </DropdownMenuItem>
+                ) : o.conversationId ? (
                   <DropdownMenuItem asChild>
                     <Link href="/whatsapp">Abrir en WhatsApp</Link>
                   </DropdownMenuItem>
                 ) : (
-                  <DropdownMenuItem disabled>Abrir en WhatsApp</DropdownMenuItem>
+                  <DropdownMenuItem disabled>Abrir conversación</DropdownMenuItem>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

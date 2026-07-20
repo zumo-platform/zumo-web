@@ -34,6 +34,7 @@ import {
   draftToSavePayload,
   fetchCustomerFullDetailViaProxy,
   fetchCustomersViaProxy,
+  patchDashboardCustomerViaProxy,
   saveDashboardCustomerViaProxy,
   type CustomerDraftState,
   type DashboardCustomerFullDetail,
@@ -65,6 +66,7 @@ export function CustomerDetailExperience({
   const [navIds, setNavIds] = useState<number[]>(() => [...(initialNavIds ?? [])]);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
   const [orderDetailOpen, setOrderDetailOpen] = useState(false);
+  const [emailOrderingEnabled, setEmailOrderingEnabled] = useState(false);
 
   const catalogById = useMemo(
     () => new Map(products.map((p) => [p.productId, p])),
@@ -94,6 +96,7 @@ export function CustomerDetailExperience({
       setDetail(full);
       setDraft(nextDraft);
       setSavedDraft(nextDraft);
+      setEmailOrderingEnabled(full.emailOrderingEnabled);
       setProducts(catalog);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el cliente.");
@@ -122,6 +125,24 @@ export function CustomerDetailExperience({
 
   function updateDraft(patch: Partial<CustomerDraftState>) {
     setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+  }
+
+  async function persistOrderingEmail(orderingEmail: string) {
+    const next = orderingEmail.trim() || null;
+    try {
+      await patchDashboardCustomerViaProxy(customerId, { orderingEmail: next });
+      setSavedDraft((prev) => (prev ? { ...prev, orderingEmail: next ?? "" } : prev));
+      setDetail((prev) => (prev ? { ...prev, orderingEmail: next } : prev));
+      toast.success(
+        next
+          ? "Correo oficial de pedidos guardado."
+          : "Correo oficial de pedidos eliminado.",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "No se pudo guardar el correo oficial.",
+      );
+    }
   }
 
   function handleCancel() {
@@ -247,6 +268,8 @@ export function CustomerDetailExperience({
           customerId={customerId}
           discountLists={detail.discountLists}
           draft={draft}
+          emailOrderingEnabled={emailOrderingEnabled}
+          onEmailOrderingChange={setEmailOrderingEnabled}
           labelsSlot={
             <CustomerLabelsSection
               customerId={customerId}
@@ -255,6 +278,7 @@ export function CustomerDetailExperience({
             />
           }
           onDraftChange={updateDraft}
+          onOrderingEmailPersist={persistOrderingEmail}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

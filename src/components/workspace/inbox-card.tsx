@@ -2,7 +2,17 @@
 
 import type { KeyboardEvent } from "react";
 
-import { AlertTriangle, Clock, ExternalLink, Eye, FileText, PackageCheck, User } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  ExternalLink,
+  Eye,
+  FileText,
+  Mail,
+  MessageCircle,
+  PackageCheck,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -74,15 +84,20 @@ export function InboxCard({
   card,
   onOpenOrder,
   onOpenError,
+  onOpenEmail,
 }: Readonly<{
   card: InboxCardData;
   onOpenOrder?: (card: InboxCardData) => void;
   onOpenError?: (card: InboxCardData) => void;
+  onOpenEmail?: (card: InboxCardData) => void;
 }>) {
   const { timeZone } = useWorkspacePreferences();
-  const title = card.isUnknownCustomer
-    ? card.customerPhone || "Contacto sin registrar"
-    : card.customerName;
+  const isEmail = card.channel === "email";
+  const title = isEmail
+    ? card.subject?.trim() || card.customerName || "Correo sin asunto"
+    : card.isUnknownCustomer
+      ? card.customerPhone || "Contacto sin registrar"
+      : card.customerName;
   const isError = card.column === "errors";
   const isDraftOrder = card.orderStatus === "draft";
   const wasViewed = isDraftOrder && Boolean(card.orderSeenAt);
@@ -98,7 +113,12 @@ export function InboxCard({
           >
             {title}
           </p>
-          {card.contactName ? (
+          {isEmail && card.senderEmail ? (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-muted-foreground text-xs">
+              <Mail aria-hidden className="size-3 shrink-0" />
+              {card.senderEmail}
+            </p>
+          ) : card.contactName ? (
             <p className="mt-0.5 flex items-center gap-1 truncate text-muted-foreground text-xs">
               <User aria-hidden className="size-3 shrink-0" />
               {card.contactName}
@@ -106,6 +126,17 @@ export function InboxCard({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          <Badge className="gap-1" variant="outline">
+            {isEmail ? (
+              <>
+                <Mail aria-hidden className="size-3" /> Correo
+              </>
+            ) : (
+              <>
+                <MessageCircle aria-hidden className="size-3" /> WhatsApp
+              </>
+            )}
+          </Badge>
           {wasViewed ? (
             <span
               aria-label="Borrador visto"
@@ -151,9 +182,9 @@ export function InboxCard({
             <Badge className="shrink-0" variant="outline">{card.errorDisplayCode}</Badge>
           ) : card.orderDisplayCode || card.orderId ? (
             <Badge className="shrink-0" variant="outline">{card.orderDisplayCode ?? card.orderId}</Badge>
-          ) : (
+          ) : !isEmail ? (
             <span className="truncate text-muted-foreground text-xs">{card.customerPhone}</span>
-          )}
+          ) : null}
           {isError ? (
             <AssociatedOrderChip card={card} onOpenOrder={onOpenOrder} />
           ) : null}
@@ -191,6 +222,14 @@ export function InboxCard({
       >
         {content}
       </div>
+    );
+  }
+
+  if (isEmail && onOpenEmail) {
+    return (
+      <button className={className} type="button" onClick={() => onOpenEmail(card)}>
+        {content}
+      </button>
     );
   }
 

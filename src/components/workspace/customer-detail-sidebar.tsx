@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CustomerDiscountListsSection } from "@/components/workspace/customer-discount-lists-section";
+import { CustomerEmailOrderingToggle } from "@/components/workspace/customer-email-ordering-toggle";
 import { CustomerPriceLevelField } from "@/components/workspace/customer-price-level-field";
 import {
   CustomerDraftField,
@@ -31,14 +32,21 @@ export function CustomerDetailSidebar({
   draft,
   discountLists,
   labelsSlot,
+  emailOrderingEnabled,
+  onEmailOrderingChange,
   onDraftChange,
+  onOrderingEmailPersist,
 }: Readonly<{
   customerId: number;
   createdAt: string | null;
   draft: CustomerDraftState;
   discountLists: readonly CustomerDiscountListSummary[];
   labelsSlot?: ReactNode;
+  emailOrderingEnabled: boolean;
+  onEmailOrderingChange: (enabled: boolean) => void;
   onDraftChange: (patch: Partial<CustomerDraftState>) => void;
+  /** Persist official order email immediately (does not wait for page Guardar). */
+  onOrderingEmailPersist?: (orderingEmail: string) => void | Promise<void>;
 }>) {
   return (
     <aside className="flex min-h-0 w-full shrink-0 flex-col border-r bg-muted/20 lg:w-72 xl:w-80">
@@ -92,6 +100,22 @@ export function CustomerDetailSidebar({
               value={draft.primaryContactEmail}
               onChange={(primaryContactEmail) => onDraftChange({ primaryContactEmail })}
             />
+            <div className="space-y-1.5">
+              <CustomerDraftField
+                label="Correo oficial de pedidos"
+                placeholder="pedidos@sucliente.com"
+                value={draft.orderingEmail}
+                onChange={(orderingEmail) => {
+                  onDraftChange({ orderingEmail });
+                  void onOrderingEmailPersist?.(orderingEmail);
+                }}
+              />
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Dirección desde la que este cliente envía sus pedidos por correo (ej.
+                pedidos@sucliente.com). Los correos desde esta dirección se reconocen
+                automáticamente como pedidos oficiales.
+              </p>
+            </div>
             <CustomerDraftField
               label="Dirección de entrega"
               multiline
@@ -120,6 +144,11 @@ export function CustomerDetailSidebar({
             <CustomerPriceLevelField
               value={draft.priceLevelId}
               onChange={(priceLevelId) => onDraftChange({ priceLevelId })}
+            />
+            <CustomerEmailOrderingToggle
+              customerId={customerId}
+              enabled={emailOrderingEnabled}
+              onChange={onEmailOrderingChange}
             />
             <CustomerDiscountListsSection lists={discountLists} />
             {labelsSlot}
