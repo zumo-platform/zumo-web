@@ -29,6 +29,7 @@ export type InboxCard = Readonly<{
   errorTitle?: string | null;
   errorMessage?: string | null;
   assignedSellerName?: string | null;
+  assignedSellerId?: number | null;
   conversationId: string;
   column: InboxColumnKey;
   customerId: number | null;
@@ -43,6 +44,7 @@ export type InboxCard = Readonly<{
   orderDisplayCode: string | null;
   orderStatus: string | null;
   orderSeenAt?: string | null;
+  orderSeenBySellerId?: number | null;
   orderLineCount?: number | null;
   productNames: string[];
   productSkus: string[];
@@ -87,6 +89,12 @@ function looksLikeEmailAddress(value: string | null | undefined): boolean {
   return v.includes("@") && !v.startsWith("+");
 }
 
+function parseOptionalInt(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function normalizeInboxCard(raw: InboxCard): InboxCard {
   // Prefer API channel; fall back when older Lambdas omit it but contactPhone holds the sender email.
   const channel: InboxChannel =
@@ -105,7 +113,32 @@ function normalizeInboxCard(raw: InboxCard): InboxCard {
     subject: raw.subject ?? null,
     senderEmail,
     senderTrust: channel === "email" ? (parseSenderTrust(raw.senderTrust) ?? "unknown") : null,
+    assignedSellerId: parseOptionalInt(raw.assignedSellerId),
+    orderSeenBySellerId: parseOptionalInt(raw.orderSeenBySellerId),
   };
+}
+
+/** Draft order not yet opened by the current supplier user. */
+export function inboxCardIsUnseenForSeller(
+  card: InboxCard,
+  sellerId: number,
+): boolean {
+  if (card.column !== "orders" || card.orderStatus !== "draft" || !card.orderId) {
+    return false;
+  }
+  if (sellerId <= 0) return !card.orderSeenAt;
+  if (!card.orderSeenAt) return true;
+  return card.orderSeenBySellerId == null || card.orderSeenBySellerId !== sellerId;
+}
+
+/** Match card against multi-seller filter (empty = all). */
+export function inboxCardMatchesSellerFilter(
+  card: InboxCard,
+  selectedSellerIds: ReadonlySet<number>,
+): boolean {
+  if (selectedSellerIds.size === 0) return true;
+  if (card.assignedSellerId == null) return false;
+  return selectedSellerIds.has(card.assignedSellerId);
 }
 
 export type InboxBoard = Readonly<{
@@ -400,6 +433,7 @@ export function mergeDraftInboxCardWithApiCard(
       senderEmail: api.senderEmail ?? draft.senderEmail,
       senderTrust: api.senderTrust ?? draft.senderTrust,
       conversationId: api.conversationId || draft.conversationId,
+      assignedSellerId: api.assignedSellerId ?? draft.assignedSellerId,
     };
   }
   return {
@@ -408,6 +442,7 @@ export function mergeDraftInboxCardWithApiCard(
     subject: api.subject ?? draft.subject,
     senderEmail: api.senderEmail ?? draft.senderEmail,
     senderTrust: api.senderTrust ?? draft.senderTrust,
+    assignedSellerId: api.assignedSellerId ?? draft.assignedSellerId,
   };
 }
 
@@ -423,6 +458,7 @@ export function draftOrderToInboxCard(
     column: "orders",
     customerId: order.customerId,
     customerName,
+    assignedSellerId: order.customerAssignedSellerId ?? null,
     contactName: "",
     customerPhone: customer?.contactPhone ?? "",
     isUnknownCustomer: false,
@@ -433,6 +469,7 @@ export function draftOrderToInboxCard(
     orderDisplayCode: order.displayCode,
     orderStatus: order.status,
     orderSeenAt: order.seenAt,
+    orderSeenBySellerId: order.seenBySellerId,
     orderLineCount: order.lineCount,
     productNames: order.productNames,
     productSkus: order.productSkus,

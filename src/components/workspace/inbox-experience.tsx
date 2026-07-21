@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Copy, Mail, MessageCircle, Search } from "lucide-react";
+import { Copy, Mail, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InboxFiltersBar, type InboxChannelFilter } from "@/components/workspace/inbox-filters";
 import { InboxCard } from "@/components/workspace/inbox-card";
 import { InboxEmailSheet } from "@/components/workspace/inbox-email-sheet";
 import { InboxErrorSheet } from "@/components/workspace/inbox-error-sheet";
@@ -20,19 +21,22 @@ import {
   draftOrderToInboxCard,
   mergeDraftInboxCardWithApiCard,
   fetchInboxBoardViaProxy,
+  fetchSellerOptionsViaProxy,
+  inboxCardIsUnseenForSeller,
   inboxCardMatchesQuery,
+  inboxCardMatchesSellerFilter,
   searchInboxViaProxy,
   type InboxBoard,
   type InboxCard as InboxCardData,
-  type InboxChannel,
   type InboxColumnKey,
   type InboxErrorDetail,
+  type InboxSellerOption,
 } from "@/lib/dashboard-inbox";
 import type { DashboardOrderPatch } from "@/lib/dashboard-orders";
 import { fetchEmailSettingsViaProxy } from "@/lib/dashboard-settings";
 import { buildInboxColumns } from "@/lib/inbox-columns";
 import { loadCustomersList, loadOrdersCatalog } from "@/lib/orders-catalog-cache";
-import { cn } from "@/lib/utils";
+import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
 const EMPTY: InboxBoard = {
   columns: { orders: [], not_orders: [], errors: [] },
@@ -40,14 +44,6 @@ const EMPTY: InboxBoard = {
 };
 
 const MIN_COLUMN_WIDTH = 260;
-
-type ChannelFilter = "all" | InboxChannel;
-
-const CHANNEL_FILTERS: ReadonlyArray<{ value: ChannelFilter; label: string; icon?: typeof Mail }> = [
-  { value: "all", label: "Todos" },
-  { value: "whatsapp", label: "WhatsApp", icon: MessageCircle },
-  { value: "email", label: "Correo", icon: Mail },
-];
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -103,6 +99,8 @@ function InboxColumn({
 }
 
 export function InboxExperience() {
+  const { sellerId, can } = useWorkspacePermissions();
+  const canFilterBySeller = can("conversations.view_all");
   const [board, setBoard] = useState<InboxBoard>(EMPTY);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState("");
@@ -115,7 +113,10 @@ export function InboxExperience() {
   const [errorOpen, setErrorOpen] = useState(false);
   const [emailCard, setEmailCard] = useState<InboxCardData | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
-  const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
+  const [channelFilter, setChannelFilter] = useState<InboxChannelFilter>("all");
+  const [unseenOnly, setUnseenOnly] = useState(false);
+  const [selectedSellerIds, setSelectedSellerIds] = useState<Set<number>>(() => new Set());
+  const [sellers, setSellers] = useState<InboxSellerOption[]>([]);
   const [inboundEmailAddress, setInboundEmailAddress] = useState<string | null>(null);
 
   const refreshBoard = useCallback(async () => {
@@ -140,12 +141,14 @@ export function InboxExperience() {
     let active = true;
     void (async () => {
       try {
-        const [nextBoard, emailSettings] = await Promise.all([
+        const [nextBoard, emailSettings, sellerOptions] = await Promise.all([
           fetchInboxBoardViaProxy(),
           fetchEmailSettingsViaProxy(),
+          canFilterBySeller ? fetchSellerOptionsViaProxy() : Promise.resolve([]),
         ]);
         if (!active) return;
         setBoard(nextBoard);
+        setSellers(sellerOptions);
         const addr = emailSettings?.address?.trim() || null;
         setInboundEmailAddress(addr);
       } finally {
@@ -155,7 +158,7 @@ export function InboxExperience() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canFilterBySeller]);
 
   const handleCopyInboundEmail = useCallback(async () => {
     const addr = inboundEmailAddress?.trim();
@@ -252,31 +255,45 @@ export function InboxExperience() {
     };
   }, [board.columns, draftOrderCards]);
 
-  const columns = useMemo(() => {
-    const matchesChannel = (card: InboxCardData) =>
-      channelFilter === "all" || card.channel === channelFilter;
+  const applyInboxFilters = useCallback(
+    (cards: InboxCardData[]) =>
+      cards.filter((card) => {
+        if (channelFilter !== "all" && card.channel !== channelFilter) return false;
+        if (unseenOnly && !inboxCardIsUnseenForSeller(card, sellerId)) return false;
+        if (canFilterBySeller && !inboxCardMatchesSellerFilter(card, selectedSellerIds)) {
+          return false;
+        }
+        return true;
+      }),
+    [canFilterBySeller, channelFilter, selectedSellerIds, sellerId, unseenOnly],
+  );
 
+  const columns = useMemo(() => {
     if (activeQuery.length === 0) {
       return {
-        orders: baseColumns.orders.filter(matchesChannel),
-        not_orders: baseColumns.not_orders.filter(matchesChannel),
-        errors: baseColumns.errors.filter(matchesChannel),
+        orders: applyInboxFilters(baseColumns.orders),
+        not_orders: applyInboxFilters(baseColumns.not_orders),
+        errors: applyInboxFilters(baseColumns.errors),
       };
     }
-    const draftMatches = draftOrderCards.filter(
-      (card) => inboxCardMatchesQuery(card, activeQuery) && matchesChannel(card),
+    const draftMatches = draftOrderCards.filter((card) =>
+      inboxCardMatchesQuery(card, activeQuery),
     );
     const draftIds = new Set(draftMatches.map((card) => card.orderId).filter(Boolean));
-    return buildInboxColumns(
+    const merged = buildInboxColumns(
       [
         ...draftMatches,
         ...(searchResults ?? []).filter(
-          (card) =>
-            matchesChannel(card) && (!card.orderId || !draftIds.has(card.orderId)),
+          (card) => !card.orderId || !draftIds.has(card.orderId),
         ),
       ],
     );
-  }, [activeQuery, baseColumns, channelFilter, draftOrderCards, searchResults]);
+    return {
+      orders: applyInboxFilters(merged.orders),
+      not_orders: applyInboxFilters(merged.not_orders),
+      errors: applyInboxFilters(merged.errors),
+    };
+  }, [activeQuery, applyInboxFilters, baseColumns, draftOrderCards, searchResults]);
 
   const handleOpenOrder = useCallback((card: InboxCardData) => {
     if (!card.orderId) return;
@@ -337,21 +354,31 @@ export function InboxExperience() {
     setSearchResults((cards) => (cards ? cards.map(updateError) : cards));
   }, []);
 
-  const handleOrderSeen = useCallback((orderId: string) => {
-    const seenAt = new Date().toISOString();
-    const markSeen = (card: InboxCardData): InboxCardData =>
-      card.orderId === orderId ? { ...card, orderSeenAt: card.orderSeenAt ?? seenAt } : card;
-    setDraftOrderCards((cards) => cards.map(markSeen));
-    setBoard((current) => ({
-      ...current,
-      columns: {
-        orders: current.columns.orders.map(markSeen),
-        not_orders: current.columns.not_orders.map(markSeen),
-        errors: current.columns.errors.map(markSeen),
-      },
-    }));
-    setSearchResults((cards) => (cards ? cards.map(markSeen) : cards));
-  }, []);
+  const handleOrderSeen = useCallback(
+    (orderId: string) => {
+      const seenAt = new Date().toISOString();
+      const markSeen = (card: InboxCardData): InboxCardData =>
+        card.orderId === orderId
+          ? {
+              ...card,
+              orderSeenAt: card.orderSeenAt ?? seenAt,
+              orderSeenBySellerId:
+                card.orderSeenBySellerId ?? (sellerId > 0 ? sellerId : null),
+            }
+          : card;
+      setDraftOrderCards((cards) => cards.map(markSeen));
+      setBoard((current) => ({
+        ...current,
+        columns: {
+          orders: current.columns.orders.map(markSeen),
+          not_orders: current.columns.not_orders.map(markSeen),
+          errors: current.columns.errors.map(markSeen),
+        },
+      }));
+      setSearchResults((cards) => (cards ? cards.map(markSeen) : cards));
+    },
+    [sellerId],
+  );
 
   const handleOrderRemoved = useCallback((orderId: string) => {
     const removeOrder = (cards: InboxCardData[]) => cards.filter((card) => card.orderId !== orderId);
@@ -414,33 +441,17 @@ export function InboxExperience() {
         description="Pedidos, mensajes y errores de WhatsApp y correo en un solo lugar."
         title="Inbox"
       >
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <div
-            aria-label="Filtrar por canal"
-            className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5"
-            role="group"
-          >
-            {CHANNEL_FILTERS.map((opt) => {
-              const Icon = opt.icon;
-              const active = channelFilter === opt.value;
-              return (
-                <button
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors",
-                    active
-                      ? "bg-background font-medium text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setChannelFilter(opt.value)}
-                >
-                  {Icon ? <Icon aria-hidden className="size-3" /> : null}
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
+          <InboxFiltersBar
+            canFilterBySeller={canFilterBySeller}
+            channelFilter={channelFilter}
+            selectedSellerIds={selectedSellerIds}
+            sellers={sellers}
+            unseenOnly={unseenOnly}
+            onChannelFilterChange={setChannelFilter}
+            onSelectedSellerIdsChange={setSelectedSellerIds}
+            onUnseenOnlyChange={setUnseenOnly}
+          />
           <div className="relative w-full sm:w-80">
             <Search
               aria-hidden

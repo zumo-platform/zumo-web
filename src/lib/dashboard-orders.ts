@@ -140,6 +140,8 @@ export type DashboardOrderListRow = Readonly<{
   backorderRiskLineCount: number;
   /** Conversation channel when order came from Inbox (null = created in panel). */
   sourceChannel: "email" | "whatsapp" | null;
+  customerAssignedSellerId: number | null;
+  seenBySellerId: number | null;
 }>;
 
 export type DashboardOrderPatch = Partial<
@@ -215,6 +217,11 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
       : rawSourceChannel === "whatsapp"
         ? "whatsapp"
         : null;
+
+  const customerAssignedSellerId = parsePositiveInt(
+    o.customerAssignedSellerId ?? o.customer_assigned_seller_id,
+  );
+  const seenBySellerId = parsePositiveInt(o.seenBySellerId ?? o.seen_by_seller_id);
 
   const matchCoverage = parseMatchCoverage(o.matchCoverage);
   const isTouchless = o.isTouchless === true;
@@ -294,6 +301,8 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     lineCount,
     conversationId,
     sourceChannel,
+    customerAssignedSellerId,
+    seenBySellerId,
     matchCoverage,
     isTouchless,
     productNames,

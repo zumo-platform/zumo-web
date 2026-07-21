@@ -18,6 +18,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
   intentLabel,
+  inboxCardIsUnseenForSeller,
   type InboxCard as InboxCardData,
 } from "@/lib/dashboard-inbox";
 import { inboxCardHref } from "@/lib/inbox-columns";
@@ -91,7 +92,7 @@ export function InboxCard({
   onOpenError?: (card: InboxCardData) => void;
   onOpenEmail?: (card: InboxCardData) => void;
 }>) {
-  const { timeZone } = useWorkspacePreferences();
+  const { timeZone, sellerId } = useWorkspacePreferences();
   const isEmail = card.channel === "email";
   const title = isEmail
     ? card.subject?.trim() || card.customerName || "Correo sin asunto"
@@ -100,7 +101,8 @@ export function InboxCard({
       : card.customerName;
   const isError = card.column === "errors";
   const isDraftOrder = card.orderStatus === "draft";
-  const wasViewed = isDraftOrder && Boolean(card.orderSeenAt);
+  const isUnseen =
+    isDraftOrder && inboxCardIsUnseenForSeller(card, sellerId);
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
@@ -108,7 +110,7 @@ export function InboxCard({
           <p
             className={cn(
               "truncate font-medium text-foreground text-sm",
-              isDraftOrder && !wasViewed && "font-semibold",
+              isDraftOrder && isUnseen && "font-semibold",
             )}
           >
             {title}
@@ -126,7 +128,15 @@ export function InboxCard({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <Badge className="gap-1" variant="outline">
+          <Badge
+            className={cn(
+              "gap-1 border-transparent font-normal",
+              isEmail
+                ? "bg-sky-100 text-sky-800 hover:bg-sky-100"
+                : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
+            )}
+            variant="secondary"
+          >
             {isEmail ? (
               <>
                 <Mail aria-hidden className="size-3" /> Correo
@@ -137,7 +147,7 @@ export function InboxCard({
               </>
             )}
           </Badge>
-          {wasViewed ? (
+          {isDraftOrder && !isUnseen ? (
             <span
               aria-label="Borrador visto"
               className="inline-flex items-center text-muted-foreground"
