@@ -29,6 +29,8 @@ export const PERMISSION_KEYS = [
   "pricing.override_band",
   "marketing.access",
   "marketing.manage",
+  "market.access",
+  "market.admin",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -50,6 +52,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, ReadonlySet<PermissionKey>> 
     "orders.delete",
     "marketing.manage",
     "marketing.access",
+    "market.access",
   ]),
   seller: new Set([
     "conversations.view_own",
@@ -63,8 +66,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, ReadonlySet<PermissionKey>> 
     "proposals.create_own",
     "pricing.edit_own",
     "pricing.override_band",
+    "market.access",
   ]),
-  marketing: new Set(["marketing.manage", "marketing.access"]),
+  marketing: new Set(["marketing.manage", "marketing.access", "market.access"]),
 };
 
 export function normalizeRole(raw: string | null | undefined): Role | null {
@@ -212,6 +216,10 @@ export const PERMISSION_GROUPS: ReadonlyArray<{
     label: "Marketing",
     keys: ["marketing.access", "marketing.manage"],
   },
+  {
+    label: "Market",
+    keys: ["market.access", "market.admin"],
+  },
 ];
 
 export function permissionLabel(key: PermissionKey): string {
@@ -262,6 +270,10 @@ export function permissionLabel(key: PermissionKey): string {
       return "Acceder a marketing";
     case "marketing.manage":
       return "Gestionar marketing";
+    case "market.access":
+      return "Acceder a Market";
+    case "market.admin":
+      return "Administrar Market";
     default:
       return key;
   }

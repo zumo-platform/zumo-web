@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   ChevronRight,
   Inbox,
+  MapPin,
   Megaphone,
   MessageSquare,
   Package,
@@ -100,6 +101,7 @@ const baseMainNav: NavItem[] = [
   { href: "/vendedores", icon: Users, label: "Vendedores" },
   { href: "/compras", icon: Truck, label: "Compras" },
   { href: "/marketing", icon: Megaphone, label: "Marketing" },
+  { href: "/market", icon: MapPin, label: "Market" },
 ];
 
 export function AppSidebar({
@@ -119,6 +121,9 @@ export function AppSidebar({
   const mainNav = baseMainNav.filter((item) => {
     if ("href" in item && item.href === "/marketing") {
       return can("marketing.access");
+    }
+    if ("href" in item && item.href === "/market") {
+      return can("market.access");
     }
     return true;
   });
