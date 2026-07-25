@@ -17,7 +17,7 @@ const MarketMapExperience = dynamic(
 
 export default function MarketPage() {
   return (
-    <div className="flex h-[calc(100vh-var(--workspace-header,3.5rem))] min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <MarketMapExperience />
     </div>
   );

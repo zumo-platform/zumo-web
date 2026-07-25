@@ -17,12 +17,14 @@ export function WorkspaceBootstrapProvider({
   appVersion: string;
   children: React.ReactNode;
 }>) {
-  const [bootstrap, setBootstrap] = useState<WorkspaceBootstrap>(
-    () => readCachedWorkspaceBootstrap() ?? defaultBootstrap,
-  );
+  // Always match SSR: never read session cache in the initial state initializer.
+  const [bootstrap, setBootstrap] = useState<WorkspaceBootstrap>(defaultBootstrap);
 
   useEffect(() => {
     let cancelled = false;
+    const cached = readCachedWorkspaceBootstrap();
+    if (cached) setBootstrap(cached);
+
     void loadWorkspaceBootstrap().then((data) => {
       if (!cancelled) setBootstrap(data);
     });

@@ -70,11 +70,13 @@ export function SupplierWorkspaceMenu({
   logoUrl?: string | null;
 }>) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     return () => {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
@@ -107,6 +109,45 @@ export function SupplierWorkspaceMenu({
     }
   }
 
+  const triggerButton = (
+    <button
+      aria-label={`Menú de ${businessName}`}
+      className={cn(
+        "flex w-full min-w-0 items-center gap-2 rounded-lg border border-sidebar-border bg-background/70 px-2 py-1.5 text-left transition-colors",
+        "hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+        "group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:hover:bg-sidebar-accent",
+      )}
+      type="button"
+    >
+      <SupplierLogo
+        businessName={businessName}
+        className="size-8 shrink-0 text-xs"
+        logoUrl={logoUrl}
+      />
+      <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+        <span className="block truncate font-semibold text-sm leading-tight">{businessName}</span>
+        <span className="block truncate text-muted-foreground text-xs leading-tight">Zumo</span>
+      </span>
+      <span
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors",
+          open && "border-sidebar-border bg-background",
+          "group-data-[collapsible=icon]:hidden",
+        )}
+      >
+        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+      </span>
+    </button>
+  );
+
+  if (!mounted) {
+    return (
+      <div className="min-w-0 w-full group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+        {triggerButton}
+      </div>
+    );
+  }
+
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
       <div
@@ -114,42 +155,7 @@ export function SupplierWorkspaceMenu({
         onMouseEnter={handleEnter}
         onMouseLeave={scheduleClose}
       >
-        <DropdownMenuTrigger asChild>
-          <button
-            aria-label={`Menú de ${businessName}`}
-            className={cn(
-              "flex w-full min-w-0 items-center gap-2 rounded-lg border border-sidebar-border bg-background/70 px-2 py-1.5 text-left transition-colors",
-              "hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-              "group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:hover:bg-sidebar-accent",
-            )}
-            type="button"
-          >
-            <SupplierLogo
-              businessName={businessName}
-              className="size-8 shrink-0 text-xs"
-              logoUrl={logoUrl}
-            />
-            <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-              <span className="block truncate font-semibold text-sm leading-tight">
-                {businessName}
-              </span>
-              <span className="block truncate text-muted-foreground text-xs leading-tight">
-                Zumo
-              </span>
-            </span>
-            <span
-              className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors",
-                open && "border-sidebar-border bg-background",
-                "group-data-[collapsible=icon]:hidden",
-              )}
-            >
-              <ChevronDown
-                className={cn("size-3.5 transition-transform", open && "rotate-180")}
-              />
-            </span>
-          </button>
-        </DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
 
         <DropdownMenuContent
           align="start"

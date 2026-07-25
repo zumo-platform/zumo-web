@@ -30,6 +30,7 @@ type MarketBusinessRaw = Readonly<{
   website: string | null;
   prospectState: MarketProspectState | null;
   assignedSellerId: number | null;
+  convertedLeadId: number | null;
   convertedCustomerId: number | null;
 }>;
 
@@ -46,7 +47,8 @@ export type Bbox = Readonly<{
   maxLng: number;
 }>;
 
-function parseBusiness(r: MarketBusinessRaw): MarketBusiness {
+function parseBusiness(r: MarketBusinessRaw | null | undefined): MarketBusiness | null {
+  if (!r) return null;
   return {
     ...r,
     lat: r.lat != null ? Number(r.lat) : null,
@@ -77,10 +79,12 @@ export async function fetchBusinessesInBbox(
   });
   if (filters?.category) p.set("category", filters.category);
   if (filters?.canton) p.set("canton", filters.canton);
-  const { data } = await getJson<{ data: MarketBusinessRaw[] }>(
+  const { data } = await getJson<{ data: MarketBusinessRaw[] | null }>(
     `/api/backend/dashboard/market/businesses?${p.toString()}`,
   );
-  return data.map(parseBusiness);
+  return (data ?? [])
+    .map(parseBusiness)
+    .filter((b): b is MarketBusiness => b != null);
 }
 
 export async function fetchBusinessesInRadius(
@@ -94,10 +98,12 @@ export async function fetchBusinessesInRadius(
   });
   if (filters?.category) p.set("category", filters.category);
   if (filters?.canton) p.set("canton", filters.canton);
-  const { data } = await getJson<{ data: MarketBusinessRaw[] }>(
+  const { data } = await getJson<{ data: MarketBusinessRaw[] | null }>(
     `/api/backend/dashboard/market/businesses?${p.toString()}`,
   );
-  return data.map(parseBusiness);
+  return (data ?? [])
+    .map(parseBusiness)
+    .filter((b): b is MarketBusiness => b != null);
 }
 
 export async function setProspect(input: {
@@ -159,9 +165,10 @@ export async function fetchMyCustomerPins(): Promise<MarketCustomerPin[]> {
 }
 
 /** Pin color bucket derived from prospect state. */
-export type PinBucket = "prospect" | "engaged" | "customer";
+export type PinBucket = "prospect" | "engaged" | "lead" | "customer";
 export function pinBucket(b: MarketBusiness): PinBucket {
-  if (b.convertedCustomerId != null || b.prospectState === "converted") return "customer";
+  if (b.convertedCustomerId != null) return "customer";
+  if (b.convertedLeadId != null || b.prospectState === "converted") return "lead";
   if (b.prospectState === "interested" || b.prospectState === "assigned") return "engaged";
   return "prospect";
 }
