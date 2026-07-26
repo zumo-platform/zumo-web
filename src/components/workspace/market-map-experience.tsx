@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { CircleOff, PencilRuler, X } from "lucide-react";
+import { CircleOff, Copy, PencilRuler, X } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Map as MLMap } from "maplibre-gl";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MarketCustomerDetailSheet } from "@/components/workspace/market-customer-detail-sheet";
 import { fetchSellerOptionsViaProxy, type InboxSellerOption } from "@/lib/dashboard-inbox";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +39,7 @@ import {
   type Bbox,
   type MarketBusiness,
   type MarketCategory,
+  type MarketCustomerPin,
   type PinBucket,
 } from "@/lib/dashboard-market";
 
@@ -47,6 +50,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const DEFAULT_CENTER: [number, number] = [-84.08, 9.93];
 const DEFAULT_ZOOM = 12;
 const SELECTED_BUSINESS_ZOOM = 17;
+/** Selection zoom: longer base + scale by zoom delta for a gentler ease-in-out. */
+const FOCUS_ZOOM_MIN_MS = 900;
+const FOCUS_ZOOM_MAX_MS = 2200;
+const FOCUS_ZOOM_MS_PER_LEVEL = 180;
+const FOCUS_PAN_MS = 650;
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
 /** Pin grows 25% when zoomed in or when a business is selected. */
@@ -55,7 +63,7 @@ const LARGE_PIN_ZOOM = 15;
 const PIN_SVG_WIDTH = 27;
 const PIN_SVG_HEIGHT = 43;
 
-/** Google Maps default marker red — used for prospect pins and the selected pointer. */
+/** Google Maps default marker red — used for market business pins and the selected pointer. */
 const GOOGLE_MAPS_RED = "#EA4335";
 const GOOGLE_MAPS_RED_DARK = "#C5221F";
 
@@ -63,15 +71,21 @@ const BUCKET_COLOR: Record<PinBucket, string> = {
   prospect: GOOGLE_MAPS_RED,
   engaged: "#2563eb", // blue-600 — interested / assigned
   lead: "#d97706", // amber-600 — converted to CRM lead
-  customer: "#16a34a", // green-600 — already a customer
+  customer: "#16a34a", // green-600 — supplier client / converted market business
 };
+
+const CLIENT_PIN_GREEN = BUCKET_COLOR.customer;
+const CLIENT_PIN_GREEN_DARK = "#15803d";
+
+/** Spanish UI label for PinBucket.prospect (unworked market business). Logic id stays `prospect`. */
+const MARKET_BUSINESS_LABEL = "Negocio";
 
 const BUCKET_META: ReadonlyArray<{
   id: PinBucket;
   label: string;
   color: string;
 }> = [
-  { id: "prospect", label: "Prospecto", color: BUCKET_COLOR.prospect },
+  { id: "prospect", label: MARKET_BUSINESS_LABEL, color: BUCKET_COLOR.prospect },
   { id: "engaged", label: "Interesado", color: BUCKET_COLOR.engaged },
   { id: "lead", label: "Lead creado", color: BUCKET_COLOR.lead },
   { id: "customer", label: "Ya es mi cliente", color: BUCKET_COLOR.customer },
@@ -86,6 +100,20 @@ const CATEGORY_OPTIONS: ReadonlyArray<{ value: MarketCategory | "all"; label: st
   { value: "bar", label: "Bares" },
   { value: "other", label: "Otros" },
 ];
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+/** Duration scales with how far we zoom so small tweaks stay snappy. */
+function focusAnimationDuration(currentZoom: number, targetZoom: number): number {
+  const zoomDelta = Math.abs(targetZoom - currentZoom);
+  if (zoomDelta < 0.05) return FOCUS_PAN_MS;
+  return Math.min(
+    FOCUS_ZOOM_MAX_MS,
+    Math.max(FOCUS_ZOOM_MIN_MS, FOCUS_ZOOM_MIN_MS + zoomDelta * FOCUS_ZOOM_MS_PER_LEVEL),
+  );
+}
 
 function prefersReducedMotion(): boolean {
   return (
@@ -142,9 +170,13 @@ function applyPointerScale(element: HTMLElement | undefined, scale: number): voi
   element.style.transform = scale === 1 ? "" : `scale(${scale})`;
 }
 
-function createGooglePinSvgElement(animate: boolean): HTMLElement {
+function createPinSvgElement(
+  animate: boolean,
+  fill: string,
+  inner: string,
+): HTMLElement {
   const pin = document.createElement("div");
-  pin.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${PIN_SVG_WIDTH}" height="${PIN_SVG_HEIGHT}" viewBox="0 0 27 43" aria-hidden="true"><path fill="${GOOGLE_MAPS_RED}" d="M13.5 0C6.04 0 0 6.04 0 13.5 0 23.63 13.5 43 13.5 43S27 23.63 27 13.5C27 6.04 20.96 0 13.5 0z"/><circle fill="${GOOGLE_MAPS_RED_DARK}" cx="13.5" cy="13.5" r="5.5"/></svg>`;
+  pin.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${PIN_SVG_WIDTH}" height="${PIN_SVG_HEIGHT}" viewBox="0 0 27 43" aria-hidden="true"><path fill="${fill}" d="M13.5 0C6.04 0 0 6.04 0 13.5 0 23.63 13.5 43 13.5 43S27 23.63 27 13.5C27 6.04 20.96 0 13.5 0z"/><circle fill="${inner}" cx="13.5" cy="13.5" r="5.5"/></svg>`;
   pin.style.cssText = "line-height:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3));transform-origin:bottom center;";
   if (animate && !prefersReducedMotion()) {
     pin.style.animation = "market-pin-pop 0.35s ease-out forwards";
@@ -152,8 +184,20 @@ function createGooglePinSvgElement(animate: boolean): HTMLElement {
   return pin;
 }
 
-/** Google Maps–style selected marker: white label above a red teardrop pin. */
-function createSelectedPinElement(name: string, scale = PIN_LARGE_SCALE): HTMLElement {
+function createGooglePinSvgElement(animate: boolean): HTMLElement {
+  return createPinSvgElement(animate, GOOGLE_MAPS_RED, GOOGLE_MAPS_RED_DARK);
+}
+
+function createClientPinSvgElement(animate: boolean): HTMLElement {
+  return createPinSvgElement(animate, CLIENT_PIN_GREEN, CLIENT_PIN_GREEN_DARK);
+}
+
+/** Google Maps–style selected marker: white label above a teardrop pin. */
+function createSelectedPinElement(
+  name: string,
+  scale = PIN_LARGE_SCALE,
+  pinSvg: HTMLElement = createGooglePinSvgElement(false),
+): HTMLElement {
   const wrap = document.createElement("div");
   wrap.style.cssText =
     "display:flex;flex-direction:column;align-items:center;pointer-events:none;transform-origin:bottom center;";
@@ -161,7 +205,7 @@ function createSelectedPinElement(name: string, scale = PIN_LARGE_SCALE): HTMLEl
   const label = createBusinessLabelElement(name);
   label.style.marginBottom = "4px";
 
-  wrap.append(label, createGooglePinSvgElement(false));
+  wrap.append(label, pinSvg);
   applyPointerScale(wrap, scale);
   return wrap;
 }
@@ -178,8 +222,10 @@ function ensurePinPopKeyframes(): void {
 }
 
 type HoveredPin = Readonly<{ id: string; name: string; lng: number; lat: number }>;
+type HoveredCustomerPin = Readonly<{ id: number; name: string; lng: number; lat: number }>;
 
 const BUSINESS_MAP_SOURCE = "businesses";
+const CUSTOMER_MAP_SOURCE = "my-customers";
 
 /** Feature-state calls can throw when data was refreshed or the point is clustered. */
 function setBusinessPinHidden(map: MLMap, id: string, hidden: boolean): void {
@@ -190,6 +236,15 @@ function setBusinessPinHidden(map: MLMap, id: string, hidden: boolean): void {
     map.setFeatureState({ source: BUSINESS_MAP_SOURCE, id }, { hoverHidden: hidden });
   } catch {
     // No-op: feature not in the current tile set or state already cleared.
+  }
+}
+
+function setCustomerPinHidden(map: MLMap, id: number, hidden: boolean): void {
+  if (!Number.isFinite(id) || id <= 0 || !map.getSource(CUSTOMER_MAP_SOURCE)) return;
+  try {
+    map.setFeatureState({ source: CUSTOMER_MAP_SOURCE, id: String(id) }, { hoverHidden: hidden });
+  } catch {
+    // No-op
   }
 }
 
@@ -257,18 +312,26 @@ function MarketMapInner() {
   const mapRef = useRef<MLMap | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const selectedCustomerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const hoverLabelMarkerRef = useRef<maplibregl.Marker | null>(null);
   const hoverPointerMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const customerHoverLabelRef = useRef<maplibregl.Marker | null>(null);
+  const customerHoverPointerRef = useRef<maplibregl.Marker | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const customerHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoveredPinRef = useRef<HoveredPin | null>(null);
+  const hoveredCustomerRef = useRef<HoveredCustomerPin | null>(null);
   const selectedRef = useRef<MarketBusiness | null>(null);
+  const selectedCustomerRef = useRef<MarketCustomerPin | null>(null);
   const selectedPinHiddenRef = useRef<string | null>(null);
+  const selectedCustomerPinHiddenRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const [bbox, setBbox] = useState<Bbox | null>(null);
   const [category, setCategory] = useState<MarketCategory | "all">("all");
   const [cantonInput, setCantonInput] = useState("");
   const [canton, setCanton] = useState<string | null>(null);
   const [selected, setSelected] = useState<MarketBusiness | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<MarketCustomerPin | null>(null);
   const [radiusMode, setRadiusMode] = useState(false);
   const [radiusKm, setRadiusKm] = useState(2);
   const [radiusCenter, setRadiusCenter] = useState<RadiusCenter | null>(null);
@@ -286,28 +349,107 @@ function MarketMapInner() {
     [radiusMode, radiusCenter, radiusKm],
   );
 
-  const focusBusinessOnMap = useCallback((business: MarketBusiness) => {
-    if (business.lat == null || business.lng == null) return;
+  const focusPointOnMap = useCallback((lng: number, lat: number) => {
     const map = mapRef.current;
     if (!map) return;
+    const coordinates: [number, number] = [lng, lat];
+    const targetZoom = Math.max(map.getZoom(), SELECTED_BUSINESS_ZOOM);
+    if (prefersReducedMotion()) {
+      map.jumpTo({ center: coordinates, zoom: targetZoom });
+      return;
+    }
     map.easeTo({
-      center: [business.lng, business.lat],
-      zoom: Math.max(map.getZoom(), SELECTED_BUSINESS_ZOOM),
-      duration: prefersReducedMotion() ? 0 : 500,
+      center: coordinates,
+      zoom: targetZoom,
+      around: coordinates,
+      duration: focusAnimationDuration(map.getZoom(), targetZoom),
+      easing: easeInOutCubic,
+      essential: true,
     });
   }, []);
 
+  const focusBusinessOnMap = useCallback(
+    (business: MarketBusiness) => {
+      if (business.lat == null || business.lng == null) return;
+      focusPointOnMap(business.lng, business.lat);
+    },
+    [focusPointOnMap],
+  );
+
+  const focusCustomerOnMap = useCallback(
+    (customer: MarketCustomerPin) => {
+      focusPointOnMap(customer.lng, customer.lat);
+    },
+    [focusPointOnMap],
+  );
+
   const selectBusiness = useCallback(
     (business: MarketBusiness, options?: Readonly<{ focus?: boolean }>) => {
+      setSelectedCustomer(null);
       setSelected(business);
       if (options?.focus !== false) focusBusinessOnMap(business);
     },
     [focusBusinessOnMap],
   );
 
+  const selectCustomer = useCallback(
+    (customer: MarketCustomerPin, options?: Readonly<{ focus?: boolean }>) => {
+      setSelected(null);
+      setSelectedCustomer(customer);
+      if (options?.focus !== false) focusCustomerOnMap(customer);
+    },
+    [focusCustomerOnMap],
+  );
+
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
+
+  useEffect(() => {
+    selectedCustomerRef.current = selectedCustomer;
+  }, [selectedCustomer]);
+
+  const clearHoveredCustomer = useCallback(() => {
+    if (customerHoverTimerRef.current) {
+      clearTimeout(customerHoverTimerRef.current);
+      customerHoverTimerRef.current = null;
+    }
+    customerHoverLabelRef.current?.remove();
+    customerHoverLabelRef.current = null;
+    customerHoverPointerRef.current?.remove();
+    customerHoverPointerRef.current = null;
+
+    const map = mapRef.current;
+    const hovered = hoveredCustomerRef.current;
+    if (map && hovered) {
+      setCustomerPinHidden(map, hovered.id, false);
+    }
+    hoveredCustomerRef.current = null;
+  }, []);
+
+  const showCustomerHoverPointer = useCallback((pin: HoveredCustomerPin) => {
+    const map = mapRef.current;
+    if (!map || selectedCustomerRef.current?.id === pin.id) return;
+
+    customerHoverLabelRef.current?.remove();
+    customerHoverLabelRef.current = null;
+
+    setCustomerPinHidden(map, pin.id, true);
+
+    const scale = pinPointerScale(mapZoomRef.current);
+    const wrap = document.createElement("div");
+    wrap.style.cssText =
+      "display:flex;flex-direction:column;align-items:center;pointer-events:none;transform-origin:bottom center;";
+    const label = createBusinessLabelElement(pin.name);
+    label.style.marginBottom = "4px";
+    wrap.append(label, createClientPinSvgElement(true));
+    applyPointerScale(wrap, scale);
+
+    customerHoverPointerRef.current?.remove();
+    customerHoverPointerRef.current = new maplibregl.Marker({ element: wrap, anchor: "bottom" })
+      .setLngLat([pin.lng, pin.lat])
+      .addTo(map);
+  }, []);
 
   const clearHoveredPin = useCallback(() => {
     if (hoverTimerRef.current) {
@@ -448,6 +590,7 @@ function MarketMapInner() {
       map.addSource("my-customers", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+        promoteId: "id",
       });
       map.addLayer({
         id: "my-customer-pins",
@@ -455,8 +598,19 @@ function MarketMapInner() {
         source: "my-customers",
         paint: {
           "circle-color": BUCKET_COLOR.customer,
-          "circle-radius": 6,
-          "circle-stroke-width": 2,
+          "circle-radius": [
+            "case",
+            ["boolean", ["feature-state", "hoverHidden"], false],
+            0,
+            10,
+          ],
+          "circle-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hoverHidden"], false],
+            0,
+            1,
+          ],
+          "circle-stroke-width": 2.5,
           "circle-stroke-color": "#ffffff",
         },
       });
@@ -500,6 +654,8 @@ function MarketMapInner() {
       map.on("mouseleave", "clusters", pointer(false));
       map.on("mouseenter", "business-pins", pointer(true));
       map.on("mouseleave", "business-pins", pointer(false));
+      map.on("mouseenter", "my-customer-pins", pointer(true));
+      map.on("mouseleave", "my-customer-pins", pointer(false));
 
       setReady(true);
       setBbox(boundsToBbox(map));
@@ -512,6 +668,13 @@ function MarketMapInner() {
       if (hoverMarker) {
         applyPointerScale(
           hoverMarker.getElement?.(),
+          pinPointerScale(mapZoomRef.current),
+        );
+      }
+      const customerHoverMarker = customerHoverPointerRef.current;
+      if (customerHoverMarker) {
+        applyPointerScale(
+          customerHoverMarker.getElement?.(),
           pinPointerScale(mapZoomRef.current),
         );
       }
@@ -603,6 +766,40 @@ function MarketMapInner() {
     };
   }, [selected, ready]);
 
+  // Pin pointer + halo for the selected customer (green).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    selectedCustomerMarkerRef.current?.remove();
+    selectedCustomerMarkerRef.current = null;
+
+    if (selectedCustomerPinHiddenRef.current != null) {
+      setCustomerPinHidden(map, selectedCustomerPinHiddenRef.current, false);
+      selectedCustomerPinHiddenRef.current = null;
+    }
+
+    if (!selectedCustomer) return;
+
+    setCustomerPinHidden(map, selectedCustomer.id, true);
+    selectedCustomerPinHiddenRef.current = selectedCustomer.id;
+
+    const coordinates: [number, number] = [selectedCustomer.lng, selectedCustomer.lat];
+    const el = createSelectedPinElement(
+      selectedCustomer.name,
+      PIN_LARGE_SCALE,
+      createClientPinSvgElement(false),
+    );
+    selectedCustomerMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat(coordinates)
+      .addTo(map);
+
+    return () => {
+      selectedCustomerMarkerRef.current?.remove();
+      selectedCustomerMarkerRef.current = null;
+    };
+  }, [selectedCustomer, ready]);
+
   // ---- customer overlay (private, display-only) ----
   const customersQuery = useQuery({
     queryKey: ["market-my-customers"],
@@ -619,11 +816,75 @@ function MarketMapInner() {
       type: "FeatureCollection",
       features: (customersQuery.data ?? []).map((c) => ({
         type: "Feature",
+        id: c.id,
         geometry: { type: "Point", coordinates: [c.lng, c.lat] },
         properties: { id: c.id, name: c.name },
       })),
     });
+    const selectedCustomerId = selectedCustomerRef.current?.id;
+    if (selectedCustomerId) {
+      setCustomerPinHidden(map, selectedCustomerId, true);
+      selectedCustomerPinHiddenRef.current = selectedCustomerId;
+    }
   }, [customersQuery.data, ready]);
+
+  // Hover label + click for supplier client pins (green pointer behavior).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    const onCustomerEnter = (e: maplibregl.MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      const rawId = f?.properties?.id;
+      const id = typeof rawId === "number" ? rawId : Number(rawId);
+      const name = f?.properties?.name as string | undefined;
+      if (!Number.isFinite(id) || id <= 0 || !name || f?.geometry.type !== "Point") return;
+      if (selectedCustomerRef.current?.id === id) return;
+
+      clearHoveredCustomer();
+
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      const pin: HoveredCustomerPin = { id, name, lng, lat };
+      hoveredCustomerRef.current = pin;
+
+      const labelEl = createBusinessLabelElement(name);
+      customerHoverLabelRef.current = new maplibregl.Marker({
+        element: labelEl,
+        anchor: "bottom",
+        offset: [0, -10],
+      })
+        .setLngLat([lng, lat])
+        .addTo(map);
+
+      customerHoverTimerRef.current = setTimeout(() => {
+        customerHoverTimerRef.current = null;
+        if (hoveredCustomerRef.current?.id !== id) return;
+        showCustomerHoverPointer(pin);
+      }, HOVER_POINTER_DELAY_MS);
+    };
+
+    const onCustomerLeave = () => {
+      clearHoveredCustomer();
+    };
+
+    const onCustomerClick = (e: maplibregl.MapLayerMouseEvent) => {
+      const raw = e.features?.[0]?.properties?.id;
+      const id = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(id) || id <= 0) return;
+      const hit = customersQuery.data?.find((c) => c.id === id);
+      if (hit) selectCustomer(hit);
+    };
+
+    map.on("mouseenter", "my-customer-pins", onCustomerEnter);
+    map.on("mouseleave", "my-customer-pins", onCustomerLeave);
+    map.on("click", "my-customer-pins", onCustomerClick);
+    return () => {
+      map.off("mouseenter", "my-customer-pins", onCustomerEnter);
+      map.off("mouseleave", "my-customer-pins", onCustomerLeave);
+      map.off("click", "my-customer-pins", onCustomerClick);
+      clearHoveredCustomer();
+    };
+  }, [ready, customersQuery.data, selectCustomer, clearHoveredCustomer, showCustomerHoverPointer]);
 
   // Open the detail sheet when a pin is clicked.
   useEffect(() => {
@@ -747,6 +1008,7 @@ function MarketMapInner() {
   }, []);
 
   const results = businessesQuery.data ?? [];
+  const locatedClients = customersQuery.data ?? [];
   const bucketCounts = useMemo(() => {
     const counts: Record<PinBucket, number> = {
       prospect: 0,
@@ -755,8 +1017,9 @@ function MarketMapInner() {
       customer: 0,
     };
     for (const b of results) counts[pinBucket(b)] += 1;
+    counts.customer += locatedClients.length;
     return counts;
-  }, [results]);
+  }, [results, locatedClients]);
   const filteredResults = useMemo(
     () =>
       bucketFilter === "all"
@@ -854,7 +1117,7 @@ function MarketMapInner() {
       {/* Legend (bottom-left, quiet) */}
       <div className="absolute bottom-3 left-3 z-10 rounded-lg border bg-background/95 p-3 text-sm shadow-sm backdrop-blur">
         <p className="mb-1 font-medium">Leyenda</p>
-        <LegendRow color={BUCKET_COLOR.prospect} label="Prospecto" />
+        <LegendRow color={BUCKET_COLOR.prospect} label={MARKET_BUSINESS_LABEL} />
         <LegendRow color={BUCKET_COLOR.engaged} label="Interesado / asignado" />
         <LegendRow color={BUCKET_COLOR.lead} label="Lead creado" />
         <LegendRow color={BUCKET_COLOR.customer} label="Ya es mi cliente" />
@@ -923,14 +1186,38 @@ function MarketMapInner() {
               <Skeleton className="h-14 w-full" key={i} />
             ))}
           </div>
-        ) : filteredResults.length === 0 ? (
+        ) : filteredResults.length === 0 &&
+          !(bucketFilter === "customer" && locatedClients.length > 0) ? (
           <p className="text-muted-foreground p-4 text-sm">
-            {results.length === 0
-              ? "No hay negocios en esta área. Mové el mapa o ajustá los filtros."
-              : "Ningún negocio en esta categoría. Probá otro filtro o ampliá el mapa."}
+            {bucketFilter === "customer"
+              ? locatedClients.length === 0
+                ? "Ningún cliente con ubicación. Agregá un enlace Waze con coordenadas en la ficha del cliente."
+                : "Ningún negocio del market en esta categoría."
+              : results.length === 0
+                ? "No hay negocios en esta área. Mové el mapa o ajustá los filtros."
+                : "Ningún negocio en esta categoría. Probá otro filtro o ampliá el mapa."}
           </p>
         ) : (
           <div className="divide-y">
+            {bucketFilter === "customer"
+              ? locatedClients.map((c) => (
+                  <button
+                    className={cn(
+                      "flex w-full flex-col items-start gap-1 p-3 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      selectedCustomer?.id === c.id && "bg-accent ring-2 ring-primary ring-inset",
+                    )}
+                    key={`client-${c.id}`}
+                    type="button"
+                    onClick={() => selectCustomer(c)}
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-muted-foreground text-xs">
+                      Cliente · {c.lat.toFixed(5)}, {c.lng.toFixed(5)}
+                    </span>
+                    <Badge className="bg-green-600 hover:bg-green-600">Cliente</Badge>
+                  </button>
+                ))
+              : null}
             {filteredResults.map((b) => (
               <button
                 className={cn(
@@ -953,7 +1240,7 @@ function MarketMapInner() {
         </div>
       </aside>
 
-      {/* Detail sheet */}
+      {/* Detail sheet — market business */}
       <Sheet open={selected != null} onOpenChange={(o) => !o && setSelected(null)}>
         <SheetContent className="w-full sm:max-w-md" side="right">
           {selected && (
@@ -967,6 +1254,15 @@ function MarketMapInner() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Detail sheet — supplier client on map */}
+      <MarketCustomerDetailSheet
+        customerId={selectedCustomer?.id ?? null}
+        fallbackLat={selectedCustomer?.lat}
+        fallbackLng={selectedCustomer?.lng}
+        fallbackName={selectedCustomer?.name}
+        onClose={() => setSelectedCustomer(null)}
+      />
     </div>
   );
 }
@@ -991,7 +1287,61 @@ function BucketBadge({ business }: Readonly<{ business: MarketBusiness }>) {
     return <Badge className="bg-amber-600 hover:bg-amber-600">Lead</Badge>;
   if (bucket === "engaged")
     return <Badge className="bg-blue-600 hover:bg-blue-600">En proceso</Badge>;
-  return <Badge variant="secondary">Prospecto</Badge>;
+  return <Badge variant="secondary">{MARKET_BUSINESS_LABEL}</Badge>;
+}
+
+/** Official Waze mark, simplified to a single inline SVG (no external asset/dependency). */
+function WazeLogo({ className }: Readonly<{ className?: string }>) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path d="M12 2C6.9 2 2.75 5.94 2.75 10.8c0 1.02.2 2 .58 2.9-.16.62-.5 1.2-1.02 1.62a.9.9 0 0 0 .5 1.6c1.03.06 2-.28 2.77-.9A10.6 10.6 0 0 0 12 17.6c5.1 0 9.25-3.94 9.25-8.8S17.1 2 12 2Zm-3.1 9.3a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm6.2 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4ZM12 15.2c-1.9 0-3.6-1-4.4-2.5a.6.6 0 0 1 1.05-.58c.6 1.1 1.9 1.88 3.35 1.88s2.75-.78 3.35-1.88a.6.6 0 1 1 1.05.58c-.8 1.5-2.5 2.5-4.4 2.5Z" />
+      <circle cx="7" cy="20" r="1.6" />
+      <circle cx="15" cy="20" r="1.6" />
+    </svg>
+  );
+}
+
+function WazeActions({ lat, lng }: Readonly<{ lat: number; lng: number }>) {
+  const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(wazeUrl);
+      toast.success("Enlace de Waze copiado");
+    } catch {
+      toast.error("No se pudo copiar el enlace");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <Button
+        asChild
+        className="flex-1 gap-2 bg-[#33ccff] text-white hover:bg-[#2bb8e6]"
+        variant="secondary"
+      >
+        <a href={wazeUrl} rel="noreferrer" target="_blank">
+          <WazeLogo className="h-4 w-4" />
+          Abrir en Waze
+        </a>
+      </Button>
+      <Button
+        aria-label="Copiar enlace de Waze"
+        size="icon"
+        title="Copiar enlace de Waze"
+        variant="outline"
+        onClick={() => void copyUrl()}
+      >
+        <Copy className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 }
 
 function BusinessDetail({
@@ -1087,6 +1437,9 @@ function BusinessDetail({
             </a>
           </p>
         )}
+        {business.lat != null && business.lng != null && (
+          <WazeActions lat={business.lat} lng={business.lng} />
+        )}
         <div className="pt-2">
           <BucketBadge business={business} />
         </div>
@@ -1134,7 +1487,7 @@ function BusinessDetail({
           </p>
         ) : (
           <Button className="w-full" disabled={busy} onClick={() => void convert()}>
-            Agregar como prospecto (crear lead)
+            Agregar negocio (crear lead)
           </Button>
         )}
         {!hasLead && !isCustomer ? (

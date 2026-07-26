@@ -1,5 +1,7 @@
 "use client";
 
+import { parseWazeCoordinates } from "@/lib/waze-url";
+
 export type MarketProspectState =
   | "new"
   | "interested"
@@ -144,31 +146,46 @@ export type MarketCustomerPin = Readonly<{
   lng: number;
 }>;
 
+function parseCustomerPinRows(
+  rows: Array<Record<string, unknown>>,
+): MarketCustomerPin[] {
+  return rows
+    .map((c) => {
+      const id = Number(c.customerId ?? c.id);
+      const name = String(c.name ?? "");
+      let lat = c.lat != null ? Number(c.lat) : Number.NaN;
+      let lng = c.lng != null ? Number(c.lng) : Number.NaN;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        const waze = typeof c.wazeAddress === "string" ? c.wazeAddress : null;
+        const parsed = parseWazeCoordinates(waze);
+        if (parsed) {
+          lat = parsed.lat;
+          lng = parsed.lng;
+        }
+      }
+      return { id, name, lat, lng };
+    })
+    .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng) && c.id > 0);
+}
+
 export async function fetchMyCustomerPins(): Promise<MarketCustomerPin[]> {
-  const res = await fetch("/api/backend/dashboard/customers", {
+  const res = await fetch("/api/backend/dashboard/market/customers", {
     cache: "no-store",
     credentials: "same-origin",
   });
   if (!res.ok) return [];
-  // The customers endpoint returns `{ customers: [...] }`.
   const body = (await res.json().catch(() => ({}))) as {
-    customers?: Array<Record<string, unknown>>;
+    data?: Array<Record<string, unknown>>;
   };
-  return (body.customers ?? [])
-    .map((c) => ({
-      id: Number(c.customerId ?? c.id),
-      name: String(c.name ?? ""),
-      lat: c.lat != null ? Number(c.lat) : Number.NaN,
-      lng: c.lng != null ? Number(c.lng) : Number.NaN,
-    }))
-    .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+  return parseCustomerPinRows(body.data ?? []);
 }
 
-/** Pin color bucket derived from prospect state. */
+/** Pin color bucket for a market business in the supplier pipeline. */
 export type PinBucket = "prospect" | "engaged" | "lead" | "customer";
 export function pinBucket(b: MarketBusiness): PinBucket {
   if (b.convertedCustomerId != null) return "customer";
   if (b.convertedLeadId != null || b.prospectState === "converted") return "lead";
   if (b.prospectState === "interested" || b.prospectState === "assigned") return "engaged";
+  // Default: published market business with no supplier workflow yet (`prospect` id is legacy).
   return "prospect";
 }

@@ -142,6 +142,8 @@ export type DashboardCustomerDetail = Readonly<{
   region: string | null;
   postalCode: string | null;
   wazeAddress: string | null;
+  lat: number | null;
+  lng: number | null;
 }>;
 
 export type PatchDashboardCustomerInput = Readonly<{
@@ -232,6 +234,8 @@ export type DashboardCustomerFullDetail = Readonly<{
   region: string | null;
   postalCode: string | null;
   wazeAddress: string | null;
+  lat: number | null;
+  lng: number | null;
   deliveryNotes: string | null;
   notes: string | null;
   paymentTerms: string | null;
@@ -314,6 +318,8 @@ function parseCustomerDetail(raw: unknown): DashboardCustomerDetail | null {
     region: strOrNull("region"),
     postalCode: strOrNull("postalCode"),
     wazeAddress: strOrNull("wazeAddress"),
+    lat: asNumOrNull(o.lat),
+    lng: asNumOrNull(o.lng),
   };
 }
 

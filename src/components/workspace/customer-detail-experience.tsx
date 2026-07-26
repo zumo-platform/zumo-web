@@ -269,6 +269,8 @@ export function CustomerDetailExperience({
           discountLists={detail.discountLists}
           draft={draft}
           emailOrderingEnabled={emailOrderingEnabled}
+          storedLat={detail.lat}
+          storedLng={detail.lng}
           onEmailOrderingChange={setEmailOrderingEnabled}
           labelsSlot={
             <CustomerLabelsSection

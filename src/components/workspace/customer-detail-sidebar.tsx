@@ -2,6 +2,10 @@
 
 import type { ReactNode } from "react";
 
+import { Copy } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CustomerDiscountListsSection } from "@/components/workspace/customer-discount-lists-section";
 import { CustomerEmailOrderingToggle } from "@/components/workspace/customer-email-ordering-toggle";
@@ -11,6 +15,7 @@ import {
   CustomerDraftReadonly,
 } from "@/components/workspace/customer-draft-field";
 import type { CustomerDraftState, CustomerDiscountListSummary } from "@/lib/dashboard-customers";
+import { normalizeWazeUrl, parseWazeCoordinates } from "@/lib/waze-url";
 
 function formatCreatedAt(iso: string | null): string {
   if (!iso) return "—";
@@ -26,6 +31,79 @@ function formatLocation(city: string, region: string): string {
   return parts.length > 0 ? parts.join(", ") : "—";
 }
 
+function CustomerWazeField({
+  value,
+  storedLat,
+  storedLng,
+  onChange,
+}: Readonly<{
+  value: string;
+  storedLat: number | null;
+  storedLng: number | null;
+  onChange: (value: string) => void;
+}>) {
+  const wazeUrl = normalizeWazeUrl(value);
+  const parsed = parseWazeCoordinates(value);
+  const lat = parsed?.lat ?? storedLat;
+  const lng = parsed?.lng ?? storedLng;
+
+  async function copyUrl() {
+    if (!wazeUrl) return;
+    try {
+      await navigator.clipboard.writeText(wazeUrl);
+      toast.success("Enlace de Waze copiado");
+    } catch {
+      toast.error("No se pudo copiar el enlace");
+    }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <CustomerDraftField
+        label="Enlace Waze"
+        placeholder="https://waze.com/ul?ll=…"
+        value={value}
+        onChange={onChange}
+      />
+      {value.trim() && wazeUrl ? (
+        <div className="space-y-1 rounded-md border bg-muted/20 px-2.5 py-2">
+          <div className="flex items-start gap-2">
+            <a
+              className="min-w-0 flex-1 truncate text-primary text-xs underline underline-offset-2"
+              href={wazeUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {value.trim()}
+            </a>
+            <Button
+              aria-label="Copiar enlace de Waze"
+              className="size-7 shrink-0"
+              size="icon"
+              title="Copiar enlace de Waze"
+              type="button"
+              variant="outline"
+              onClick={() => void copyUrl()}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+          {lat != null && lng != null ? (
+            <p className="text-muted-foreground text-xs tabular-nums">
+              Coordenadas: {lat.toFixed(6)}, {lng.toFixed(6)}
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              Guardá un enlace Waze con <code className="text-[11px]">ll=lat,lng</code> para
+              ubicar al cliente en el mapa.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function CustomerDetailSidebar({
   customerId,
   createdAt,
@@ -33,6 +111,8 @@ export function CustomerDetailSidebar({
   discountLists,
   labelsSlot,
   emailOrderingEnabled,
+  storedLat,
+  storedLng,
   onEmailOrderingChange,
   onDraftChange,
   onOrderingEmailPersist,
@@ -43,6 +123,8 @@ export function CustomerDetailSidebar({
   discountLists: readonly CustomerDiscountListSummary[];
   labelsSlot?: ReactNode;
   emailOrderingEnabled: boolean;
+  storedLat: number | null;
+  storedLng: number | null;
   onEmailOrderingChange: (enabled: boolean) => void;
   onDraftChange: (patch: Partial<CustomerDraftState>) => void;
   /** Persist official order email immediately (does not wait for page Guardar). */
@@ -134,6 +216,12 @@ export function CustomerDetailSidebar({
               placeholder="Provincia"
               value={draft.region}
               onChange={(region) => onDraftChange({ region })}
+            />
+            <CustomerWazeField
+              storedLat={storedLat}
+              storedLng={storedLng}
+              value={draft.wazeAddress}
+              onChange={(wazeAddress) => onDraftChange({ wazeAddress })}
             />
             <CustomerDraftField
               label="Código cliente"

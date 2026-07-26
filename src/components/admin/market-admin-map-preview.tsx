@@ -12,7 +12,8 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 export function MarketAdminMapPreview({
   lat,
   lng,
-}: Readonly<{ lat: number; lng: number }>) {
+  markerColor = "#2563eb",
+}: Readonly<{ lat: number; lng: number; markerColor?: string }>) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MLMap | null>(null);
   const markerRef = useRef<Marker | null>(null);
@@ -29,7 +30,7 @@ export function MarketAdminMapPreview({
       attributionControl: { compact: true },
     });
     mapRef.current = map;
-    markerRef.current = new maplibregl.Marker({ color: "#2563eb" })
+    markerRef.current = new maplibregl.Marker({ color: markerColor })
       .setLngLat([initial.lng, initial.lat])
       .addTo(map);
 

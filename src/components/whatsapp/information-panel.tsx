@@ -114,7 +114,7 @@ export function InformationPanel({
               {conversation.customerId != null ? (
                 <CustomerPriceLookup
                   customerId={conversation.customerId}
-                  description="Si el cliente pregunta por un producto (ej. cebollas), buscá aquí el precio para él."
+                  description="Elegí un producto del catálogo (nombre, SKU o presentación) para ver el precio de este cliente."
                   title="Precio para este cliente"
                 />
               ) : null}

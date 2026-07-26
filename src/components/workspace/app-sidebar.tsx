@@ -101,7 +101,7 @@ const baseMainNav: NavItem[] = [
   { href: "/vendedores", icon: Users, label: "Vendedores" },
   { href: "/compras", icon: Truck, label: "Compras" },
   { href: "/marketing", icon: Megaphone, label: "Marketing" },
-  { href: "/market", icon: MapPin, label: "Market" },
+  { href: "/market", icon: MapPin, label: "Market business" },
 ];
 
 export function AppSidebar({
