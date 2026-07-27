@@ -37,12 +37,12 @@ export const ORDER_STATUS_FILTER_OPTIONS: ReadonlyArray<{
 
 export type OrderStatusFilterLogic = "or" | "and";
 
-/** Parse `?status=draft,pending` from URL; `all` = no status filter; defaults to active-work statuses. */
-export function parseOrderStatusFilter(raw: string | undefined): string[] {
+/** Parse `?status=draft,pending` from URL; `all` or absent = no status filter. */
+export function parseOrderStatusFilter(raw: string | null | undefined): string[] {
   if (raw === "all") return [];
-  if (!raw?.trim()) return [...DEFAULT_ORDER_STATUS_FILTER];
+  if (!raw?.trim()) return [];
   const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
-  return parts.length > 0 ? parts : [...DEFAULT_ORDER_STATUS_FILTER];
+  return parts.length > 0 ? parts : [];
 }
 
 export function orderStatusFilterToParam(statuses: readonly string[]): string {
@@ -88,6 +88,9 @@ export type OrdersViewMode = "list" | "board";
 
 export const ORDERS_VIEW_STORAGE_KEY = "zumo.orders.view";
 
+/** Set on unmount; cleared on next Pedidos mount to drop stale URL filters. */
+export const ORDERS_RESET_FILTERS_SESSION_KEY = "workspace:orders:reset-filters-on-enter";
+
 export function ordersBoardViewLabel(locale: MarketingLocale): string {
   return locale === "en" ? "Flow" : "Flujo";
 }
@@ -107,10 +110,6 @@ export function ordersBoardEmptyDescription(locale: MarketingLocale): string {
 
 export function parseOrdersViewMode(raw: string | null | undefined): OrdersViewMode {
   if (raw === "board" || raw === "list") return raw;
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
-    if (stored === "board" || stored === "list") return stored;
-  }
   return "list";
 }
 
@@ -138,6 +137,8 @@ export type DashboardOrderListRow = Readonly<{
   backorderLineCount: number;
   hasBackorderRisk: boolean;
   backorderRiskLineCount: number;
+  hasHeldStockReservation: boolean;
+  heldReservedUnits: number;
   /** Conversation channel when order came from Inbox (null = created in panel). */
   sourceChannel: "email" | "whatsapp" | null;
   customerAssignedSellerId: number | null;
@@ -153,6 +154,19 @@ export type DashboardOrderStatusChangeHandler = (
   status: string,
   patch?: DashboardOrderPatch,
 ) => void;
+
+function parseHeldStockReservationFields(o: Record<string, unknown>): {
+  hasHeldStockReservation: boolean;
+  heldReservedUnits: number;
+} {
+  return {
+    hasHeldStockReservation: o.hasHeldStockReservation === true,
+    heldReservedUnits:
+      typeof o.heldReservedUnits === "number" && Number.isFinite(o.heldReservedUnits)
+        ? Math.max(0, o.heldReservedUnits)
+        : 0,
+  };
+}
 
 function readStringField(o: Record<string, unknown>, key: string): string | null {
   const value = o[key];
@@ -284,6 +298,8 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
         ? backorderLineCount
         : 0;
 
+  const { hasHeldStockReservation, heldReservedUnits } = parseHeldStockReservationFields(o);
+
   return {
     orderId,
     displayCode,
@@ -311,6 +327,8 @@ function parseOrderListRow(raw: unknown): DashboardOrderListRow | null {
     backorderLineCount,
     hasBackorderRisk,
     backorderRiskLineCount,
+    hasHeldStockReservation,
+    heldReservedUnits,
   };
 }
 
@@ -719,6 +737,7 @@ export type DashboardOrderDetail = Readonly<{
   displayCode: string | null;
   customerId: number;
   status: string;
+  effectiveStatusKey: string;
   createdAt: string | null;
   deliveryDate: string | null;
   subtotal: number | null;
@@ -728,6 +747,8 @@ export type DashboardOrderDetail = Readonly<{
   isTouchless: boolean;
   isBackordered: boolean;
   hasBackorderRisk: boolean;
+  hasHeldStockReservation: boolean;
+  heldReservedUnits: number;
 }>;
 
 function asNumberOrNull(value: unknown): number | null {
@@ -811,12 +832,19 @@ export function parseDashboardOrderDetail(
   const hasBackorderRisk =
     typeof o.hasBackorderRisk === "boolean" ? o.hasBackorderRisk : isBackordered;
 
+  const { hasHeldStockReservation, heldReservedUnits } = parseHeldStockReservationFields(o);
+
   return {
     orderId,
     displayCode:
       readStringFieldOrNull(o, "displayCode") ?? readStringFieldOrNull(o, "display_code"),
     customerId,
     status: readStringFieldOrNull(o, "status") ?? "draft",
+    effectiveStatusKey:
+      readStringFieldOrNull(o, "effectiveStatusKey") ??
+      readStringFieldOrNull(o, "effective_status_key") ??
+      readStringFieldOrNull(o, "status") ??
+      "draft",
     createdAt: readStringFieldOrNull(o, "createdAt"),
     deliveryDate: readStringFieldOrNull(o, "deliveryDate"),
     subtotal: asNumberOrNull(o.subtotal),
@@ -826,6 +854,8 @@ export function parseDashboardOrderDetail(
     isTouchless: o.isTouchless === true,
     isBackordered,
     hasBackorderRisk,
+    hasHeldStockReservation,
+    heldReservedUnits,
   };
 }
 

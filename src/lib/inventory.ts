@@ -761,6 +761,140 @@ export async function updateShortfallPolicyViaProxy(
   return { ok: true };
 }
 
+// ── Inventory deduction point (pedido vs nota de entrega) ────────────────────
+
+export type InventoryDeductionPoint = "order" | "delivery_note";
+
+export const DEDUCTION_POINT_OPTIONS: ReadonlyArray<{
+  value: InventoryDeductionPoint;
+  label: string;
+}> = [
+  { value: "order", label: "Con el pedido (al marcar entregado)" },
+  { value: "delivery_note", label: "Con la nota de entrega (al despachar)" },
+];
+
+export type MidFlightBlockingOrder = Readonly<{
+  orderId: string;
+  displayCode: string | null;
+  effectiveStatusKey: string;
+  customerName: string;
+}>;
+
+export type MidFlightBlockingNote = Readonly<{
+  deliveryNoteId: string;
+  displayCode: string | null;
+  status: string;
+}>;
+
+export type DeductionPointBlocking = Readonly<{
+  orders: number;
+  notes: number;
+  blockingOrders: MidFlightBlockingOrder[];
+  blockingNotes: MidFlightBlockingNote[];
+}>;
+
+export type DeductionPointState = Readonly<{
+  point: InventoryDeductionPoint;
+  canSwitch: boolean;
+  blocking: DeductionPointBlocking;
+}>;
+
+export async function fetchDeductionPointViaProxy(): Promise<DeductionPointState> {
+  const res = await fetch("/api/backend/dashboard/settings/inventory-deduction-point", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    point?: string;
+    canSwitch?: boolean;
+    blocking?: {
+      orders?: number;
+      notes?: number;
+      blockingOrders?: unknown;
+      blockingNotes?: unknown;
+    };
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(readApiErrorBody(data, res.status));
+  }
+  const point: InventoryDeductionPoint =
+    data.point === "delivery_note" ? "delivery_note" : "order";
+  return {
+    point,
+    canSwitch: data.canSwitch !== false,
+    blocking: parseDeductionPointBlocking(data.blocking),
+  };
+}
+
+function parseBlockingOrder(raw: unknown): MidFlightBlockingOrder | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const orderId = typeof row.orderId === "string" ? row.orderId.trim() : "";
+  if (!orderId) return null;
+  return {
+    orderId,
+    displayCode: typeof row.displayCode === "string" ? row.displayCode : null,
+    effectiveStatusKey:
+      typeof row.effectiveStatusKey === "string" ? row.effectiveStatusKey : "confirmed",
+    customerName:
+      typeof row.customerName === "string" && row.customerName.trim().length > 0
+        ? row.customerName.trim()
+        : "Sin nombre",
+  };
+}
+
+function parseBlockingNote(raw: unknown): MidFlightBlockingNote | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const deliveryNoteId =
+    typeof row.deliveryNoteId === "string" ? row.deliveryNoteId.trim() : "";
+  if (!deliveryNoteId) return null;
+  return {
+    deliveryNoteId,
+    displayCode: typeof row.displayCode === "string" ? row.displayCode : null,
+    status: typeof row.status === "string" ? row.status : "borrador",
+  };
+}
+
+function parseDeductionPointBlocking(raw: unknown): DeductionPointBlocking {
+  const blocking =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const blockingOrders = Array.isArray(blocking.blockingOrders)
+    ? blocking.blockingOrders
+        .map(parseBlockingOrder)
+        .filter((row): row is MidFlightBlockingOrder => row != null)
+    : [];
+  const blockingNotes = Array.isArray(blocking.blockingNotes)
+    ? blocking.blockingNotes
+        .map(parseBlockingNote)
+        .filter((row): row is MidFlightBlockingNote => row != null)
+    : [];
+  return {
+    orders: Number(blocking.orders ?? blockingOrders.length),
+    notes: Number(blocking.notes ?? blockingNotes.length),
+    blockingOrders,
+    blockingNotes,
+  };
+}
+
+export async function updateDeductionPointViaProxy(
+  point: InventoryDeductionPoint,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await fetch("/api/backend/dashboard/settings/inventory-deduction-point", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ point }),
+  });
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+  if (!res.ok) {
+    return { ok: false, error: readApiErrorBody(body, res.status) };
+  }
+  return { ok: true };
+}
+
 // ── Vendors (Proveedores) ───────────────────────────────────────────────────
 
 export type DashboardVendorRow = Readonly<{

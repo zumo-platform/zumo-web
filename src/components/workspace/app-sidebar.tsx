@@ -178,7 +178,7 @@ export function AppSidebar({
                       )}
                     >
                       <Link
-                        href={item.href}
+                        href={item.href === "/orders" ? "/orders?status=all" : item.href}
                         prefetch
                         onMouseEnter={() => {
                           router.prefetch(item.href);

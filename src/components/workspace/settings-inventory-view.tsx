@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CircleHelp, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,11 +27,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  DEDUCTION_POINT_OPTIONS,
+  fetchDeductionPointViaProxy,
   fetchShortfallPolicyViaProxy,
   SHORTFALL_POLICY_OPTIONS,
+  updateDeductionPointViaProxy,
   updateShortfallPolicyViaProxy,
+  type DeductionPointBlocking,
+  type DeductionPointState,
+  type InventoryDeductionPoint,
+  type MidFlightBlockingNote,
   type ShortfallPolicy,
 } from "@/lib/inventory";
+import { formatOrderDisplayCode } from "@/lib/order-display-code";
+import { SYSTEM_STATUS_LABELS } from "@/lib/order-status-flow";
 import {
   fetchLotNomenclatureViaProxy,
   fetchBatchSettingsViaProxy,
@@ -49,6 +59,107 @@ type SettingsInventoryViewProps = Readonly<{
 
 const SAMPLE_VENDOR = "Acme Foods";
 const SAMPLE_SKU = "SKU-001";
+
+const DEFAULT_DEDUCTION: DeductionPointState = {
+  point: "order",
+  canSwitch: true,
+  blocking: { orders: 0, notes: 0, blockingOrders: [], blockingNotes: [] },
+};
+
+const DELIVERY_NOTE_STATUS_LABELS: Record<string, string> = {
+  borrador: "Borrador",
+  confirmada: "Confirmada",
+  en_ruta: "En ruta",
+  entregada: "Entregada",
+  entregada_parcial: "Entregada parcial",
+  cancelada: "Cancelada",
+};
+
+function flowStatusLabel(statusKey: string): string {
+  return SYSTEM_STATUS_LABELS[statusKey] ?? statusKey.replaceAll("_", " ");
+}
+
+function deliveryNoteDisplayCode(note: MidFlightBlockingNote): string {
+  const code = note.displayCode?.trim();
+  if (code) return code;
+  if (note.deliveryNoteId.length <= 14) return note.deliveryNoteId;
+  return `${note.deliveryNoteId.slice(0, 10)}…${note.deliveryNoteId.slice(-4)}`;
+}
+
+function DeductionPointBlockingNotice({
+  blocking,
+}: Readonly<{ blocking: DeductionPointBlocking }>) {
+  const { orders, notes, blockingOrders, blockingNotes } = blocking;
+  if (orders === 0 && notes === 0) return null;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3 text-sm">
+      <div className="space-y-1">
+        <p className="font-medium text-foreground">
+          Hay {orders} pedido{orders === 1 ? "" : "s"} con inventario reservado
+          {notes > 0
+            ? ` y ${notes} nota${notes === 1 ? "" : "s"} de entrega abiertas`
+            : ""}
+          .
+        </p>
+        <p className="text-muted-foreground">
+          El tablero de pedidos muestra todos los pedidos por estado; este conteo solo incluye
+          pedidos que pasaron por confirmado y aún tienen stock reservado (no entregado ni
+          cancelado). Marcá esos pedidos como{" "}
+          <span className="text-foreground">Entregado</span> o{" "}
+          <span className="text-foreground">Cancelado</span> para liberar el inventario.
+        </p>
+      </div>
+
+      {blockingOrders.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="font-medium text-foreground text-xs uppercase tracking-wide">
+            Pedidos con stock reservado
+          </p>
+          <ul className="space-y-1">
+            {blockingOrders.map((order) => (
+              <li key={order.orderId}>
+                <Link
+                  className="text-primary underline-offset-4 hover:underline"
+                  href={`/orders/${encodeURIComponent(order.orderId)}`}
+                >
+                  {formatOrderDisplayCode(order.orderId, order.displayCode)}
+                </Link>
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {order.customerName} · {flowStatusLabel(order.effectiveStatusKey)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {blockingNotes.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="font-medium text-foreground text-xs uppercase tracking-wide">
+            Notas de entrega abiertas
+          </p>
+          <ul className="space-y-1 text-muted-foreground">
+            {blockingNotes.map((note) => (
+              <li key={note.deliveryNoteId}>
+                {deliveryNoteDisplayCode(note)} ·{" "}
+                {DELIVERY_NOTE_STATUS_LABELS[note.status] ?? note.status}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <Link
+        className="inline-flex text-primary text-sm underline-offset-4 hover:underline"
+        href="/orders"
+      >
+        Ir al tablero de pedidos
+      </Link>
+    </div>
+  );
+}
 
 function SettingLabel({
   htmlFor,
@@ -83,6 +194,8 @@ function SettingLabel({
 export function SettingsInventoryView({ canEdit }: SettingsInventoryViewProps) {
   const [policy, setPolicy] = useState<ShortfallPolicy | null>(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
+  const [deduction, setDeduction] = useState<DeductionPointState | null>(null);
+  const [savingDeduction, setSavingDeduction] = useState(false);
 
   const [lotSettings, setLotSettings] = useState<LotNomenclature | null>(null);
   const [lotDraft, setLotDraft] = useState<{
@@ -104,6 +217,26 @@ export function SettingsInventoryView({ canEdit }: SettingsInventoryViewProps) {
       } catch (err) {
         if (!cancelled) {
           toast.error(err instanceof Error ? err.message : "No se pudo cargar la política.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const value = await fetchDeductionPointViaProxy();
+        if (!cancelled) setDeduction(value);
+      } catch (err) {
+        if (!cancelled) {
+          setDeduction(DEFAULT_DEDUCTION);
+          toast.error(
+            err instanceof Error ? err.message : "No se pudo cargar la lógica de inventario.",
+          );
         }
       }
     })();
@@ -177,6 +310,39 @@ export function SettingsInventoryView({ canEdit }: SettingsInventoryViewProps) {
       }
     },
     [canEdit],
+  );
+
+  const saveDeduction = useCallback(
+    async (next: InventoryDeductionPoint) => {
+      if (!canEdit || !deduction || next === deduction.point) return;
+      setSavingDeduction(true);
+      const prev = deduction;
+      setDeduction({ ...deduction, point: next });
+      try {
+        const result = await updateDeductionPointViaProxy(next);
+        if (!result.ok) {
+          setDeduction(prev);
+          toast.error(result.error);
+          try {
+            const fresh = await fetchDeductionPointViaProxy();
+            setDeduction(fresh);
+          } catch {
+            /* keep previous state */
+          }
+          return;
+        }
+        toast.success("Lógica de inventario actualizada.");
+        try {
+          const fresh = await fetchDeductionPointViaProxy();
+          setDeduction(fresh);
+        } catch {
+          /* keep optimistic value */
+        }
+      } finally {
+        setSavingDeduction(false);
+      }
+    },
+    [canEdit, deduction],
   );
 
   const preview = useMemo(() => {
@@ -358,10 +524,45 @@ export function SettingsInventoryView({ canEdit }: SettingsInventoryViewProps) {
         <CardHeader>
           <CardTitle>Inventario</CardTitle>
           <CardDescription>
-            Qué hacer cuando un pedido confirmado no tiene stock suficiente para todas las líneas.
+            Cuándo se descuenta el inventario y qué hacer cuando un pedido confirmado no tiene
+            stock suficiente.
           </CardDescription>
         </CardHeader>
         <CardContent className="max-w-lg space-y-3">
+          <div className="space-y-2">
+            <SettingLabel
+              htmlFor="inventory-deduction-point"
+              label="¿Cuándo se descuenta el inventario?"
+              tooltip="Elegí si el stock se reduce al marcar el pedido como entregado, o al despachar la nota de entrega. No se puede cambiar mientras haya pedidos con inventario reservado o notas de entrega abiertas."
+            />
+            {deduction === null ? (
+              <SkeletonFieldList rows={1} />
+            ) : (
+              <>
+                <Select
+                  disabled={!canEdit || savingDeduction || !deduction.canSwitch}
+                  value={deduction.point}
+                  onValueChange={(value) =>
+                    void saveDeduction(value as InventoryDeductionPoint)
+                  }
+                >
+                  <SelectTrigger id="inventory-deduction-point">
+                    <SelectValue placeholder="Seleccioná una opción" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEDUCTION_POINT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!deduction.canSwitch ? (
+                  <DeductionPointBlockingNotice blocking={deduction.blocking} />
+                ) : null}
+              </>
+            )}
+          </div>
           <div className="space-y-2">
             <Label htmlFor="shortfall-policy">Política de faltantes</Label>
             {policy === null ? (

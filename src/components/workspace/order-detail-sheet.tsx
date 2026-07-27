@@ -39,9 +39,10 @@ import {
   EditableCustomerAddressField,
   EditableCustomerTextField,
 } from "@/components/workspace/customer-field-editor";
-import { MatchCoverageIndicator } from "@/components/workspace/match-coverage-indicator";
+import { MatchCoverageIndicator, LineMatchIndicator } from "@/components/workspace/match-coverage-indicator";
 import { EditableOrderLinesTable } from "@/components/workspace/editable-order-lines-table";
 import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
+import { OrderStockReservationIndicator } from "@/components/workspace/order-stock-reservation-indicator";
 import {
   BackorderRiskWarning,
   BackorderWarningIcon,
@@ -68,22 +69,23 @@ import {
   parseDashboardOrderDetail,
   patchDashboardOrderViaProxy,
   rejectDashboardOrderViaProxy,
+  updateDashboardOrderStatusViaProxy,
   type DashboardOrderPatch,
 } from "@/lib/dashboard-orders";
 import { fetchDashboardSettingsViaProxy } from "@/lib/dashboard-settings";
+import { formatQty } from "@/lib/inventory-format";
 import { fetchProductsViaProxy, selectableProducts, type DashboardProductRow } from "@/lib/dashboard-products";
 import { patchDashboardCustomerViaProxy } from "@/lib/dashboard-customers";
 import { parseMatchCoverage } from "@/lib/match-coverage";
 import { pickDefaultDeliveryDate } from "@/lib/delivery";
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
-import { statusBadgeVariant, statusLabel } from "@/lib/order-status-flow";
+import { statusBadgeVariant, statusLabel, resolveOrderFlowStatusKey } from "@/lib/order-status-flow";
 import {
   useSupplierTimeFormatters,
   useWorkspacePermissions,
   useWorkspacePreferences,
 } from "@/lib/workspace-preferences-context";
 import { formatOrderMoney } from "@/lib/order-product-search";
-import { formatQty } from "@/lib/inventory-format";
 import {
   lineAvailableStockFromCatalog,
   lineHasBackorderRisk,
@@ -126,6 +128,7 @@ type OrderDetail = Readonly<{
   displayCode: string | null;
   customerId: number;
   status: string;
+  effectiveStatusKey: string;
   createdAt: string | null;
   deliveryDate: string | null;
   confirmedAt: string | null;
@@ -138,6 +141,8 @@ type OrderDetail = Readonly<{
   isTouchless: boolean;
   isBackordered: boolean;
   hasBackorderRisk: boolean;
+  hasHeldStockReservation: boolean;
+  heldReservedUnits: number;
 }>;
 
 type CustomerDetail = Readonly<{
@@ -253,12 +258,21 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
     o.isBackordered === true || lines.some((line) => line.qtyBackordered > 0);
   const hasBackorderRisk =
     typeof o.hasBackorderRisk === "boolean" ? o.hasBackorderRisk : isBackordered;
+  const hasHeldStockReservation = o.hasHeldStockReservation === true;
+  const heldReservedUnits =
+    typeof o.heldReservedUnits === "number" && Number.isFinite(o.heldReservedUnits)
+      ? Math.max(0, o.heldReservedUnits)
+      : 0;
 
   return {
     orderId,
     displayCode: asStringOrNull(o.displayCode) ?? asStringOrNull(o.display_code),
     customerId,
     status,
+    effectiveStatusKey:
+      asStringOrNull(o.effectiveStatusKey) ??
+      asStringOrNull(o.effective_status_key) ??
+      status,
     createdAt: asStringOrNull(o.createdAt),
     deliveryDate: asStringOrNull(o.deliveryDate),
     confirmedAt: asStringOrNull(o.confirmedAt),
@@ -271,6 +285,8 @@ function parseOrderDetail(raw: unknown, fallbackOrderId: string): OrderDetail | 
     isTouchless: o.isTouchless === true,
     isBackordered,
     hasBackorderRisk,
+    hasHeldStockReservation,
+    heldReservedUnits,
   };
 }
 
@@ -359,6 +375,7 @@ export function OrderDetailSheet({
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
   const [pricingEngineEnabled, setPricingEngineEnabled] = useState(false);
 
   const navIndex =
@@ -415,11 +432,17 @@ export function OrderDetailSheet({
 
   const isBackordered = order?.isBackordered ?? order?.lines.some((l) => l.qtyBackordered > 0) ?? false;
 
+  const flowStatus = order ? resolveOrderFlowStatusKey(order) : null;
+  const canMarkDelivered =
+    flowStatus === "confirmed" ||
+    flowStatus === "in_progress" ||
+    flowStatus === "in_route";
   const canRejectOrder =
-    order?.status === "draft" ||
-    order?.status === "pending" ||
-    order?.status === "confirmed" ||
-    order?.status === "in_progress";
+    flowStatus === "draft" ||
+    flowStatus === "pending" ||
+    flowStatus === "confirmed" ||
+    flowStatus === "in_progress" ||
+    flowStatus === "in_route";
 
   const saveCustomerField = useCallback(
     async (patch: Parameters<typeof patchDashboardCustomerViaProxy>[1]) => {
@@ -453,7 +476,9 @@ export function OrderDetailSheet({
       } else {
         await rejectDashboardOrderViaProxy(order.orderId);
         toast.success("Pedido rechazado");
-        setOrder((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
+        setOrder((prev) =>
+          prev ? { ...prev, status: "cancelled", effectiveStatusKey: "cancelled", hasHeldStockReservation: false, heldReservedUnits: 0 } : prev,
+        );
         onOrderStatusChange?.(order.orderId, "cancelled");
       }
     } catch (err) {
@@ -462,6 +487,32 @@ export function OrderDetailSheet({
       setRejecting(false);
     }
   }, [canRejectOrder, onOpenChange, onOrderRemoved, onOrderStatusChange, order, rejecting]);
+
+  const handleMarkDelivered = useCallback(async () => {
+    if (!order || !canMarkDelivered || markingDelivered) return;
+    setMarkingDelivered(true);
+    try {
+      const updated = await updateDashboardOrderStatusViaProxy(order.orderId, "delivered");
+      const nextKey = updated?.effectiveStatusKey ?? "delivered";
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "delivered",
+              effectiveStatusKey: nextKey,
+              hasHeldStockReservation: false,
+              heldReservedUnits: 0,
+            }
+          : prev,
+      );
+      onOrderStatusChange?.(order.orderId, nextKey);
+      toast.success("Pedido marcado como entregado.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo marcar el pedido como entregado.");
+    } finally {
+      setMarkingDelivered(false);
+    }
+  }, [canMarkDelivered, markingDelivered, onOrderStatusChange, order]);
 
   const loadOrder = useCallback(async (id: string, signal: AbortSignal) => {
     setLoading(true);
@@ -621,7 +672,7 @@ export function OrderDetailSheet({
     setSaving(false);
   }, [open]);
 
-  const displayStatus = order?.status ?? "draft";
+  const displayStatus = order ? resolveOrderFlowStatusKey(order) : "draft";
   const statusText = statusLabel(undefined, displayStatus);
 
   const customerDisplayName =
@@ -746,6 +797,7 @@ export function OrderDetailSheet({
         displayCode: detail.displayCode,
         customerId: detail.customerId,
         status: detail.status,
+        effectiveStatusKey: detail.effectiveStatusKey,
         createdAt: detail.createdAt,
         deliveryDate: detail.deliveryDate,
         confirmedAt: order?.confirmedAt ?? null,
@@ -769,6 +821,8 @@ export function OrderDetailSheet({
         isTouchless: detail.isTouchless,
         isBackordered: detail.isBackordered,
         hasBackorderRisk: detail.hasBackorderRisk,
+        hasHeldStockReservation: detail.hasHeldStockReservation,
+        heldReservedUnits: detail.heldReservedUnits,
       });
     },
     [order?.confirmedAt, order?.conversationId, order?.currency, productRows],
@@ -882,6 +936,10 @@ export function OrderDetailSheet({
                   <OrderBackorderIndicators
                     hasBackorderRisk={hasBackorderRisk}
                     isBackordered={isBackordered}
+                  />
+                  <OrderStockReservationIndicator
+                    hasHeldStockReservation={order.hasHeldStockReservation}
+                    heldReservedUnits={order.heldReservedUnits}
                   />
                   <MatchCoverageIndicator
                     autoCommitEnabled={autoCommitEnabled}
@@ -1115,7 +1173,14 @@ export function OrderDetailSheet({
                                     })}
                                   />
                                 ) : null}
-                                <span>{line.quantity.toLocaleString("es")}</span>
+                                {order.matchCoverage != null ? (
+                                  <LineMatchIndicator
+                                    matched={line.productId != null}
+                                    quantity={line.quantity}
+                                  />
+                                ) : (
+                                  <span>{line.quantity.toLocaleString("es")}</span>
+                                )}
                               </div>
                               {line.qtyBackordered > 0 ? (
                                 <p className="mt-1 text-left text-amber-800 text-xs dark:text-amber-300">
@@ -1161,13 +1226,23 @@ export function OrderDetailSheet({
 
         <footer className="sticky bottom-0 flex shrink-0 flex-col gap-3 border-t bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-muted-foreground text-xs">
-            {order?.confirmedAt
-              ? `Confirmado el ${formatInstantDateTime(order.confirmedAt)}`
-              : displayStatus === "pending"
-                ? "En Revisión (pendiente de confirmación)."
-                : displayStatus === "draft"
-                  ? "Borrador extraído por el AI."
-                  : `Estado actual: ${statusText}.`}
+            {order?.hasHeldStockReservation ? (
+              <>
+                Stock reservado en bodega
+                {order.heldReservedUnits > 0
+                  ? ` (${formatQty(order.heldReservedUnits)} uds.). `
+                  : ". "}
+                Marcá entregado o cancelá para liberar el inventario.
+              </>
+            ) : order?.confirmedAt ? (
+              `Confirmado el ${formatInstantDateTime(order.confirmedAt)}`
+            ) : displayStatus === "pending" ? (
+              "En Revisión (pendiente de confirmación)."
+            ) : displayStatus === "draft" ? (
+              "Borrador extraído por el AI."
+            ) : (
+              `Estado actual: ${statusText}.`
+            )}
           </p>
           {order && (order.status === "draft" || order.status === "pending") ? (
             <OrderLifecycleActions
@@ -1188,6 +1263,7 @@ export function OrderDetailSheet({
                     ? {
                         ...prev,
                         status,
+                        effectiveStatusKey: status,
                         displayCode: patch?.displayCode ?? prev.displayCode,
                       }
                     : prev,
@@ -1196,6 +1272,19 @@ export function OrderDetailSheet({
                 if (status === "confirmed") onConfirmed?.(id);
               }}
             />
+          ) : null}
+          {order && canMarkDelivered ? (
+            <Button
+              disabled={markingDelivered || loading}
+              size="sm"
+              type="button"
+              onClick={() => void handleMarkDelivered()}
+            >
+              {markingDelivered ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : null}
+              Marcar entregado
+            </Button>
           ) : null}
         </footer>
         {order && isEditable ? (

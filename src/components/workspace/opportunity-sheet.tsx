@@ -83,6 +83,7 @@ function lineTotal(quantity: string, unitPrice: string): number {
 export function OpportunitySheet({
   open,
   opportunityId,
+  initialLeadId,
   stages,
   businessTypes,
   onOpenChange,
@@ -90,6 +91,7 @@ export function OpportunitySheet({
 }: Readonly<{
   open: boolean;
   opportunityId: string | null;
+  initialLeadId?: number | null;
   stages: PipelineStage[];
   businessTypes: BusinessType[];
   onOpenChange: (v: boolean) => void;
@@ -147,9 +149,15 @@ export function OpportunitySheet({
     let cancelled = false;
 
     if (!opportunityId) {
-      setContactMode("new_lead");
-      setCustomerId(null);
-      setLeadId(null);
+      if (initialLeadId != null && initialLeadId > 0) {
+        setContactMode("existing_lead");
+        setCustomerId(null);
+        setLeadId(initialLeadId);
+      } else {
+        setContactMode("new_lead");
+        setCustomerId(null);
+        setLeadId(null);
+      }
       setLeadName("");
       setLeadPoc("");
       setLeadEmail("");
@@ -206,7 +214,7 @@ export function OpportunitySheet({
     return () => {
       cancelled = true;
     };
-  }, [open, opportunityId, defaultStageKey]);
+  }, [open, opportunityId, initialLeadId, defaultStageKey]);
 
   const productById = useMemo(() => {
     const m = new Map<number, DashboardProductRow>();
@@ -232,7 +240,9 @@ export function OpportunitySheet({
     setLeadName(lead.name);
     setLeadPoc(lead.legalName ?? "");
     setLeadEmail(lead.email ?? "");
-    setLeadLocation(lead.city ?? "");
+    setLeadLocation([lead.city, lead.region].filter(Boolean).join(", ") || lead.location || "");
+    if (lead.businessCategory) setBusinessTypeKey(lead.businessCategory);
+    if (lead.assignedSellerId != null) setAssignedSellerId(lead.assignedSellerId);
   }, [leadId, leads, contactMode]);
 
   const orderSubtotal = useMemo(

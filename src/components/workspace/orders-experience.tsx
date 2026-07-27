@@ -15,7 +15,7 @@ import { OrdersToolbar } from "@/components/workspace/orders-toolbar";
 import { OrdersPageSkeleton } from "@/components/workspace/workspace-skeletons";
 import type { DashboardCustomerRow } from "@/lib/dashboard-customers";
 import {
-  DEFAULT_ORDER_STATUS_FILTER,
+  ORDERS_RESET_FILTERS_SESSION_KEY,
   ORDERS_VIEW_STORAGE_KEY,
   normalizeOrderSearchText,
   orderMatchesStatusFilter,
@@ -34,6 +34,7 @@ import {
   buildDefaultFlowItems,
   fetchSupplierFlow,
   flowToBoardColumns,
+  resolveOrderFlowStatusKey,
   type EffectiveStatusItem,
 } from "@/lib/order-status-flow";
 import {
@@ -43,6 +44,10 @@ import {
   readCachedOrders,
 } from "@/lib/orders-catalog-cache";
 import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
+import {
+  invalidateSessionCache,
+  readSessionCache,
+} from "@/lib/workspace-session-cache";
 import { useWorkspaceLocale } from "@/lib/use-workspace-locale";
 import { cn } from "@/lib/utils";
 import {
@@ -74,15 +79,15 @@ export function OrdersExperience() {
     () => flowToBoardColumns(buildDefaultFlowItems()).map((column) => column.key),
     [],
   );
-  const cachedOrdersOnMount = readCachedOrders(defaultBoardKeys);
-  const cachedCustomersOnMount = readCachedCustomers();
 
   const [supplierFlow, setSupplierFlow] = useState<EffectiveStatusItem[]>(() => buildDefaultFlowItems());
   const [flowReady, setFlowReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") ?? "");
   const [deliveryDateFilter, setDeliveryDateFilter] = useState("");
   const [viewMode, setViewMode] = useState<OrdersViewMode>(() => readInitialViewMode(searchParams));
-  const [boardMounted, setBoardMounted] = useState(() => readInitialViewMode(searchParams) === "board");
+  const [boardMounted, setBoardMounted] = useState(
+    () => searchParams.get("view") === "board",
+  );
 
   const deferredViewMode = useDeferredValue(viewMode);
   const isViewTransitioning = viewMode !== deferredViewMode;
@@ -90,11 +95,10 @@ export function OrdersExperience() {
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const urlView = searchParams.get("view");
 
-  const statusFilter = useMemo((): string[] => {
-    const raw = searchParams.get("status");
-    if (raw !== null) return parseOrderStatusFilter(raw);
-    return [...DEFAULT_ORDER_STATUS_FILTER];
-  }, [searchParams]);
+  const statusFilter = useMemo(
+    (): string[] => parseOrderStatusFilter(searchParams.get("status")),
+    [searchParams],
+  );
 
   const statusLogic = useMemo(
     (): OrderStatusFilterLogic => parseOrderStatusFilterLogic(searchParams.get("statusLogic")),
@@ -107,13 +111,23 @@ export function OrdersExperience() {
   );
   const boardStatusKeysKey = useMemo(() => boardStatusKeys.join(","), [boardStatusKeys]);
 
-  const [orders, setOrders] = useState<DashboardOrderListRow[]>(() => cachedOrdersOnMount ?? []);
+  const [orders, setOrders] = useState<DashboardOrderListRow[]>([]);
   const [ordersFetchFailed, setOrdersFetchFailed] = useState(false);
-  const [ordersReady, setOrdersReady] = useState(() => cachedOrdersOnMount !== null);
-  const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | null>(
-    () => cachedCustomersOnMount,
-  );
+  const [ordersReady, setOrdersReady] = useState(false);
+  const [customerRows, setCustomerRows] = useState<DashboardCustomerRow[] | null>(null);
   const [customersFetchFailed, setCustomersFetchFailed] = useState(false);
+
+  useEffect(() => {
+    const cachedOrders = readCachedOrders(defaultBoardKeys);
+    if (cachedOrders) {
+      setOrders(cachedOrders);
+      setOrdersReady(true);
+    }
+    const cachedCustomers = readCachedCustomers();
+    if (cachedCustomers) {
+      setCustomerRows(cachedCustomers);
+    }
+  }, [defaultBoardKeys]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,13 +191,33 @@ export function OrdersExperience() {
     [router, searchParams],
   );
 
+  const clearOrdersFilters = useCallback(() => {
+    setSearchQuery("");
+    setDeliveryDateFilter("");
+    replaceSearchParams((params) => {
+      params.delete("status");
+      params.delete("statusLogic");
+      params.delete("q");
+    });
+  }, [replaceSearchParams]);
+
   useEffect(() => {
-    if (urlView !== "board" && urlView !== "list") return;
-    const timer = window.setTimeout(() => {
+    if (!readSessionCache<boolean>(ORDERS_RESET_FILTERS_SESSION_KEY)) return;
+    invalidateSessionCache(ORDERS_RESET_FILTERS_SESSION_KEY);
+    clearOrdersFilters();
+  }, [clearOrdersFilters]);
+
+  useEffect(() => {
+    if (urlView === "board" || urlView === "list") {
       setViewMode(urlView);
       if (urlView === "board") setBoardMounted(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
+      return;
+    }
+    const stored = window.localStorage.getItem(ORDERS_VIEW_STORAGE_KEY);
+    if (stored === "board" || stored === "list") {
+      setViewMode(stored);
+      if (stored === "board") setBoardMounted(true);
+    }
   }, [urlView]);
 
   useEffect(() => {
@@ -264,7 +298,7 @@ export function OrdersExperience() {
     () =>
       searchFilteredOrders.filter((o) =>
         orderMatchesStatusFilter(
-          o.effectiveStatusKey ?? o.status,
+          resolveOrderFlowStatusKey(o),
           statusFilter,
           statusLogic,
         ),
@@ -277,27 +311,30 @@ export function OrdersExperience() {
   const ordersByStatus = useMemo(() => {
     const bucket = new Map<string, DashboardOrderListRow[]>();
     for (const order of statusFilteredOrders) {
-      const key = order.effectiveStatusKey ?? order.status;
+      const key = resolveOrderFlowStatusKey(order);
       const list = bucket.get(key) ?? [];
       list.push(order);
       bucket.set(key, list);
-    }
-    for (const [, list] of bucket) {
-      list.sort((a, b) => {
-        const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
-        const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
-        return bTime - aTime;
-      });
     }
     return bucket;
   }, [statusFilteredOrders]);
 
   const handleOrderStatusChange = useCallback(
     (orderId: string, status: string, patch?: DashboardOrderPatch) => {
+      const clearsReservation =
+        status === "delivered" || status === "cancelled" || status === "rejected";
       setOrders((prev) =>
         prev.map((o) =>
           o.orderId === orderId
-            ? { ...o, status, effectiveStatusKey: status, ...patch }
+            ? {
+                ...o,
+                status,
+                effectiveStatusKey: status,
+                ...patch,
+                ...(clearsReservation
+                  ? { hasHeldStockReservation: false, heldReservedUnits: 0 }
+                  : {}),
+              }
             : o,
         ),
       );
@@ -429,11 +466,7 @@ export function OrdersExperience() {
                       size="sm"
                       type="button"
                       variant="outline"
-                      onClick={() => {
-                        setSearchQuery("");
-                        setDeliveryDateFilter("");
-                        handleStatusFilterChange([], "or");
-                      }}
+                      onClick={clearOrdersFilters}
                     >
                       Limpiar filtros
                     </Button>

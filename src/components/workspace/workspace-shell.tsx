@@ -1,14 +1,37 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
+import { usePathname } from "next/navigation";
+
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { SellerMe, WhatsappStatusResult } from "@/lib/dashboard-types";
+import { ORDERS_RESET_FILTERS_SESSION_KEY } from "@/lib/dashboard-orders";
 import {
   WorkspacePreferencesProvider,
   type WorkspacePreferences,
 } from "@/lib/workspace-preferences-context";
+import { writeSessionCache } from "@/lib/workspace-session-cache";
 
 import { AppSidebar } from "./app-sidebar";
 import { WhatsappTokenBanner } from "./whatsapp-token-banner";
+
+/** When the user leaves `/orders`, mark the next visit to reset URL filters. */
+function useMarkOrdersListExit() {
+  const pathname = usePathname();
+  const prevPathRef = useRef(pathname);
+
+  useEffect(() => {
+    const prev = prevPathRef.current;
+    prevPathRef.current = pathname;
+    if (prev === "/orders" && pathname !== "/orders") {
+      writeSessionCache(ORDERS_RESET_FILTERS_SESSION_KEY, true, 60_000);
+    }
+    if (pathname === "/orders" && prev !== "/orders") {
+      writeSessionCache(ORDERS_RESET_FILTERS_SESSION_KEY, true, 60_000);
+    }
+  }, [pathname]);
+}
 
 export function WorkspaceShell({
   seller,
@@ -25,6 +48,8 @@ export function WorkspaceShell({
   workspacePreferences: WorkspacePreferences;
   children: React.ReactNode;
 }>) {
+  useMarkOrdersListExit();
+
   return (
     <WorkspacePreferencesProvider value={workspacePreferences}>
       <div className="h-svh max-h-svh w-full overflow-hidden">

@@ -261,7 +261,44 @@ export type LeadRow = Readonly<{
   email: string | null;
   phone: string | null;
   city: string | null;
+  region: string | null;
+  source: string | null;
+  businessCategory: string | null;
+  location: string;
+  assignedSellerId: number | null;
+  assignedSellerName: string | null;
+  createdAt: string;
 }>;
+
+function parseLeadRow(raw: unknown): LeadRow | null {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (typeof o.leadId !== "number" && !Number.isFinite(Number(o.leadId))) return null;
+  const city = optStr(o.city);
+  const region = optStr(o.region);
+  const locationRaw = optStr(o.location);
+  return {
+    leadId: Number(o.leadId),
+    name: typeof o.name === "string" ? o.name : "",
+    legalName: optStr(o.legalName),
+    email: optStr(o.email),
+    phone: optStr(o.phone),
+    city,
+    region,
+    source: optStr(o.source),
+    businessCategory: optStr(o.businessCategory),
+    location:
+      locationRaw ??
+      ([city, region].filter(Boolean).join(", ") || "—"),
+    assignedSellerId:
+      o.assignedSellerId == null || o.assignedSellerId === ""
+        ? null
+        : Number.isFinite(Number(o.assignedSellerId))
+          ? Number(o.assignedSellerId)
+          : null,
+    assignedSellerName: optStr(o.assignedSellerName),
+    createdAt: typeof o.createdAt === "string" ? o.createdAt : "",
+  };
+}
 
 export async function fetchLeadsViaProxy(): Promise<LeadRow[]> {
   const res = await fetch(`/api/backend/dashboard/leads`, {
@@ -271,19 +308,19 @@ export async function fetchLeadsViaProxy(): Promise<LeadRow[]> {
   const body = (await res.json().catch(() => ({}))) as { leads?: unknown[] };
   if (!res.ok || !Array.isArray(body.leads)) return [];
   return body.leads
-    .map((r) => {
-      const o = (r ?? {}) as Record<string, unknown>;
-      if (typeof o.leadId !== "number" && !Number.isFinite(Number(o.leadId))) return null;
-      return {
-        leadId: Number(o.leadId),
-        name: typeof o.name === "string" ? o.name : "",
-        legalName: optStr(o.legalName),
-        email: optStr(o.email),
-        phone: optStr(o.phone),
-        city: optStr(o.city),
-      } satisfies LeadRow;
-    })
+    .map(parseLeadRow)
     .filter((l): l is LeadRow => l != null);
+}
+
+export async function deleteLeadViaProxy(leadId: number): Promise<void> {
+  const res = await fetch(`/api/backend/dashboard/leads/${encodeURIComponent(String(leadId))}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+  if (!res.ok) {
+    throw new Error(apiErrorMessage(body, "No se pudo eliminar el lead."));
+  }
 }
 
 export async function createLeadViaProxy(input: {

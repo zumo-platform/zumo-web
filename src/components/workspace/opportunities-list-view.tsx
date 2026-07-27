@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LeadsListView } from "@/components/workspace/leads-list-view";
 import { OpportunitySheet } from "@/components/workspace/opportunity-sheet";
 import {
   OPPORTUNITY_STATUS_LABEL,
@@ -39,6 +40,7 @@ export function OpportunitiesListView({
   const [businessTypes, setBusinessTypes] = useState<BusinessType[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [view, setView] = useState<"opportunities" | "leads">("opportunities");
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +83,10 @@ export function OpportunitiesListView({
 
   const rows = board.opportunities;
 
+  if (view === "leads") {
+    return <LeadsListView onBack={() => setView("opportunities")} />;
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -90,10 +96,15 @@ export function OpportunitiesListView({
             Listado de oportunidades de venta en el pipeline.
           </p>
         </div>
-        <Button onClick={openNew}>
-          <Plus className="size-4" />
-          Nueva oportunidad
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setView("leads")}>
+            Ver leads
+          </Button>
+          <Button onClick={openNew}>
+            <Plus className="size-4" />
+            Nueva oportunidad
+          </Button>
+        </div>
       </div>
 
       {rows.length === 0 ? (

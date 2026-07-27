@@ -46,6 +46,8 @@ Invite → accept link → Cognito user + seller row → workspace. Backend invi
 - **Profile** — **`/settings/profile`**: edit name/phone, change Cognito password.
 - **Order flow settings** — **`/settings/order-flow`**: rename system statuses, reorder columns, add custom statuses (owner/admin).
 - **Clients** — table + **`/clients/[customerId]`** detail (sidebar edits, orders/products/users tabs, product picker); pagination footer (10/30/50/100 rows).
+- **Market business** — supplier HORECA map at **`/market`** (`market.access`); CRM clients with Waze coords show as green pins; read-only client detail sheet on click.
+- **Market Admin** — internal curation at **`/admin/market`** (`market.admin` only); see [`docs/market-admin.md`](./docs/market-admin.md).
 - **Inventory** — full-width catalog table synced with dashboard products API; pagination footer (20/50/100 rows).
 - **Matches** — alias CRUD at `/matches`.
 - **Settings** — business profile, AI autocommit, locale; timezone loaded for all date/time display.
@@ -75,10 +77,13 @@ zumo-web/
 │   │   ├── (marketing)/[locale]/       # EN/ES marketing, privacy, terms
 │   │   ├── (platform)/
 │   │   │   ├── (auth)/                 # /login, /register → signup tab
+│   │   │   ├── (admin)/                # internal staff routes (market.admin)
+│   │   │   │   └── admin/market/       # /admin/market — global HORECA curation
 │   │   │   └── (workspace)/            # authenticated shell
 │   │   │       ├── whatsapp/
 │   │   │       ├── orders/             # list + Flow board, creation, [orderId]/edit
 │   │   │       ├── clients/            # list + [customerId] detail
+│   │   │       ├── market/             # supplier prospecting map
 │   │   │       ├── matches/            # alias governance
 │   │   │       ├── settings/           # business, AI, order-flow, profile
 │   │   │       └── layout.tsx          # loads settings → WorkspacePreferencesProvider
@@ -87,6 +92,7 @@ zumo-web/
 │   │   │   └── backend/[...path]/      # JWT proxy to API Gateway
 │   │   └── layout.tsx
 │   ├── components/
+│   │   ├── admin/                      # market-admin-* (internal backoffice)
 │   │   ├── auth/
 │   │   ├── marketing/
 │   │   ├── whatsapp/
@@ -99,10 +105,22 @@ zumo-web/
 │   │   ├── order-status-flow.ts      # supplier flow + status labels for board/filters
 │   │   ├── workspace-layout.ts       # full-width padding + table scroll tokens
 │   │   ├── dashboard-customers.ts
+│   │   ├── dashboard-market.ts       # supplier map client
+│   │   ├── admin-market.ts           # admin curation client
 │   │   └── api.ts
 │   └── content/marketing/
+├── docs/                               # repo-local docs (see Documentation below)
 └── package.json
 ```
+
+## Documentation
+
+| Doc | Audience |
+|-----|----------|
+| [`docs/market-admin.md`](./docs/market-admin.md) | **Market Admin UI** — `/admin/market`, components, permissions |
+| [`docs/ai-matching.md`](./docs/ai-matching.md) | Match coverage UI (touchless badge, sidebar drafts) |
+| [`docs/CAPABILITIES.md`](https://github.com/zumo-platform/zumo-backend/blob/main/docs/CAPABILITIES.md) | Full product capability inventory (backend repo) |
+| [`zumo-backend/docs/market-admin.md`](https://github.com/zumo-platform/zumo-backend/blob/main/docs/market-admin.md) | Market Admin API, OSM import, merge semantics |
 
 ## Prerequisites
 
@@ -138,6 +156,8 @@ Run only **one** `next dev` per clone.
 | `/matches` | Product alias governance (Matches tab) |
 | `/clients` | Customer list |
 | `/clients/[customerId]` | Customer detail (sidebar, tabs) |
+| `/market` | Supplier Market business map — prospecting, client pins (`market.access`) |
+| `/admin/market` | **Internal** global HORECA curation (`market.admin`) — see [`docs/market-admin.md`](./docs/market-admin.md) |
 | `/settings` | Business + AI settings |
 | `/settings/order-flow` | Order status flow (rename, reorder, custom statuses) |
 | `/settings/profile` | Seller profile (name, phone, password) |

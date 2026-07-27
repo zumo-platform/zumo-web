@@ -27,6 +27,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 
 import { OrderBackorderIndicators } from "@/components/workspace/order-backorder-indicators";
+import { OrderStockReservationIndicator } from "@/components/workspace/order-stock-reservation-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,6 +65,7 @@ import {
 import { formatOrderDisplayCode } from "@/lib/order-display-code";
 import {
   findFlowItem,
+  resolveOrderFlowStatusKey,
   statusBadgeVariant,
   statusLabel as orderStatusLabel,
   type EffectiveStatusItem,
@@ -287,7 +289,7 @@ export function OrdersCatalogTable({
         header: "Estado",
         cell: ({ row }) => {
           const o = row.original;
-          const effectiveKey = o.effectiveStatusKey ?? o.status;
+          const effectiveKey = resolveOrderFlowStatusKey(o);
           const flowItem = findFlowItem(flow, effectiveKey);
           const isPending = effectiveKey === "pending";
           const isConfirmed = effectiveKey === "confirmed";
@@ -306,6 +308,10 @@ export function OrdersCatalogTable({
                 <OrderBackorderIndicators
                   hasBackorderRisk={o.hasBackorderRisk}
                   isBackordered={o.isBackordered}
+                />
+                <OrderStockReservationIndicator
+                  hasHeldStockReservation={o.hasHeldStockReservation}
+                  heldReservedUnits={o.heldReservedUnits}
                 />
                 {!isPending ? (
                   <>

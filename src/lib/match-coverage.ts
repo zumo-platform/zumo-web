@@ -31,12 +31,19 @@ export function matchCoverageTooltip(
     return "Confirmado automáticamente por IA sin intervención del vendedor (touchless ⚡).";
   }
   if (isFullMatchCoverage(coverage)) {
-    return "Coincidencia perfecta en la primera extracción. Con confirmación automática activada, los pedidos nuevos elegibles pasan directo a confirmado con ⚡. Los borradores ya creados no se confirman solos — enviá un pedido nuevo por WhatsApp para probar.";
+    return "Coincidencia perfecta con el catálogo (100%). El rayo azul ⚡ indica match completo del AI en la primera extracción.";
   }
   if (pct !== null) {
     return `${String(pct)}% de las líneas coincidieron con el inventario en la primera extracción.`;
   }
   return "Sin datos de coincidencia del AI.";
+}
+
+/** Shown when `matchCoverage` is null (manual orders, legacy rows, etc.). */
+export function matchCoverageMissingLabel(lineCount: number): string {
+  const count = Number.isFinite(lineCount) && lineCount > 0 ? lineCount : 0;
+  const lines = count === 1 ? "1 línea" : `${String(count)} líneas`;
+  return `${lines} · sin coincidencia AI`;
 }
 
 export function matchCoverageRingTone(coverage: number | null): MatchCoverageRingTone {

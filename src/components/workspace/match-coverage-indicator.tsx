@@ -10,24 +10,14 @@ import {
 } from "@/components/ui/tooltip";
 import {
   isFullMatchCoverage,
+  matchCoverageMissingLabel,
   matchCoveragePercent,
-  matchCoverageRingTone,
   matchCoverageTooltip,
-  type MatchCoverageRingTone,
 } from "@/lib/match-coverage";
 import { cn } from "@/lib/utils";
 
-const RING_COLORS: Record<MatchCoverageRingTone, string> = {
-  high: "text-emerald-600",
-  medium: "text-amber-600",
-  low: "text-red-600",
-};
-
-const RING_STROKE: Record<MatchCoverageRingTone, string> = {
-  high: "stroke-emerald-500",
-  medium: "stroke-amber-500",
-  low: "stroke-red-500",
-};
+const RING_TRACK = "stroke-muted-foreground/35";
+const RING_PROGRESS = "stroke-emerald-600";
 
 const FILLED_ICON_PX = { sm: 22, md: 26 } as const;
 const RING_ICON_PX = { sm: 30, md: 36 } as const;
@@ -36,7 +26,6 @@ function CoverageIcon({
   coverage,
   size = "sm",
 }: Readonly<{ coverage: number; size?: "sm" | "md" }>) {
-  const tone = matchCoverageRingTone(coverage);
   const pct = matchCoveragePercent(coverage) ?? 0;
   const filledPx = FILLED_ICON_PX[size];
   const ringPx = RING_ICON_PX[size];
@@ -61,13 +50,13 @@ function CoverageIcon({
   return (
     <svg
       aria-hidden
-      className={cn("shrink-0 -rotate-90", RING_COLORS[tone])}
+      className="shrink-0 -rotate-90 text-emerald-600"
       height={ringPx}
       viewBox={`0 0 ${ringPx} ${ringPx}`}
       width={ringPx}
     >
       <circle
-        className="stroke-muted/50"
+        className={RING_TRACK}
         cx={ringPx / 2}
         cy={ringPx / 2}
         fill="none"
@@ -75,7 +64,7 @@ function CoverageIcon({
         strokeWidth={4}
       />
       <circle
-        className={RING_STROKE[tone]}
+        className={RING_PROGRESS}
         cx={ringPx / 2}
         cy={ringPx / 2}
         fill="none"
@@ -90,7 +79,7 @@ function CoverageIcon({
   );
 }
 
-/** Blue ⚡ shown on touchless auto-confirmed orders (Rekki-style integration signal). */
+/** Blue ⚡ — 100% AI catalog match (coincidencia perfecta). */
 export function TouchlessBolt({
   className,
   size = "sm",
@@ -107,66 +96,140 @@ export function TouchlessBolt({
   );
 }
 
+function MatchCoverageDisplay({
+  units,
+  matchCoverage,
+  size = "sm",
+  className,
+  tooltip,
+}: Readonly<{
+  units: number;
+  matchCoverage: number;
+  size?: "sm" | "md";
+  className?: string;
+  tooltip?: string;
+}>) {
+  const pct = matchCoveragePercent(matchCoverage);
+  const full = isFullMatchCoverage(matchCoverage);
+
+  const content = (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 tabular-nums",
+        size === "md" ? "text-sm" : "text-xs",
+        tooltip ? "cursor-help" : undefined,
+        className,
+      )}
+    >
+      <span className="font-semibold text-foreground">{units}</span>
+      <CoverageIcon coverage={matchCoverage} size={size} />
+      <span
+        className={cn(
+          "font-semibold",
+          full ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {pct}%
+      </span>
+      {full ? (
+        <span className="inline-flex items-center" title="100% coincidencia AI">
+          <TouchlessBolt size={size} />
+          <span className="sr-only">100% coincidencia AI</span>
+        </span>
+      ) : null}
+    </span>
+  );
+
+  if (!tooltip) return content;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent className="max-w-xs text-left" side="top">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/** Per order line: quantity + match ring/check + % (+ ⚡ when matched). */
+export function LineMatchIndicator({
+  quantity,
+  matched,
+  size = "sm",
+  className,
+}: Readonly<{
+  quantity: number;
+  matched: boolean;
+  size?: "sm" | "md";
+  className?: string;
+}>) {
+  const coverage = matched ? 1 : 0;
+  const tooltip = matched
+    ? "Línea coincidente con el catálogo (100%)."
+    : "Línea sin coincidencia con el catálogo.";
+
+  return (
+    <MatchCoverageDisplay
+      className={className}
+      matchCoverage={coverage}
+      size={size}
+      tooltip={tooltip}
+      units={quantity}
+    />
+  );
+}
+
 export function MatchCoverageIndicator({
   lineCount,
   matchCoverage,
   isTouchless = false,
-  autoCommitEnabled = false,
+  autoCommitEnabled: _autoCommitEnabled = false,
   className,
   size = "sm",
 }: Readonly<{
   lineCount: number;
   matchCoverage: number | null;
   isTouchless?: boolean;
+  /** @deprecated Bolt now marks 100% AI match, not touchless setting alone. */
   autoCommitEnabled?: boolean;
   className?: string;
   size?: "sm" | "md";
 }>) {
-  const pct = matchCoveragePercent(matchCoverage);
   const tooltip = matchCoverageTooltip(matchCoverage, isTouchless);
-  const showTouchlessBolt = autoCommitEnabled && isTouchless;
 
   if (matchCoverage === null) {
     return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 text-muted-foreground tabular-nums",
-          size === "md" ? "text-sm" : "text-xs",
-          className,
-        )}
-      >
-        <span className="font-medium text-foreground">{lineCount}</span>
-        <span>—</span>
-      </span>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "inline-flex cursor-help items-center text-muted-foreground",
+                size === "md" ? "text-sm" : "text-xs",
+                className,
+              )}
+            >
+              {matchCoverageMissingLabel(lineCount)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-left" side="top">
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            className={cn(
-              "inline-flex cursor-help items-center gap-2 tabular-nums",
-              size === "md" ? "text-sm" : "text-xs",
-              className,
-            )}
-          >
-            <CoverageIcon coverage={matchCoverage} size={size} />
-            <span className="font-semibold text-foreground">{lineCount}</span>
-            <span className="font-semibold text-foreground">{pct}%</span>
-            {showTouchlessBolt ? (
-              <span className="inline-flex items-center">
-                <TouchlessBolt size={size} />
-                <span className="sr-only">Touchless</span>
-              </span>
-            ) : null}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs text-left" side="top">
-          {tooltip}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <MatchCoverageDisplay
+      className={className}
+      matchCoverage={matchCoverage}
+      size={size}
+      tooltip={tooltip}
+      units={lineCount}
+    />
   );
 }

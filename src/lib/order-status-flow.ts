@@ -29,6 +29,87 @@ export const SYSTEM_STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelado",
 };
 
+const SYSTEM_STATUS_PROGRESSION = [
+  "draft",
+  "pending",
+  "confirmed",
+  "in_progress",
+  "in_route",
+  "delivered",
+] as const;
+
+function systemStatusIndex(key: string): number {
+  return SYSTEM_STATUS_PROGRESSION.indexOf(key as (typeof SYSTEM_STATUS_PROGRESSION)[number]);
+}
+
+/** Board/filter key: terminal enum statuses win over a stale effectiveStatusKey. */
+export function resolveOrderFlowStatusKey(order: {
+  status: string;
+  effectiveStatusKey?: string | null;
+}): string {
+  const status = order.status.trim().toLowerCase();
+  const effective = (order.effectiveStatusKey ?? order.status).trim().toLowerCase();
+  if (status === "cancelled" || effective === "cancelled") return "cancelled";
+  if (status === "rejected" || effective === "rejected") return "rejected";
+
+  const statusIdx = systemStatusIndex(status);
+  const effectiveIdx = systemStatusIndex(effective);
+  if (statusIdx >= 0 && effectiveIdx >= 0 && statusIdx > effectiveIdx) {
+    return status;
+  }
+
+  return order.effectiveStatusKey ?? order.status;
+}
+
+export function linearFlowKeysFromItems(flow: EffectiveStatusItem[]): string[] {
+  return flow
+    .filter((item) => !item.isFloating && !item.retired)
+    .sort((a, b) => a.position - b.position)
+    .map((item) => item.key);
+}
+
+/** Mirrors backend `isTransitionAllowedPure` for Kanban drag/drop. */
+export function isOrderStatusTransitionAllowed(
+  flow: EffectiveStatusItem[],
+  from: string,
+  to: string,
+): { ok: boolean; reason?: string } {
+  if (from === to) {
+    return { ok: false, reason: "El pedido ya está en ese estado." };
+  }
+
+  if (to === "cancelled") {
+    return from === "cancelled"
+      ? { ok: false, reason: "El pedido ya está cancelado." }
+      : { ok: true };
+  }
+
+  if (from === "delivered") {
+    return { ok: false, reason: "Un pedido entregado solo puede pasar a Cancelado." };
+  }
+
+  if (from === "cancelled") {
+    return { ok: false, reason: "No se puede reactivar un pedido cancelado." };
+  }
+
+  const linearKeys = linearFlowKeysFromItems(flow);
+  const fromIdx = linearKeys.indexOf(from);
+  const toIdx = linearKeys.indexOf(to);
+
+  if (toIdx >= 0 && fromIdx >= 0 && toIdx < fromIdx) {
+    if (from === "pending" && to === "draft") {
+      return { ok: true };
+    }
+    return { ok: false, reason: "No se permite retroceder en el flujo." };
+  }
+
+  if (toIdx >= 0 || fromIdx === -1) {
+    return { ok: true };
+  }
+
+  return { ok: false, reason: "Estado de destino no válido." };
+}
+
 export const DEFAULT_STATUS_FILTER_KEYS = ["draft", "pending", "confirmed"];
 
 export const DEFAULT_SYSTEM_STATUS_CATALOG: ReadonlyArray<{
