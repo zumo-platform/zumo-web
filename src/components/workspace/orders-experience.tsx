@@ -40,6 +40,7 @@ import {
 import {
   loadCustomersList,
   loadOrdersCatalog,
+  invalidateOrdersCatalogCache,
   readCachedCustomers,
   readCachedOrders,
 } from "@/lib/orders-catalog-cache";
@@ -204,6 +205,7 @@ export function OrdersExperience() {
   useEffect(() => {
     if (!readSessionCache<boolean>(ORDERS_RESET_FILTERS_SESSION_KEY)) return;
     invalidateSessionCache(ORDERS_RESET_FILTERS_SESSION_KEY);
+    invalidateOrdersCatalogCache();
     clearOrdersFilters();
   }, [clearOrdersFilters]);
 

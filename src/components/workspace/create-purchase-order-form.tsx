@@ -160,7 +160,7 @@ export function CreatePurchaseOrderForm({
         No tenés permiso para crear órdenes de compra.
         <div className="mt-4">
           <Button asChild type="button" variant="outline">
-            <Link href="/compras?tab=ordenes">Volver</Link>
+            <Link href="/compras/ordenes">Volver</Link>
           </Button>
         </div>
       </div>
@@ -225,7 +225,7 @@ export function CreatePurchaseOrderForm({
         return;
       }
       toast.success(`Orden ${res.displayCode} creada.`);
-      router.push("/compras?tab=ordenes");
+      router.push("/compras/ordenes");
     } finally {
       setSubmitting(false);
     }
@@ -241,7 +241,7 @@ export function CreatePurchaseOrderForm({
         <h1 className="font-semibold text-xl tracking-tight">Nueva orden de compra</h1>
         <div className="flex gap-2">
           <Button asChild type="button" variant="outline">
-            <Link href="/compras?tab=ordenes">Cancelar</Link>
+            <Link href="/compras/ordenes">Cancelar</Link>
           </Button>
           <Button disabled={submitting} form={formId} type="submit">
             {submitting ? <Loader2 aria-hidden className="mr-2 size-4 animate-spin" /> : null}

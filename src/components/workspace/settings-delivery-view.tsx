@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,13 @@ import {
   type DeliverySettingsRow,
   type DeliveryZoneRow,
 } from "@/lib/delivery";
+import {
+  DELIVERY_NOTE_NOMENCLATURE_TOKENS,
+  fetchDeliveryNoteNomenclatureViaProxy,
+  previewDeliveryNoteCode,
+  updateDeliveryNoteNomenclatureViaProxy,
+  type DeliveryNoteNomenclature,
+} from "@/lib/delivery-note-nomenclature";
 import { canMutateInventory } from "@/lib/roles";
 import { workspaceTableCardClassName } from "@/lib/workspace-layout";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
@@ -150,16 +158,36 @@ export function SettingsDeliveryView() {
   const [editZone, setEditZone] = useState<DeliveryZoneRow | null>(null);
   const [deleteZone, setDeleteZone] = useState<DeliveryZoneRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [nomenclature, setNomenclature] = useState<DeliveryNoteNomenclature | null>(null);
+  const [nomenclatureDraft, setNomenclatureDraft] = useState<DeliveryNoteNomenclature | null>(
+    null,
+  );
+  const [savingNomenclature, setSavingNomenclature] = useState(false);
+
+  const nomenclaturePreview = useMemo(() => {
+    if (!nomenclatureDraft) return null;
+    return previewDeliveryNoteCode(nomenclatureDraft);
+  }, [nomenclatureDraft]);
+
+  const nomenclatureDirty =
+    nomenclature != null &&
+    nomenclatureDraft != null &&
+    (nomenclature.enabled !== nomenclatureDraft.enabled ||
+      nomenclature.pattern !== nomenclatureDraft.pattern ||
+      nomenclature.seqPadding !== nomenclatureDraft.seqPadding);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const [nextSettings, nextZones] = await Promise.all([
+      const [nextSettings, nextZones, nextNomenclature] = await Promise.all([
         fetchDeliverySettingsViaProxy(),
         fetchDeliveryZonesViaProxy(),
+        fetchDeliveryNoteNomenclatureViaProxy(),
       ]);
       setSettings(nextSettings);
       setZones(nextZones);
+      setNomenclature(nextNomenclature);
+      setNomenclatureDraft(nextNomenclature);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar la logística.");
       setSettings(null);
@@ -184,6 +212,27 @@ export function SettingsDeliveryView() {
       toast.success("Configuración guardada.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveNomenclature() {
+    if (!canEdit || !nomenclatureDraft) return;
+    setSavingNomenclature(true);
+    try {
+      const result = await updateDeliveryNoteNomenclatureViaProxy({
+        enabled: nomenclatureDraft.enabled,
+        pattern: nomenclatureDraft.pattern,
+        seqPadding: nomenclatureDraft.seqPadding,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setNomenclature(result.settings);
+      setNomenclatureDraft(result.settings);
+      toast.success("Nomenclatura guardada.");
+    } finally {
+      setSavingNomenclature(false);
     }
   }
 
@@ -342,6 +391,98 @@ export function SettingsDeliveryView() {
           ) : null}
         </div>
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Nomenclatura de notas de entrega</CardTitle>
+          <CardDescription>
+            Código consecutivo automático al crear una nota (por ejemplo NE-0001). Usá tokens de
+            fecha y secuencia.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="max-w-lg space-y-4">
+          {nomenclatureDraft === null ? (
+            <p className="text-muted-foreground text-sm">Cargando…</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="dn-nomenclature-enabled">Activar nomenclatura</Label>
+                  <p className="text-muted-foreground text-sm">
+                    Si está desactivada, las notas no reciben código visible hasta activarla.
+                  </p>
+                </div>
+                <Switch
+                  checked={nomenclatureDraft.enabled}
+                  disabled={!canEdit || savingNomenclature}
+                  id="dn-nomenclature-enabled"
+                  onCheckedChange={(enabled) =>
+                    setNomenclatureDraft((d) => (d ? { ...d, enabled } : d))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dn-pattern">Patrón</Label>
+                <Input
+                  disabled={!canEdit || savingNomenclature}
+                  id="dn-pattern"
+                  value={nomenclatureDraft.pattern}
+                  onChange={(e) =>
+                    setNomenclatureDraft((d) => (d ? { ...d, pattern: e.target.value } : d))
+                  }
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {DELIVERY_NOTE_NOMENCLATURE_TOKENS.map((token) => (
+                    <Badge key={token} variant="outline">
+                      {token}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dn-seq-padding">Relleno de secuencia</Label>
+                <Input
+                  disabled={!canEdit || savingNomenclature}
+                  id="dn-seq-padding"
+                  max={8}
+                  min={1}
+                  type="number"
+                  value={nomenclatureDraft.seqPadding}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    setNomenclatureDraft((d) =>
+                      d ? { ...d, seqPadding: Math.min(8, Math.max(1, Math.trunc(n))) } : d,
+                    );
+                  }}
+                />
+              </div>
+
+              {nomenclaturePreview ? (
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Próximo ejemplo: </span>
+                  <span className="font-mono">{nomenclaturePreview}</span>
+                </p>
+              ) : null}
+
+              {canEdit ? (
+                <Button
+                  disabled={!nomenclatureDirty || savingNomenclature}
+                  type="button"
+                  onClick={() => void saveNomenclature()}
+                >
+                  {savingNomenclature ? (
+                    <Loader2 aria-hidden className="size-4 animate-spin" />
+                  ) : null}
+                  Guardar nomenclatura
+                </Button>
+              ) : null}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

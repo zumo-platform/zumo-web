@@ -14,7 +14,6 @@ import {
   useForm,
   useWatch,
 } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorAlert } from "@/components/workspace/error-alert";
+import { showOrderCreatedToast } from "@/components/workspace/order-created-toast";
 import {
   DeliveryDateField,
   useDeliveryDateSelectionState,
@@ -309,8 +309,13 @@ export function CreateOrderForm({
     };
 
     try {
-      await createDashboardOrderViaProxy(payload);
-      toast.success("Pedido creado");
+      const created = await createDashboardOrderViaProxy(payload);
+      const customer = customers.find((c) => c.customerId === values.customerId);
+      showOrderCreatedToast({
+        orderId: created.orderId,
+        displayCode: created.displayCode,
+        customerName: customer?.name?.trim() || "Cliente",
+      });
       router.push("/orders");
       router.refresh();
     } catch (err) {

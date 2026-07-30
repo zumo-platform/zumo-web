@@ -3,6 +3,7 @@
 import { joinApiGatewayPath } from "@/lib/api";
 import type { MarketingLocale } from "@/lib/marketing-locale";
 import { parseMatchCoverage } from "@/lib/match-coverage";
+import { invalidateOrdersCatalogCache } from "@/lib/orders-catalog-cache";
 
 export const DASHBOARD_ORDER_STATUSES = [
   "draft",
@@ -503,9 +504,14 @@ export class CreateDashboardOrderError extends Error {
 }
 
 /** Browser / Route Handler: POST `/api/backend/dashboard/orders`. */
+export type CreateDashboardOrderResult = Readonly<{
+  orderId: string;
+  displayCode: string;
+}>;
+
 export async function createDashboardOrderViaProxy(
   input: CreateOrderInput,
-): Promise<{ orderId: string }> {
+): Promise<CreateDashboardOrderResult> {
   const res = await fetch("/api/backend/dashboard/orders", {
     method: "POST",
     credentials: "include",
@@ -539,13 +545,16 @@ export async function createDashboardOrderViaProxy(
 
   const order = body.order as Record<string, unknown> | undefined;
   const orderId = typeof order?.orderId === "string" ? order.orderId.trim() : "";
+  const displayCode =
+    typeof order?.displayCode === "string" ? order.displayCode.trim() : "";
   if (!orderId) {
     throw new CreateDashboardOrderError("Respuesta inválida del servidor.", 502, {
       responseBody: body,
     });
   }
 
-  return { orderId };
+  invalidateOrdersCatalogCache();
+  return { orderId, displayCode };
 }
 
 export class DashboardOrderActionError extends Error {
@@ -718,6 +727,7 @@ export type PatchOrderInput = Readonly<{
 }>;
 
 export type DashboardOrderDetailLine = Readonly<{
+  orderItemId: string | null;
   productId: number | null;
   productName: string;
   quantity: number;
@@ -807,6 +817,7 @@ export function parseDashboardOrderDetail(
     const qtyReserved =
       qtyReservedRaw !== null ? Math.max(0, qtyReservedRaw) : Math.max(0, quantity - qtyBackordered);
     lines.push({
+      orderItemId: readStringFieldOrNull(line, "orderItemId"),
       productId: parsePositiveInt(line.productId),
       productName:
         readStringFieldOrNull(line, "productName") ??

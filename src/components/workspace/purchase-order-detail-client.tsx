@@ -233,7 +233,7 @@ export function PurchaseOrderDetailClient({ poId }: Readonly<{ poId: string }>) 
         >
           <div className="min-w-0 space-y-2">
             <Button asChild className="mb-1 -ml-2 gap-1.5" size="sm" type="button" variant="ghost">
-              <Link href="/compras?tab=ordenes">
+              <Link href="/compras/ordenes">
                 <ArrowLeft aria-hidden className="size-4" />
                 Volver a órdenes
               </Link>

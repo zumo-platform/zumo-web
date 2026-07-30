@@ -65,16 +65,75 @@ type NavItem =
       icon: typeof Inbox;
       label: string;
     }
-  | { type: "ventas" };
+  | { type: "pedidos" }
+  | { type: "ventas" }
+  | { type: "compras" };
 
-const SALES_SUB_NAV: ReadonlyArray<{ href: string; label: string }> = [
-  { href: "/sales/pipeline", label: "Flujo" },
-  { href: "/sales/opportunities", label: "Oportunidades" },
-  { href: "/quotes", label: "Cotizaciones" },
+type SidebarSubNavItem = Readonly<{
+  href: string;
+  label: string;
+  isActive: (path: string) => boolean;
+}>;
+
+const PEDIDOS_SUB_NAV: readonly SidebarSubNavItem[] = [
+  {
+    href: "/orders?status=all",
+    label: "Pedidos",
+    isActive: (path) =>
+      path === "/orders" ||
+      path === "/orders/creation" ||
+      (path.startsWith("/orders/") && !path.startsWith("/orders/delivery-notes")),
+  },
+  {
+    href: "/orders/delivery-notes",
+    label: "Notas de entrega",
+    isActive: (path) =>
+      path === "/orders/delivery-notes" || path.startsWith("/orders/delivery-notes/"),
+  },
 ];
+
+const SALES_SUB_NAV: readonly SidebarSubNavItem[] = [
+  {
+    href: "/sales/pipeline",
+    label: "Flujo",
+    isActive: (path) => path === "/sales/pipeline" || path.startsWith("/sales/pipeline/"),
+  },
+  {
+    href: "/sales/opportunities",
+    label: "Oportunidades",
+    isActive: (path) =>
+      path === "/sales/opportunities" || path.startsWith("/sales/opportunities/"),
+  },
+  {
+    href: "/quotes",
+    label: "Cotizaciones",
+    isActive: (path) => path === "/quotes" || path.startsWith("/quotes/"),
+  },
+];
+
+const COMPRAS_SUB_NAV: readonly SidebarSubNavItem[] = [
+  {
+    href: "/compras/proveedores",
+    label: "Proveedores",
+    isActive: (path) => path === "/compras/proveedores" || path === "/compras",
+  },
+  {
+    href: "/compras/ordenes",
+    label: "Órdenes de compra",
+    isActive: (path) => path.startsWith("/compras/ordenes"),
+  },
+];
+
+function isPedidosNavItem(item: NavItem): item is { type: "pedidos" } {
+  return "type" in item && item.type === "pedidos";
+}
 
 function isVentasNavItem(item: NavItem): item is { type: "ventas" } {
   return "type" in item && item.type === "ventas";
+}
+
+function isComprasNavItem(item: NavItem): item is { type: "compras" } {
+  return "type" in item && item.type === "compras";
 }
 
 function isDisabledNavItem(
@@ -92,14 +151,14 @@ function isLinkNavItem(
 const baseMainNav: NavItem[] = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/whatsapp", icon: MessageSquare, label: "WhatsApp" },
-  { href: "/orders", icon: ShoppingCart, label: "Pedidos" },
+  { type: "pedidos" },
   { type: "ventas" },
   { href: "/products", icon: Package, label: "Inventario" },
   { href: "/matches", icon: Sparkles, label: "Matches" },
   { href: "/clients", icon: Store, label: "Clientes" },
   { href: "/precios", icon: Tag, label: "Precios" },
   { href: "/vendedores", icon: Users, label: "Vendedores" },
-  { href: "/compras", icon: Truck, label: "Compras" },
+  { type: "compras" },
   { href: "/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/market", icon: MapPin, label: "Market business" },
 ];
@@ -139,8 +198,54 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNav.map((item) => {
+                if (isPedidosNavItem(item)) {
+                  return (
+                    <ExpandableSidebarNavItem
+                      key="pedidos"
+                      icon={ShoppingCart}
+                      isSectionActive={(path) => path.startsWith("/orders")}
+                      label="Pedidos"
+                      pathname={pathname}
+                      router={router}
+                      subNav={PEDIDOS_SUB_NAV}
+                      tooltip="Pedidos"
+                      onPrefetchSubItem={(href) => {
+                        if (href.startsWith("/orders")) prefetchOrdersWorkspaceData();
+                      }}
+                    />
+                  );
+                }
+
                 if (isVentasNavItem(item)) {
-                  return <VentasNavItem key="ventas" pathname={pathname} router={router} />;
+                  return (
+                    <ExpandableSidebarNavItem
+                      key="ventas"
+                      icon={TrendingUp}
+                      isSectionActive={(path) =>
+                        path.startsWith("/sales/") || path.startsWith("/quotes")
+                      }
+                      label="Ventas"
+                      pathname={pathname}
+                      router={router}
+                      subNav={SALES_SUB_NAV}
+                      tooltip="Ventas"
+                    />
+                  );
+                }
+
+                if (isComprasNavItem(item)) {
+                  return (
+                    <ExpandableSidebarNavItem
+                      key="compras"
+                      icon={Truck}
+                      isSectionActive={(path) => path.startsWith("/compras")}
+                      label="Compras"
+                      pathname={pathname}
+                      router={router}
+                      subNav={COMPRAS_SUB_NAV}
+                      tooltip="Compras"
+                    />
+                  );
                 }
 
                 if (isDisabledNavItem(item)) {
@@ -225,39 +330,50 @@ export function AppSidebar({
   );
 }
 
-function VentasNavItem({
+function ExpandableSidebarNavItem({
+  label,
+  icon: Icon,
+  tooltip,
+  subNav,
   pathname,
   router,
+  isSectionActive,
+  onPrefetchSubItem,
 }: Readonly<{
+  label: string;
+  icon: typeof Inbox;
+  tooltip: string;
+  subNav: readonly SidebarSubNavItem[];
   pathname: string;
   router: ReturnType<typeof useRouter>;
+  isSectionActive: (path: string) => boolean;
+  onPrefetchSubItem?: (href: string) => void;
 }>) {
-  const isSalesActive =
-    pathname.startsWith("/sales/") || pathname.startsWith("/quotes");
-  const [open, setOpen] = useState(isSalesActive);
+  const sectionActive = isSectionActive(pathname);
+  const [open, setOpen] = useState(sectionActive);
 
   useEffect(() => {
-    if (isSalesActive) setOpen(true);
-  }, [isSalesActive]);
+    if (sectionActive) setOpen(true);
+  }, [sectionActive]);
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        isActive={isSalesActive}
+        isActive={sectionActive}
         data-state={open ? "open" : "closed"}
-        tooltip="Ventas"
+        tooltip={tooltip}
         type="button"
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          isSalesActive &&
+          sectionActive &&
             "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
         )}
       >
-        <TrendingUp />
-        <span>Ventas</span>
+        <Icon />
+        <span>{label}</span>
       </SidebarMenuButton>
       <SidebarMenuAction
-        aria-label={open ? "Contraer ventas" : "Expandir ventas"}
+        aria-label={open ? `Contraer ${label.toLowerCase()}` : `Expandir ${label.toLowerCase()}`}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -268,9 +384,8 @@ function VentasNavItem({
       </SidebarMenuAction>
       {open ? (
         <SidebarMenuSub>
-          {SALES_SUB_NAV.map((subItem) => {
-            const subActive =
-              pathname === subItem.href || pathname.startsWith(`${subItem.href}/`);
+          {subNav.map((subItem) => {
+            const subActive = subItem.isActive(pathname);
 
             return (
               <SidebarMenuSubItem key={subItem.href}>
@@ -278,8 +393,14 @@ function VentasNavItem({
                   <Link
                     href={subItem.href}
                     prefetch
-                    onMouseEnter={() => router.prefetch(subItem.href)}
-                    onFocus={() => router.prefetch(subItem.href)}
+                    onMouseEnter={() => {
+                      router.prefetch(subItem.href);
+                      onPrefetchSubItem?.(subItem.href);
+                    }}
+                    onFocus={() => {
+                      router.prefetch(subItem.href);
+                      onPrefetchSubItem?.(subItem.href);
+                    }}
                   >
                     <span>{subItem.label}</span>
                   </Link>

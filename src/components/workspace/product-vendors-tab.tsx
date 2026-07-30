@@ -275,7 +275,7 @@ export function ProductVendorsTab({
           {allVendors.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No hay proveedores en el catálogo.{" "}
-              <Link href="/compras" className="text-foreground underline underline-offset-2">
+              <Link href="/compras/proveedores" className="text-foreground underline underline-offset-2">
                 Creá uno en Compras
               </Link>
               .
@@ -285,7 +285,7 @@ export function ProductVendorsTab({
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button asChild type="button" size="sm" variant="outline" className="gap-2">
-              <Link href="/compras">
+              <Link href="/compras/proveedores">
                 <Truck aria-hidden className="size-4" />
                 Crear proveedor
               </Link>
@@ -423,7 +423,7 @@ export function ProductVendorsTab({
                 <Label htmlFor="pv-vendor">Proveedor</Label>
                 {!editTarget ? (
                   <Button asChild type="button" size="sm" variant="outline" className="h-8 gap-1.5">
-                    <Link href="/compras">
+                    <Link href="/compras/proveedores">
                       <Truck aria-hidden className="size-3.5" />
                       Crear proveedor
                     </Link>
