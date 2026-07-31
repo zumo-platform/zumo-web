@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ChevronDown, EyeOff, Mail, MessageCircle, Users } from "lucide-react";
 
@@ -48,7 +48,12 @@ export function InboxFiltersBar({
   sellers: readonly InboxSellerOption[];
   canFilterBySeller: boolean;
 }>) {
+  const [mounted, setMounted] = useState(false);
   const [sellerQuery, setSellerQuery] = useState("");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const activeSellers = useMemo(
     () => sellers.filter((s) => s.active !== false),
@@ -74,6 +79,14 @@ export function InboxFiltersBar({
     else next.add(sellerId);
     onSelectedSellerIdsChange(next);
   }
+
+  const sellerFilterTrigger = (
+    <Button className="h-8 gap-1.5 px-2.5 text-xs" type="button" variant="outline">
+      <Users aria-hidden className="size-3.5" />
+      <span className="max-w-[9rem] truncate">{sellerLabel}</span>
+      <ChevronDown aria-hidden className="size-3 opacity-60" />
+    </Button>
+  );
 
   return (
     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -122,45 +135,43 @@ export function InboxFiltersBar({
       </button>
 
       {canFilterBySeller ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="h-8 gap-1.5 px-2.5 text-xs" type="button" variant="outline">
-              <Users aria-hidden className="size-3.5" />
-              <span className="max-w-[9rem] truncate">{sellerLabel}</span>
-              <ChevronDown aria-hidden className="size-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Vendedores</DropdownMenuLabel>
-            <div className="px-2 pb-2">
-              <Input
-                className="h-8"
-                placeholder="Buscar vendedor…"
-                value={sellerQuery}
-                onChange={(e) => setSellerQuery(e.target.value)}
-              />
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={selectedSellerIds.size === 0}
-              onCheckedChange={() => onSelectedSellerIdsChange(new Set())}
-              onSelect={(e) => e.preventDefault()}
-            >
-              Todos los vendedores
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            {filteredSellers.map((seller) => (
+        mounted ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>{sellerFilterTrigger}</DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Vendedores</DropdownMenuLabel>
+              <div className="px-2 pb-2">
+                <Input
+                  className="h-8"
+                  placeholder="Buscar vendedor…"
+                  value={sellerQuery}
+                  onChange={(e) => setSellerQuery(e.target.value)}
+                />
+              </div>
+              <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
-                checked={selectedSellerIds.has(seller.sellerId)}
-                key={seller.sellerId}
-                onCheckedChange={() => toggleSeller(seller.sellerId)}
+                checked={selectedSellerIds.size === 0}
+                onCheckedChange={() => onSelectedSellerIdsChange(new Set())}
                 onSelect={(e) => e.preventDefault()}
               >
-                {seller.name}
+                Todos los vendedores
               </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuSeparator />
+              {filteredSellers.map((seller) => (
+                <DropdownMenuCheckboxItem
+                  checked={selectedSellerIds.has(seller.sellerId)}
+                  key={seller.sellerId}
+                  onCheckedChange={() => toggleSeller(seller.sellerId)}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {seller.name}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          sellerFilterTrigger
+        )
       ) : null}
     </div>
   );

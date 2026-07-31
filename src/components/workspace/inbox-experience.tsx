@@ -125,7 +125,7 @@ export function InboxExperience() {
   }, []);
 
   const loadDraftOrderCards = useCallback(async (): Promise<InboxCardData[]> => {
-    const draftResult = await loadOrdersCatalog(["draft"]);
+    const draftResult = await loadOrdersCatalog(["draft"], { force: true });
     if (!draftResult.ok || draftResult.orders.length === 0) {
       return [];
     }

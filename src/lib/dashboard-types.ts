@@ -69,6 +69,8 @@ export interface Order {
   displayCode?: string | null;
   status: OrderStatus | string;
   lines: OrderLine[] | null;
+  /** List API may send this without embedding full `lines`. */
+  lineCount?: number;
   deliveryNotes?: string | null;
   deliveryDate?: string | null;
   deliveryDateStatus?: string | null;

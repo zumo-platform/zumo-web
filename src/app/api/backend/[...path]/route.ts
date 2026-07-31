@@ -39,6 +39,21 @@ function isCacheableDashboardGet(method: string, segments: readonly string[]): b
   return CACHEABLE_DASHBOARD_GET_PATHS.has(segments.join("/"));
 }
 
+const UPSTREAM_FETCH_TIMEOUT_MS = 45_000;
+
+async function fetchUpstream(
+  upstream: string,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(upstream, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function proxyRequest(
   request: Request,
   segments: string[],
@@ -123,7 +138,7 @@ async function proxyRequest(
 
   try {
     const upstreamFetch = (bearer: string) =>
-      fetch(upstream, {
+      fetchUpstream(upstream, {
         method: request.method,
         headers:
           forwardedBody !== undefined
@@ -175,12 +190,16 @@ async function proxyRequest(
         console.error("[api/backend] Cognito refresh retry failed", err);
       }
     }
-  } catch {
+  } catch (err) {
+    const reason =
+      err instanceof Error && err.name === "AbortError"
+        ? "Timeout al conectar con el API."
+        : "No se pudo conectar con el API. Comprueba API_URL y la red/VPN.";
+    console.error("[api/backend] upstream fetch failed", upstream, err);
     return NextResponse.json(
       {
         error: "UpstreamUnavailable",
-        message:
-          "No se pudo conectar con el API. Comprueba API_URL y la red/VPN.",
+        message: reason,
       },
       { status: 502 },
     );

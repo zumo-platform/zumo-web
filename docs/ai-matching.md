@@ -2,6 +2,8 @@
 
 Canonical reference: [zumo-backend/docs/ai-matching.md](../../zumo-backend/docs/ai-matching.md).
 
+**AI improvement timeline (backend):** [zumo-backend/docs/ai-order-intelligence.md](../../zumo-backend/docs/ai-order-intelligence.md).
+
 ## Components
 
 | Component | File | Where used |

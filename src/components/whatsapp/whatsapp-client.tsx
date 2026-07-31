@@ -7,6 +7,7 @@ import {
   applyClientPipeline,
   buildConversationsQuery,
   defaultConversationFilters,
+  findNewerConversationForSameCustomer,
   type ConversationFilterState,
 } from "@/components/whatsapp/conversation-filters";
 import { ConversationList } from "@/components/whatsapp/conversation-list";
@@ -24,7 +25,10 @@ import type { Conversation, Message, Order } from "@/lib/dashboard-types";
 import { loadOrdersCatalog } from "@/lib/orders-catalog-cache";
 import { useWorkspacePermissions } from "@/lib/workspace-preferences-context";
 
-const WHATSAPP_POLL_MS = 15_000;
+const WHATSAPP_POLL_MS = 5_000;
+const WHATSAPP_POLL_AWAITING_REPLY_MS = 2_000;
+const WHATSAPP_POLL_ERROR_BACKOFF_MS = 15_000;
+const WHATSAPP_POLL_ERROR_THRESHOLD = 3;
 
 function PanelHeading({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -56,6 +60,8 @@ export function WhatsappClient() {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const userTouchedFiltersRef = useRef(false);
+  const convPollFailuresRef = useRef(0);
+  const hasLoadedConversationsRef = useRef(false);
 
   const refreshOrders = useCallback(async (opts?: { force?: boolean }) => {
     try {
@@ -71,15 +77,25 @@ export function WhatsappClient() {
     }
   }, []);
 
-  const fetchConversations = useCallback(async () => {
-    setConvsFetchError(null);
+  const fetchConversations = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setConvsFetchError(null);
     try {
       const qs = buildConversationsQuery(filtersRef.current);
       const data = await backendGet<{ conversations?: Conversation[] }>(`dashboard/conversations${qs}`);
       setConversations(data.conversations ?? []);
+      hasLoadedConversationsRef.current = true;
+      convPollFailuresRef.current = 0;
+      setConvsFetchError(null);
     } catch (err) {
-      setConversations([]);
-      setConvsFetchError(err instanceof Error ? err.message : "No se pudieron cargar las conversaciones.");
+      convPollFailuresRef.current += 1;
+      const message =
+        err instanceof Error ? err.message : "No se pudieron cargar las conversaciones.";
+      if (!opts?.silent || !hasLoadedConversationsRef.current) {
+        setConvsFetchError(message);
+      }
+      if (!hasLoadedConversationsRef.current && !opts?.silent) {
+        setConversations([]);
+      }
     }
   }, []);
 
@@ -114,8 +130,12 @@ export function WhatsappClient() {
       );
       setMessages(data.messages ?? []);
     } catch (err) {
-      if (!opts?.silent) setMessages([]);
-      setMsgsFetchError(err instanceof Error ? err.message : "No se pudieron cargar los mensajes.");
+      if (!opts?.silent) {
+        setMessages([]);
+        setMsgsFetchError(
+          err instanceof Error ? err.message : "No se pudieron cargar los mensajes.",
+        );
+      }
     } finally {
       if (!opts?.silent) setMsgsLoading(false);
     }
@@ -135,17 +155,18 @@ export function WhatsappClient() {
   }, []);
 
   useEffect(() => {
-    async function init() {
-      setConvsLoading(true);
-      await Promise.all([fetchConversations(), refreshOrders(), fetchSellers()]);
-      setConvsLoading(false);
-    }
-    void init();
-  }, [fetchConversations, refreshOrders, fetchSellers]);
+    void (async () => {
+      await Promise.all([refreshOrders(), fetchSellers()]);
+    })();
+  }, [refreshOrders, fetchSellers]);
 
   const serverQuery = buildConversationsQuery(filters);
   useEffect(() => {
-    void fetchConversations();
+    void (async () => {
+      setConvsLoading(true);
+      await fetchConversations();
+      setConvsLoading(false);
+    })();
   }, [serverQuery, fetchConversations]);
 
   const prevSelectedIdRef = useRef<string | null>(null);
@@ -160,33 +181,6 @@ export function WhatsappClient() {
     prevSelectedIdRef.current = selectedId;
     void fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
-
-  useEffect(() => {
-    let inFlight = false;
-
-    const tick = () => {
-      if (inFlight || document.hidden) return;
-      inFlight = true;
-      void Promise.all([
-        fetchConversations(),
-        refreshOrders({ force: true }),
-        selectedId ? fetchMessages(selectedId, { silent: true }) : Promise.resolve(),
-      ]).finally(() => {
-        inFlight = false;
-      });
-    };
-
-    const id = window.setInterval(tick, WHATSAPP_POLL_MS);
-    const onVisible = () => {
-      if (!document.hidden) tick();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [fetchConversations, fetchMessages, refreshOrders, selectedId]);
 
   useEffect(() => {
     if (userTouchedFiltersRef.current) return;
@@ -235,11 +229,63 @@ export function WhatsappClient() {
     return found;
   }, [conversations, selectedId]);
 
+  const awaitingAiReply = useMemo(() => {
+    const last = messages.at(-1);
+    return last?.role === "customer";
+  }, [messages]);
+
+  useEffect(() => {
+    let inFlight = false;
+    let timeoutId: number | undefined;
+
+    const tick = () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      void Promise.all([
+        fetchConversations({ silent: true }),
+        refreshOrders({ force: true }),
+        selectedId ? fetchMessages(selectedId, { silent: true }) : Promise.resolve(),
+      ]).finally(() => {
+        inFlight = false;
+        scheduleNext();
+      });
+    };
+
+    const scheduleNext = () => {
+      window.clearTimeout(timeoutId);
+      const pollFailures = convPollFailuresRef.current;
+      const delay =
+        pollFailures >= WHATSAPP_POLL_ERROR_THRESHOLD
+          ? WHATSAPP_POLL_ERROR_BACKOFF_MS
+          : selectedId && awaitingAiReply
+            ? WHATSAPP_POLL_AWAITING_REPLY_MS
+            : WHATSAPP_POLL_MS;
+      timeoutId = window.setTimeout(tick, delay);
+    };
+
+    scheduleNext();
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchConversations, fetchMessages, refreshOrders, selectedId, awaitingAiReply]);
+
   useEffect(() => {
     if (!selectedId) return;
     const found = conversations.find((c) => c.conversationId === selectedId);
     if (found && isEmailChannel(found)) {
       setSelectedId(null);
+      return;
+    }
+    if (!found || isEmailChannel(found)) return;
+    const newer = findNewerConversationForSameCustomer(found, conversations);
+    if (newer && newer.conversationId !== selectedId) {
+      setSelectedId(newer.conversationId);
     }
   }, [conversations, selectedId]);
 
@@ -296,7 +342,12 @@ export function WhatsappClient() {
               />
             </div>
           ) : null}
-          <MessageThread conversationId={selectedId} loading={msgsLoading} messages={messages} />
+          <MessageThread
+            awaitingAiReply={awaitingAiReply}
+            conversationId={selectedId}
+            loading={msgsLoading}
+            messages={messages}
+          />
           <MessageComposer
             conversationId={selectedId}
             onSent={(msg) => {

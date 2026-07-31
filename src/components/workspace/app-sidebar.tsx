@@ -36,6 +36,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import type { SellerMe } from "@/lib/dashboard-types";
 import { prefetchInventoryWorkspaceData } from "@/lib/products-catalog-cache";
@@ -349,12 +350,48 @@ function ExpandableSidebarNavItem({
   isSectionActive: (path: string) => boolean;
   onPrefetchSubItem?: (href: string) => void;
 }>) {
+  const { state: sidebarState } = useSidebar();
+  const isCollapsed = sidebarState === "collapsed";
+  const firstSubHref = subNav[0]?.href;
   const sectionActive = isSectionActive(pathname);
   const [open, setOpen] = useState(sectionActive);
 
   useEffect(() => {
     if (sectionActive) setOpen(true);
   }, [sectionActive]);
+
+  const activeButtonClass = cn(
+    sectionActive &&
+      "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
+  );
+
+  const prefetchSubItem = (href: string) => {
+    router.prefetch(href);
+    onPrefetchSubItem?.(href);
+  };
+
+  if (isCollapsed && firstSubHref) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          isActive={sectionActive}
+          tooltip={tooltip}
+          className={activeButtonClass}
+        >
+          <Link
+            href={firstSubHref}
+            prefetch
+            onFocus={() => prefetchSubItem(firstSubHref)}
+            onMouseEnter={() => prefetchSubItem(firstSubHref)}
+          >
+            <Icon />
+            <span>{label}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
 
   return (
     <SidebarMenuItem>
@@ -364,10 +401,7 @@ function ExpandableSidebarNavItem({
         tooltip={tooltip}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={cn(
-          sectionActive &&
-            "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
-        )}
+        className={activeButtonClass}
       >
         <Icon />
         <span>{label}</span>
@@ -393,14 +427,8 @@ function ExpandableSidebarNavItem({
                   <Link
                     href={subItem.href}
                     prefetch
-                    onMouseEnter={() => {
-                      router.prefetch(subItem.href);
-                      onPrefetchSubItem?.(subItem.href);
-                    }}
-                    onFocus={() => {
-                      router.prefetch(subItem.href);
-                      onPrefetchSubItem?.(subItem.href);
-                    }}
+                    onMouseEnter={() => prefetchSubItem(subItem.href)}
+                    onFocus={() => prefetchSubItem(subItem.href)}
                   >
                     <span>{subItem.label}</span>
                   </Link>

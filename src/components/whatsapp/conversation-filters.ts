@@ -145,6 +145,61 @@ function timeValue(iso: string | null | undefined): number {
   return Number.isFinite(t) ? t : 0;
 }
 
+function customerConversationKey(conv: Conversation): string | null {
+  if (conv.customerId != null) return `customer:${String(conv.customerId)}`;
+  const phone = normalize(conv.customerPhone ?? "");
+  return phone ? `phone:${phone}` : null;
+}
+
+/** One WhatsApp row per customer/phone — keeps the thread with the latest activity. */
+export function dedupeWhatsAppConversations(list: readonly Conversation[]): Conversation[] {
+  const bestByKey = new Map<string, Conversation>();
+
+  for (const conv of list) {
+    const key = customerConversationKey(conv);
+    if (!key) {
+      bestByKey.set(`id:${conv.conversationId}`, conv);
+      continue;
+    }
+    const existing = bestByKey.get(key);
+    if (!existing) {
+      bestByKey.set(key, conv);
+      continue;
+    }
+    const existingAt = timeValue(existing.lastMessageAt ?? existing.createdAt);
+    const candidateAt = timeValue(conv.lastMessageAt ?? conv.createdAt);
+    if (candidateAt >= existingAt) {
+      bestByKey.set(key, conv);
+    }
+  }
+
+  return [...bestByKey.values()];
+}
+
+export function findNewerConversationForSameCustomer(
+  selected: Conversation,
+  list: readonly Conversation[],
+): Conversation | null {
+  const key = customerConversationKey(selected);
+  if (!key) return null;
+
+  const selectedAt = timeValue(selected.lastMessageAt ?? selected.createdAt);
+  let newest: Conversation | null = null;
+  let newestAt = selectedAt;
+
+  for (const conv of list) {
+    if (isEmailChannel(conv)) continue;
+    if (customerConversationKey(conv) !== key) continue;
+    const at = timeValue(conv.lastMessageAt ?? conv.createdAt);
+    if (at > newestAt) {
+      newest = conv;
+      newestAt = at;
+    }
+  }
+
+  return newest;
+}
+
 function displayName(conv: Conversation): string {
   if (isUnknownConversationCustomer(conv)) {
     return conv.customerPhone?.trim() || "";
@@ -195,7 +250,8 @@ export function applyClientPipeline(
 ): Conversation[] {
   // Email conversations belong in Inbox — never in the WhatsApp tab.
   const whatsappOnly = list.filter((c) => !isEmailChannel(c));
-  const searched = whatsappOnly.filter((c) => conversationMatchesSearch(c, filters.search));
+  const deduped = dedupeWhatsAppConversations(whatsappOnly);
+  const searched = deduped.filter((c) => conversationMatchesSearch(c, filters.search));
   return sortConversations(searched, filters.sort);
 }
 

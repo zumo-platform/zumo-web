@@ -58,7 +58,7 @@ export function DraftOrderPreviewCard({
             </p>
             <MatchCoverageIndicator
               autoCommitEnabled={autoCommitEnabled}
-              lineCount={order.lines?.length ?? 0}
+              lineCount={order.lineCount ?? order.lines?.length ?? 0}
               matchCoverage={parseMatchCoverage(order.matchCoverage)}
               isTouchless={Boolean(order.isTouchless)}
             />

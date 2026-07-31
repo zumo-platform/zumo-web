@@ -10,8 +10,10 @@ import {
 export async function backendGet<T>(path: string): Promise<T> {
   const res = await fetch(`/api/backend/${path}`, { cache: "no-store", credentials: "include" });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err?.error ?? `HTTP ${String(res.status)}`);
+    const err = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new Error(
+      err?.message?.trim() || err?.error?.trim() || `HTTP ${String(res.status)}`,
+    );
   }
   return res.json() as Promise<T>;
 }

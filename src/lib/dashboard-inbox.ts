@@ -95,23 +95,24 @@ function parseOptionalInt(value: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function normalizeInboxCard(raw: InboxCard): InboxCard {
-  // Prefer API channel; fall back when older Lambdas omit it but contactPhone holds the sender email.
+export function normalizeInboxCard(raw: InboxCard): InboxCard {
+  // Prefer explicit API channel; WhatsApp always wins when set.
   const channel: InboxChannel =
-    raw.channel === "email" ||
-    looksLikeEmailAddress(raw.senderEmail) ||
-    looksLikeEmailAddress(raw.customerPhone)
-      ? "email"
-      : "whatsapp";
+    raw.channel === "whatsapp"
+      ? "whatsapp"
+      : raw.channel === "email" || looksLikeEmailAddress(raw.senderEmail)
+        ? "email"
+        : "whatsapp";
   const senderEmail =
-    raw.senderEmail ?? (channel === "email" && looksLikeEmailAddress(raw.customerPhone)
+    raw.senderEmail ??
+    (channel === "email" && looksLikeEmailAddress(raw.customerPhone)
       ? raw.customerPhone.trim()
       : null);
   return {
     ...raw,
     channel,
-    subject: raw.subject ?? null,
-    senderEmail,
+    subject: channel === "email" ? (raw.subject ?? null) : null,
+    senderEmail: channel === "email" ? senderEmail : null,
     senderTrust: channel === "email" ? (parseSenderTrust(raw.senderTrust) ?? "unknown") : null,
     assignedSellerId: parseOptionalInt(raw.assignedSellerId),
     orderSeenBySellerId: parseOptionalInt(raw.orderSeenBySellerId),
@@ -425,23 +426,14 @@ export function mergeDraftInboxCardWithApiCard(
   api?: InboxCard | null,
 ): InboxCard {
   if (!api) return draft;
-  if (api.channel === "email" || draft.channel === "email") {
-    return {
-      ...draft,
-      channel: "email",
-      subject: api.subject ?? draft.subject,
-      senderEmail: api.senderEmail ?? draft.senderEmail,
-      senderTrust: api.senderTrust ?? draft.senderTrust,
-      conversationId: api.conversationId || draft.conversationId,
-      assignedSellerId: api.assignedSellerId ?? draft.assignedSellerId,
-    };
-  }
+  const channel = draft.channel;
   return {
     ...draft,
-    channel: api.channel ?? draft.channel,
-    subject: api.subject ?? draft.subject,
-    senderEmail: api.senderEmail ?? draft.senderEmail,
-    senderTrust: api.senderTrust ?? draft.senderTrust,
+    channel,
+    subject: channel === "email" ? (api.subject ?? draft.subject) : null,
+    senderEmail: channel === "email" ? (api.senderEmail ?? draft.senderEmail) : null,
+    senderTrust: channel === "email" ? (api.senderTrust ?? draft.senderTrust) : null,
+    conversationId: api.conversationId || draft.conversationId,
     assignedSellerId: api.assignedSellerId ?? draft.assignedSellerId,
   };
 }

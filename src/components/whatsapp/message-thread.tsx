@@ -47,10 +47,12 @@ export function MessageThread({
   conversationId,
   messages,
   loading,
+  awaitingAiReply = false,
 }: Readonly<{
   conversationId: string | null;
   messages: Message[];
   loading: boolean;
+  awaitingAiReply?: boolean;
 }>) {
   const { timeZone } = useWorkspacePreferences();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -139,6 +141,16 @@ export function MessageThread({
               <MessageBubble key={item.message.messageId} message={item.message} />
             ),
           )}
+          {awaitingAiReply ? (
+            <div
+              aria-label="El asistente está escribiendo"
+              className="flex max-w-[min(75%,28rem)] items-center gap-1 rounded-2xl bg-[#334155] px-3 py-2.5 text-sm shadow-sm"
+            >
+              <span className="size-1.5 animate-bounce rounded-full bg-white/70 [animation-delay:0ms]" />
+              <span className="size-1.5 animate-bounce rounded-full bg-white/70 [animation-delay:150ms]" />
+              <span className="size-1.5 animate-bounce rounded-full bg-white/70 [animation-delay:300ms]" />
+            </div>
+          ) : null}
           <div ref={bottomRef} />
         </div>
       </WhatsappScrollPane>
