@@ -119,11 +119,6 @@ export function InboxExperience() {
   const [sellers, setSellers] = useState<InboxSellerOption[]>([]);
   const [inboundEmailAddress, setInboundEmailAddress] = useState<string | null>(null);
 
-  const refreshBoard = useCallback(async () => {
-    const nextBoard = await fetchInboxBoardViaProxy();
-    setBoard(nextBoard);
-  }, []);
-
   const loadDraftOrderCards = useCallback(async (): Promise<InboxCardData[]> => {
     const draftResult = await loadOrdersCatalog(["draft"], { force: true });
     if (!draftResult.ok || draftResult.orders.length === 0) {
@@ -136,6 +131,15 @@ export function InboxExperience() {
       .filter((order) => order.status === "draft")
       .map((order) => draftOrderToInboxCard(order, customerById.get(order.customerId)));
   }, []);
+
+  const refreshBoard = useCallback(async () => {
+    const [nextBoard, nextDrafts] = await Promise.all([
+      fetchInboxBoardViaProxy(),
+      loadDraftOrderCards(),
+    ]);
+    setBoard(nextBoard);
+    setDraftOrderCards(nextDrafts);
+  }, [loadDraftOrderCards]);
 
   useEffect(() => {
     let active = true;
@@ -188,7 +192,7 @@ export function InboxExperience() {
 
   useEffect(() => {
     if (!ready) return;
-    const POLL_MS = 15_000;
+    const POLL_MS = 5_000;
     let inFlight = false;
 
     const tick = async () => {

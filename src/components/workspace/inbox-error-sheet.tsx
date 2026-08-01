@@ -29,6 +29,7 @@ import {
   fetchInboxErrorOrderLinesViaProxy,
   fetchInboxErrorViaProxy,
   fetchSellerOptionsViaProxy,
+  inboxErrorMessageLabel,
   updateInboxErrorViaProxy,
   type InboxErrorDetail,
   type InboxErrorInvolvedProduct,
@@ -176,7 +177,12 @@ export function InboxErrorSheet({
           ) : detail ? (
             <>
               <div className="rounded-lg border bg-card p-4">
-                <p className="font-medium text-sm">Mensaje de WhatsApp</p>
+                <p className="font-medium text-sm">
+                  {inboxErrorMessageLabel(detail.channel ?? "whatsapp")}
+                </p>
+                {detail.channel === "email" && detail.senderEmail ? (
+                  <p className="mt-1 text-muted-foreground text-xs">{detail.senderEmail}</p>
+                ) : null}
                 <p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm">
                   {detail.messageText || "Unknown"}
                 </p>
@@ -192,8 +198,14 @@ export function InboxErrorSheet({
                   <dd className="font-medium">{detail.contactName}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground text-xs">Teléfono</dt>
-                  <dd className="font-medium">{detail.customerPhone}</dd>
+                  <dt className="text-muted-foreground text-xs">
+                    {detail.channel === "email" ? "Correo" : "Teléfono"}
+                  </dt>
+                  <dd className="font-medium">
+                    {detail.channel === "email"
+                      ? detail.senderEmail || detail.customerPhone
+                      : detail.customerPhone}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground text-xs">Fecha / hora</dt>

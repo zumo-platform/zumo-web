@@ -199,7 +199,14 @@ export type InboxErrorDetail = Readonly<{
   productSkus: string[];
   createdAt: string | null;
   resolvedAt: string | null;
+  channel: InboxChannel;
+  senderEmail: string | null;
+  subject: string | null;
 }>;
+
+export function inboxErrorMessageLabel(channel: InboxChannel): string {
+  return channel === "email" ? "Mensaje de correo" : "Mensaje de WhatsApp";
+}
 
 export const RECLAMO_TYPE_LABELS: Record<ReclamoType, string> = {
   wrong_quantity: "Cantidad incorrecta",
