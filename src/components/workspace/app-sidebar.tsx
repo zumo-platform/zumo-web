@@ -22,6 +22,10 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { SupplierWorkspaceMenu } from "@/components/workspace/supplier-workspace-menu";
 import {
+  useWhatsappUnreadCount,
+  WhatsappUnreadBadge,
+} from "@/components/workspace/whatsapp-unread-badge";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -176,6 +180,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { can } = useWorkspacePermissions();
+  const whatsappUnreadCount = useWhatsappUnreadCount();
   const businessName = supplier?.businessName?.trim() || "Mi negocio";
 
   const mainNav = baseMainNav.filter((item) => {
@@ -273,17 +278,22 @@ export function AppSidebar({
                   (item.href !== "/" && pathname.startsWith(`${item.href}/`));
 
                 return (
-                  <SidebarMenuItem key={item.href}>
+                  <SidebarMenuItem
+                    className={cn(item.href === "/whatsapp" && "overflow-visible")}
+                    key={item.href}
+                  >
                     <SidebarMenuButton
                       asChild
                       isActive={active}
                       tooltip={item.label}
                       className={cn(
+                        item.href === "/whatsapp" && "overflow-visible",
                         active &&
                           "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground",
                       )}
                     >
                       <Link
+                        className="flex w-full items-center gap-2"
                         href={item.href === "/orders" ? "/orders?status=all" : item.href}
                         prefetch
                         onMouseEnter={() => {
@@ -299,7 +309,14 @@ export function AppSidebar({
                           if (item.href === "/clients") prefetchCustomersWorkspaceData();
                         }}
                       >
-                        <Icon />
+                        {item.href === "/whatsapp" ? (
+                          <span className="relative inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
+                            <Icon className="size-4 shrink-0" />
+                            <WhatsappUnreadBadge count={whatsappUnreadCount} />
+                          </span>
+                        ) : (
+                          <Icon />
+                        )}
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>

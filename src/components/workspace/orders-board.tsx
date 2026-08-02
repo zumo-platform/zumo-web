@@ -56,11 +56,8 @@ import {
   sortOrdersByColumnOrder,
 } from "@/lib/orders-board-order";
 import {
-  findFlowItem,
   flowToBoardColumns,
   isOrderStatusTransitionAllowed,
-  statusBadgeVariant,
-  statusLabel as orderStatusLabel,
   resolveOrderFlowStatusKey,
   type EffectiveStatusItem,
 } from "@/lib/order-status-flow";
@@ -114,8 +111,6 @@ const BoardCardContent = memo(function BoardCardContent({
         isOrderStatusTransitionAllowed(flow, statusKey, column.key).ok,
     );
   }, [flow, statusKey]);
-
-  const flowItem = findFlowItem(flow, statusKey);
 
   return (
     <>
@@ -212,9 +207,6 @@ const BoardCardContent = memo(function BoardCardContent({
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <Badge variant={statusBadgeVariant(statusKey)}>
-          {orderStatusLabel(flowItem, statusKey)}
-        </Badge>
         <OrderBackorderIndicators
           hasBackorderRisk={order.hasBackorderRisk}
           isBackordered={order.isBackordered}

@@ -3,9 +3,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/lib/dashboard-types";
+import { isWhatsappConversationUnread } from "@/lib/whatsapp-unread";
 import { cn } from "@/lib/utils";
 import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
-import { Mail, MessageCircle } from "lucide-react";
+import { Mail } from "lucide-react";
 
 import { orderStatePill } from "./conversation-filters";
 import {
@@ -56,7 +57,7 @@ export function ConversationListItem({
       : null;
 
   const pill = orderStatePill(conv.orderState);
-  const isUnread = (conv.uiStatus ?? "sin_responder") === "sin_responder";
+  const isUnread = isWhatsappConversationUnread(conv);
   const assignedName = conv.assignedSellerName?.trim() ?? "";
 
   return (
@@ -94,15 +95,7 @@ export function ConversationListItem({
                   <Mail aria-hidden className="size-3" />
                   Correo
                 </Badge>
-              ) : (
-                <Badge
-                  className="shrink-0 gap-0.5 border-transparent bg-emerald-100 font-normal text-[10px] text-emerald-800"
-                  variant="secondary"
-                >
-                  <MessageCircle aria-hidden className="size-3" />
-                  WhatsApp
-                </Badge>
-              )}
+              ) : null}
               {unknown ? (
                 <Badge className="shrink-0 font-normal text-[10px] capitalize" variant="outline">
                   Sin registrar

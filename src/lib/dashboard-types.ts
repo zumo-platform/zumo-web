@@ -26,8 +26,12 @@ export interface Conversation {
 
   /** Derived estado: sin_responder | abierto | cerrado. */
   uiStatus?: ConversationUiStatus;
-  /** First seller-open timestamp; null → sin responder. */
+  /** First seller-open timestamp; null → sin responder. Updated on each open (read cursor). */
   openedAt?: string | null;
+  /** Role of the most recent message in the thread. */
+  lastMessageRole?: string | null;
+  /** Timestamp of the most recent inbound customer message. */
+  lastCustomerMessageAt?: string | null;
   /** Assigned seller (from customer.assigned_seller_id); null for unknown/unassigned. */
   assignedSellerId?: number | null;
   assignedSellerName?: string | null;

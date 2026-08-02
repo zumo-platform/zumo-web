@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Copy, Mail, Search } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -99,6 +100,7 @@ function InboxColumn({
 }
 
 export function InboxExperience() {
+  const searchParams = useSearchParams();
   const { sellerId, can } = useWorkspacePermissions();
   const canFilterBySeller = can("conversations.view_all");
   const [board, setBoard] = useState<InboxBoard>(EMPTY);
@@ -174,6 +176,13 @@ export function InboxExperience() {
       toast.error("No se pudo copiar la dirección.");
     }
   }, [inboundEmailAddress]);
+
+  useEffect(() => {
+    const errorId = searchParams.get("error")?.trim();
+    if (!errorId) return;
+    setDetailErrorId(errorId);
+    setErrorOpen(true);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!ready) return;

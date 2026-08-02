@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { NotificationProvider } from "@/components/workspace/notification-provider";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import {
   defaultBootstrap,
@@ -41,7 +42,7 @@ export function WorkspaceBootstrapProvider({
       whatsappStatus={bootstrap.whatsappStatus}
       workspacePreferences={bootstrap.preferences}
     >
-      {children}
+      <NotificationProvider>{children}</NotificationProvider>
     </WorkspaceShell>
   );
 }

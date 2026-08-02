@@ -3,9 +3,11 @@
 import { useEffect, useRef } from "react";
 
 import type { LucideIcon } from "lucide-react";
-import { Loader2, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Message } from "@/lib/dashboard-types";
+import { cn } from "@/lib/utils";
 import { useWorkspacePreferences } from "@/lib/workspace-preferences-context";
 
 import { MessageBubble } from "./message-bubble";
@@ -31,6 +33,59 @@ function EmptyState({
 }
 
 const CHAT_BG = "#F1F5F9";
+
+const THREAD_SKELETON_BUBBLES: ReadonlyArray<{
+  align: "start" | "end";
+  bodyClass: string;
+}> = [
+  { align: "start", bodyClass: "h-[4.5rem] w-52" },
+  { align: "end", bodyClass: "h-14 w-44" },
+  { align: "end", bodyClass: "h-20 w-56" },
+  { align: "start", bodyClass: "h-14 w-40" },
+  { align: "end", bodyClass: "h-[4.5rem] w-48" },
+  { align: "end", bodyClass: "h-16 w-36" },
+  { align: "start", bodyClass: "h-12 w-44" },
+  { align: "end", bodyClass: "h-14 w-52" },
+];
+
+function MessageThreadSkeleton() {
+  return (
+    <div
+      aria-label="Cargando mensajes"
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+      role="status"
+      style={{ backgroundColor: CHAT_BG }}
+    >
+      <span className="sr-only">Cargando mensajes…</span>
+      <WhatsappScrollPane className="bg-[#F1F5F9]">
+        <div className="flex flex-col gap-2 px-4 py-4">
+          {THREAD_SKELETON_BUBBLES.map((bubble, index) => (
+            <div
+              className={cn(
+                "flex max-w-[min(75%,28rem)] flex-col gap-1",
+                bubble.align === "start" ? "self-start" : "self-end",
+              )}
+              key={index}
+            >
+              <Skeleton
+                aria-hidden
+                className={cn(
+                  "rounded-2xl motion-reduce:animate-none",
+                  bubble.bodyClass,
+                  bubble.align === "end" ? "bg-primary/15" : "bg-muted",
+                )}
+              />
+              <Skeleton
+                aria-hidden
+                className="h-3 w-9 self-end rounded-md motion-reduce:animate-none"
+              />
+            </div>
+          ))}
+        </div>
+      </WhatsappScrollPane>
+    </div>
+  );
+}
 
 function ThreadEmpty({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -95,11 +150,7 @@ export function MessageThread({
   }
 
   if (showInitialLoader) {
-    return (
-      <ThreadEmpty>
-        <Loader2 aria-hidden className="size-6 animate-spin text-muted-foreground" />
-      </ThreadEmpty>
-    );
+    return <MessageThreadSkeleton />;
   }
 
   if (messages.length === 0) {
@@ -119,15 +170,6 @@ export function MessageThread({
       className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
       style={{ backgroundColor: CHAT_BG }}
     >
-      {loading ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute top-3 right-4 z-10 flex items-center gap-1.5 rounded-md bg-background/90 px-2 py-1 text-muted-foreground text-xs shadow-sm"
-        >
-          <Loader2 className="size-3.5 animate-spin" />
-          Actualizando…
-        </div>
-      ) : null}
       <WhatsappScrollPane ref={scrollPaneRef} className="bg-[#F1F5F9]">
         <div className="flex flex-col gap-2 px-4 py-4">
           {items.map((item) =>

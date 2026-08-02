@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Building, Layers, Mail, MessageCircle, Package, Shield, Sparkles, Store, Tag, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
+import { Bell, Building, Layers, Mail, MessageCircle, Package, Shield, Sparkles, Store, Tag, Truck, UserRound, Warehouse, Workflow } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -13,6 +13,7 @@ const SETTINGS_NAV: ReadonlyArray<{
   icon: LucideIcon;
 }> = [
   { href: "/settings/profile", label: "Perfil", icon: UserRound },
+  { href: "/settings/notifications", label: "Notificaciones", icon: Bell },
   { href: "/settings/business", label: "Negocio", icon: Building },
   { href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/settings/email", label: "Correo", icon: Mail },

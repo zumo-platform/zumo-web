@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ChevronDown,
@@ -73,31 +73,10 @@ export function SupplierWorkspaceMenu({
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
   }, []);
-
-  function clearCloseTimer() {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }
-
-  function scheduleClose() {
-    clearCloseTimer();
-    closeTimerRef.current = setTimeout(() => setOpen(false), 140);
-  }
-
-  function handleEnter() {
-    clearCloseTimer();
-    setOpen(true);
-  }
 
   async function logout() {
     setLogoutPending(true);
@@ -150,11 +129,7 @@ export function SupplierWorkspaceMenu({
 
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
-      <div
-        className="min-w-0 w-full group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center"
-        onMouseEnter={handleEnter}
-        onMouseLeave={scheduleClose}
-      >
+      <div className="min-w-0 w-full group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
         <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
 
         <DropdownMenuContent
@@ -162,8 +137,6 @@ export function SupplierWorkspaceMenu({
           className="w-(--radix-dropdown-menu-trigger-width) min-w-52 p-1"
           side="bottom"
           sideOffset={6}
-          onMouseEnter={handleEnter}
-          onMouseLeave={scheduleClose}
         >
           {MENU_ITEMS.map((item) => {
             const Icon = item.icon;
