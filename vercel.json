@@ -1,0 +1,52 @@
+{
+  "redirects": [
+    {
+      "source": "/:locale(es|en)/login",
+      "has": [{ "type": "host", "value": "zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/:locale/login",
+      "permanent": false
+    },
+    {
+      "source": "/:locale(es|en)/login",
+      "has": [{ "type": "host", "value": "www.zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/:locale/login",
+      "permanent": false
+    },
+    {
+      "source": "/login",
+      "has": [{ "type": "host", "value": "zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/es/login",
+      "permanent": false
+    },
+    {
+      "source": "/login",
+      "has": [{ "type": "host", "value": "www.zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/es/login",
+      "permanent": false
+    },
+    {
+      "source": "/register",
+      "has": [{ "type": "host", "value": "zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/es/login?tab=signup",
+      "permanent": false
+    },
+    {
+      "source": "/register",
+      "has": [{ "type": "host", "value": "www.zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/es/login?tab=signup",
+      "permanent": false
+    },
+    {
+      "source": "/api/auth/:path*",
+      "has": [{ "type": "host", "value": "zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/api/auth/:path*",
+      "permanent": false
+    },
+    {
+      "source": "/api/auth/:path*",
+      "has": [{ "type": "host", "value": "www.zumob2b.com" }],
+      "destination": "https://app.zumob2b.com/api/auth/:path*",
+      "permanent": false
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { authPlatformOrigin } from "@/lib/platform-url";
+
 /** Spanish first — default marketing and auth locale. */
 export const MARKETING_LOCALES = ["es", "en"] as const;
 
@@ -16,13 +18,15 @@ export function marketingHref(locale: MarketingLocale, segment: MarketingPageSeg
   return `/${locale}/${segment}`;
 }
 
-/** Localized login route (`/es/login`, `/en/login`). */
+/** Localized login route — on marketing (Vercel), points to AWS platform app. */
 export function authLoginPath(
   locale: MarketingLocale,
   options?: Readonly<{ tab?: "signup" }>,
 ): string {
-  const base = `/${locale}/login`;
-  return options?.tab === "signup" ? `${base}?tab=signup` : base;
+  const path = `/${locale}/login`;
+  const withQuery = options?.tab === "signup" ? `${path}?tab=signup` : path;
+  const platform = authPlatformOrigin();
+  return platform ? `${platform}${withQuery}` : withQuery;
 }
 
 export function resolveMarketingSegment(pathname: string): MarketingPageSegment {

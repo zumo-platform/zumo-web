@@ -1,7 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AuthForms, type AuthTabValue } from "@/components/auth/auth-forms";
 import { ZumoWordmark } from "@/components/branding/zumo-logos";
@@ -16,6 +17,7 @@ import {
   MARKETING_LOCALES,
   type MarketingLocale,
 } from "@/lib/marketing-locale";
+import { isMarketingSiteHost, resolvedPlatformAppOrigin } from "@/lib/platform-url";
 import { cn } from "@/lib/utils";
 
 type LoginPageProps = Readonly<{
@@ -100,6 +102,12 @@ export default async function LocalizedLoginPage({ params, searchParams }: Login
 
   const locale = raw;
   const { tab } = await searchParams;
+  const host = (await headers()).get("host") ?? "";
+  if (isMarketingSiteHost(host)) {
+    const suffix = tab === "signup" ? "?tab=signup" : "";
+    redirect(`${resolvedPlatformAppOrigin()}/${locale}/login${suffix}`);
+  }
+
   const defaultTab: AuthTabValue = tab === "signup" ? "signup" : "signin";
   const messages = getAuthMessages(locale);
   const landingHref = marketingHref(locale, "home");

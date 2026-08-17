@@ -1,4 +1,7 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+
+import { isMarketingSiteHost, resolvedPlatformAppOrigin } from "@/lib/platform-url";
 
 type LoginRedirectProps = Readonly<{
   searchParams: Promise<{ tab?: string }>;
@@ -8,5 +11,10 @@ type LoginRedirectProps = Readonly<{
 export default async function LegacyLoginRedirect({ searchParams }: LoginRedirectProps) {
   const { tab } = await searchParams;
   const suffix = tab === "signup" ? "?tab=signup" : "";
-  redirect(`/es/login${suffix}`);
+  const host = (await headers()).get("host") ?? "";
+  const loginPath = `/es/login${suffix}`;
+  if (isMarketingSiteHost(host)) {
+    redirect(`${resolvedPlatformAppOrigin()}${loginPath}`);
+  }
+  redirect(loginPath);
 }
